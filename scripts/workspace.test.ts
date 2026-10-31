@@ -16,7 +16,13 @@ describe("workspace", () => {
     expect(coreId).toBe("@thin-pr/core");
     expect(ping()).toBe("pong");
     expect(specialistsId).toBe("@thin-pr/specialists");
-    expect(listSpecialists()).toEqual([]);
+    expect(listSpecialists().map((specialist) => specialist.id)).toEqual([
+      "plan",
+      "implement",
+      "test",
+      "review",
+      "gate",
+    ]);
     expect(gateId).toBe("@thin-pr/gate");
     expect(readiness()).toBe("unconfigured");
     expect(githubId).toBe("@thin-pr/github");

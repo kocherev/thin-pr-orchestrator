@@ -4,11 +4,11 @@ This file maps the repository layout to a few harness and field-engineering them
 
 ## Meta harness
 
-`packages/core` is a thin typed control plane. It will sequence work. It does not call a model. Workers sit behind `packages/specialists`.
+`packages/core` is a thin typed control plane. It runs a template and records each transition. It does not call a model. Workers sit behind `packages/specialists`.
 
 ## Anthropic and OpenAI, forward deployed
 
-Specialist input and output will be validated at the boundary. `packages/gate` is where a draft becomes reviewable. Neither check is implemented in this skeleton. The import ban in `packages/core` is the line those clients must stay behind.
+Specialist input and output will be validated at the boundary. `packages/gate` is where a draft becomes reviewable. `decide()` is a fixed stub. The import ban in `packages/core` is the line model clients must stay behind.
 
 ## GitHub Actions
 
@@ -16,4 +16,4 @@ Specialist input and output will be validated at the boundary. `packages/gate` i
 
 ## Tesla, forward deployed
 
-`templates/` holds workflow names as data (`bugfix`, `small-feature`, `docs-update`). `evals/` is reserved for replay fixtures, so a later change to the control plane can be checked against recorded runs. Both directories are unloaded.
+`templates/stub-run.json` is the workflow the control plane loads. `bugfix`, `small-feature`, and `docs-update` are still unloaded names. `evals/` is reserved for later replay fixtures. The run log itself is SQLite, checked by the replay test in `packages/core`.
