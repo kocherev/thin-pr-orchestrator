@@ -1,5 +1,13 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { bannedSpecifiersIn, packageName } from "./check-core-boundary.js";
+import { bannedSpecifiersIn, packageName, scanDirectory } from "./check-core-boundary.js";
+
+const scriptPath = fileURLToPath(new URL("./check-core-boundary.ts", import.meta.url));
+const repoRoot = join(dirname(scriptPath), "..");
 
 describe("core import boundary", () => {
   it("reads the package name from a specifier", () => {
@@ -35,4 +43,58 @@ describe("core import boundary", () => {
       [],
     );
   });
+
+  it("exits non-zero when a scanned file imports a model client", () => {
+    const directory = mkdtempSync(join(tmpdir(), "thin-pr-boundary-"));
+    try {
+      writeFileSync(join(directory, "client.ts"), 'import client from "openai";\n');
+      expect(scanDirectory(directory)).toEqual([
+        { file: "client.ts", specifier: "openai" },
+      ]);
+      const result = spawnNode([
+        "--experimental-strip-types",
+        scriptPath,
+        directory,
+      ]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('banned model client import "openai"');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("fails lint when packages/core imports a model client", () => {
+    const result = spawnNode(
+      [
+        join(repoRoot, "node_modules/eslint/bin/eslint.js"),
+        "--stdin",
+        "--stdin-filename",
+        "packages/core/src/banned-import.ts",
+      ],
+      'import client from "openai";\n',
+    );
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain(
+      "Model clients are not allowed in packages/core",
+    );
+  });
 });
+
+function spawnNode(args: readonly string[], input?: string) {
+  try {
+    const stdout = execFileSync(process.execPath, [...args], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      input,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    return { status: 0, stdout, stderr: "" };
+  } catch (error) {
+    const failed = error as { status?: number; stdout?: string; stderr?: string };
+    return {
+      status: failed.status ?? 1,
+      stdout: failed.stdout ?? "",
+      stderr: failed.stderr ?? "",
+    };
+  }
+}

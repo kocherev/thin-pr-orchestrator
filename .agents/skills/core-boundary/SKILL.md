@@ -19,6 +19,4 @@ Banned specifiers today, matched on the package name:
 - `@google/generative-ai`
 - `ai`
 
-`pnpm lint` runs `scripts/check-core-boundary.ts`. The script exits non-zero when any of those names is imported under `packages/core`.
-
-TODO: replace that script with an ESLint rule for the same denylist. The empty rules block in `eslint.config.js` for `packages/core/**/*.ts` is the placeholder for that rule.
+`pnpm lint` enforces the ban twice. ESLint `no-restricted-imports` rejects a static import under `packages/core`. `scripts/check-core-boundary.ts` rejects `require()` and dynamic `import()` as well, and it exits non-zero when it finds one. Add a new model SDK to both lists.

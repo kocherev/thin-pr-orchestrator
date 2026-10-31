@@ -4,7 +4,7 @@ Thin PR Orchestrator. Read this before changing the repo.
 
 ## Layout
 
-`packages/core` is the control plane. It is typed TypeScript and it does not call a model. `packages/specialists` is where model-backed workers will live. `packages/gate` will decide whether a draft is reviewable. `packages/github` will talk to GitHub. `templates/` and `evals/` are data directories for later workflows and replay fixtures.
+`packages/core` is the control plane. It runs a typed state machine, appends each transition to SQLite, and does not call a model. `packages/specialists` holds stub workers for now. `packages/gate` exposes a fixed `decide()` stub. `packages/github` will talk to GitHub. `templates/stub-run.json` is the template the machine loads. `evals/` is still for later fixtures.
 
 ## Skills
 
@@ -22,4 +22,4 @@ Use ponytail and the working style on every change. Ponytail stops extra code. T
 
 ## Hard rule
 
-No model-client import in `packages/core`. The scanner is `scripts/check-core-boundary.ts`. An ESLint rule is still a TODO. See `.agents/skills/core-boundary`.
+No model-client import in `packages/core`. ESLint and `scripts/check-core-boundary.ts` both fail the build on one. See `.agents/skills/core-boundary`.

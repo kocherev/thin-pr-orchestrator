@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 
 /**
  * Package names that must not be imported from packages/core.
- * TODO: replace this denylist with an ESLint rule. Add new model SDKs here until then.
+ * eslint.config.js bans the same names as static imports.
+ * This script also rejects require() and dynamic import().
  */
 export const BANNED_PACKAGES = [
   "openai",
@@ -94,15 +95,16 @@ function isDirectRun(): boolean {
   return resolve(entry) === fileURLToPath(import.meta.url);
 }
 
+export function checkBoundary(root: string): number {
+  const hits = scanDirectory(root);
+  for (const hit of hits) {
+    process.stderr.write(`${hit.file}: banned model client import "${hit.specifier}"\n`);
+  }
+  return hits.length === 0 ? 0 : 1;
+}
+
 if (isDirectRun()) {
   const coreRoot = join(dirname(fileURLToPath(import.meta.url)), "../packages/core");
-  const hits = scanDirectory(coreRoot);
-  if (hits.length > 0) {
-    for (const hit of hits) {
-      process.stderr.write(
-        `${hit.file}: banned model client import "${hit.specifier}"\n`,
-      );
-    }
-    process.exit(1);
-  }
+  const requested = process.argv[2];
+  process.exit(checkBoundary(requested ? resolve(requested) : coreRoot));
 }
