@@ -1,0 +1,30 @@
+{
+  "plan": {
+    "summary": "Add an uppercase label helper.",
+    "steps": [
+      "Export formatLabel from src/format.ts"
+    ]
+  },
+  "implement": {
+    "summary": "Export formatLabel.",
+    "files": [
+      "src/format.ts"
+    ]
+  },
+  "test": {
+    "summary": "formatLabel uppercases text.",
+    "passed": true
+  },
+  "review": {
+    "summary": "formatCount is unchanged.",
+    "notes": []
+  },
+  "pullRequest": {
+    "summary": "pass",
+    "title": "Add an uppercase label",
+    "body": "formatLabel uppercases its input."
+  },
+  "changes": [
+    "src/format.ts"
+  ]
+}

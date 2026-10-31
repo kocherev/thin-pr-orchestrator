@@ -6,6 +6,7 @@ Run these before opening a pull request:
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm eval
 ```
 
 Keep model client imports out of `packages/core`. `pnpm lint` runs that check.

@@ -1,0 +1,30 @@
+{
+  "plan": {
+    "summary": "Drop empty lines from splitNotes.",
+    "steps": [
+      "Filter blank lines in src/notes.ts"
+    ]
+  },
+  "implement": {
+    "summary": "Skip blank note lines.",
+    "files": [
+      "src/notes.ts"
+    ]
+  },
+  "test": {
+    "summary": "Blank lines are gone.",
+    "passed": true
+  },
+  "review": {
+    "summary": "Empty lines are filtered.",
+    "notes": []
+  },
+  "pullRequest": {
+    "summary": "pass",
+    "title": "Skip blank note lines",
+    "body": "splitNotes drops empty lines."
+  },
+  "changes": [
+    "src/notes.ts"
+  ]
+}

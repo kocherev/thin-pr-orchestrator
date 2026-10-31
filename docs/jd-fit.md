@@ -16,4 +16,4 @@ Specialist input and output are validated with Zod at the boundary. `packages/ga
 
 ## Tesla, forward deployed
 
-`templates/bugfix.yaml`, `templates/small-feature.yaml`, and `templates/docs-update.yaml` load through the same check as `templates/stub-run.json`. `evals/` is reserved for later replay fixtures. The run log itself is SQLite, checked by the replay test in `packages/core`.
+`templates/bugfix.yaml`, `templates/small-feature.yaml`, and `templates/docs-update.yaml` load through the same check as `templates/stub-run.json`. `evals/` stores the sample repo and recorded responses. `pnpm eval` replays them and checks the pass rate against `evals/baseline.json`. The run log itself is SQLite, checked by the replay test in `packages/core`.

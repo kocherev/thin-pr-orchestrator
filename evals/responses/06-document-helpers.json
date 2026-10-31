@@ -1,0 +1,30 @@
+{
+  "plan": {
+    "summary": "Mention reset in the sample readme.",
+    "steps": [
+      "Add a reset bullet to README.md"
+    ]
+  },
+  "implement": {
+    "summary": "Document reset.",
+    "files": [
+      "README.md"
+    ]
+  },
+  "test": {
+    "summary": "The readme lists reset.",
+    "passed": true
+  },
+  "review": {
+    "summary": "The new bullet matches the helper.",
+    "notes": []
+  },
+  "pullRequest": {
+    "summary": "pass",
+    "title": "Document the helpers",
+    "body": "The readme mentions reset."
+  },
+  "changes": [
+    "README.md"
+  ]
+}

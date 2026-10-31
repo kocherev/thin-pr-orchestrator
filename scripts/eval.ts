@@ -1,0 +1,412 @@
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+import { runAction, type GitHubSurface } from "@thin-pr/github";
+import { implementerOutput, ReplayModelClient } from "@thin-pr/specialists";
+
+export type CaseReport = {
+  readonly id: string;
+  readonly gate: "pass" | "fail";
+  readonly files: number;
+  readonly lines: number;
+  readonly withinBudget: boolean;
+};
+
+export type RangeStat = {
+  readonly min: number;
+  readonly median: number;
+  readonly max: number;
+};
+
+export type EvalReport = {
+  readonly cases: readonly CaseReport[];
+  readonly passed: number;
+  readonly total: number;
+  readonly passRate: number;
+  readonly minPassRate: number;
+  readonly withinBudget: number;
+  readonly budget: { readonly maxFiles: number; readonly maxLines: number };
+  readonly files: RangeStat;
+  readonly lines: RangeStat;
+  readonly meetsBaseline: boolean;
+};
+
+type RecordedResponse = {
+  readonly plan: unknown;
+  readonly implement: unknown;
+  readonly test: unknown;
+  readonly review: unknown;
+  readonly pullRequest: unknown;
+  readonly changes: readonly string[];
+};
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+export async function runEval(workspace = root): Promise<EvalReport> {
+  const evalsDir = join(workspace, "evals");
+  const minPassRate = readPassRate(jsonFile(join(evalsDir, "baseline.json")), "baseline.json");
+  const budget = readBudget(jsonFile(join(evalsDir, "budget.json")));
+  const sampleRoot = join(evalsDir, "sample-repo");
+  const ids = issueIds(join(evalsDir, "issues"));
+  if (ids.length < 10) {
+    throw new Error(`evals need at least 10 issues, found ${ids.length}`);
+  }
+
+  const directory = mkdtempSync(join(tmpdir(), "thin-pr-eval-"));
+  try {
+    const cases: CaseReport[] = [];
+    const seenIssues = new Set<number>();
+    for (const id of ids) {
+      const issuePath = join(evalsDir, "issues", `${id}.json`);
+      const responsePath = join(evalsDir, "responses", `${id}.json`);
+      const payload = jsonFile(issuePath);
+      const response = readResponse(id, jsonFile(responsePath));
+      const issueNumber = issueNumberOf(id, payload);
+      if (seenIssues.has(issueNumber)) {
+        throw new Error(`${id}: duplicate issue number ${issueNumber}`);
+      }
+      seenIssues.add(issueNumber);
+      const diff = scoreDiff(id, sampleRoot, join(evalsDir, "diffs", id), response.changes);
+      const gate = await replay(id, workspace, directory, issueNumber, payload, response);
+      cases.push({
+        id,
+        gate,
+        files: diff.files,
+        lines: diff.lines,
+        withinBudget: diff.files <= budget.maxFiles && diff.lines <= budget.maxLines,
+      });
+    }
+    return summarize(cases, minPassRate, budget);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+export function meetsBaseline(passed: number, total: number, minPassRate: number): boolean {
+  if (total <= 0) {
+    return false;
+  }
+  return passed / total >= minPassRate;
+}
+
+export function formatReport(report: EvalReport): string {
+  const lines = [
+    "Replay eval",
+    `cases: ${report.total}`,
+    `gate pass rate: ${report.passed}/${report.total} (${percent(report.passRate)})`,
+    `baseline: ${percent(report.minPassRate)}`,
+    `diff budget: ${report.budget.maxFiles} files, ${report.budget.maxLines} lines`,
+    `within budget: ${report.withinBudget}/${report.total}`,
+    `files changed: min ${formatNumber(report.files.min)}, median ${formatNumber(report.files.median)}, max ${formatNumber(report.files.max)}`,
+    `lines changed: min ${formatNumber(report.lines.min)}, median ${formatNumber(report.lines.median)}, max ${formatNumber(report.lines.max)}`,
+  ];
+  for (const item of report.cases) {
+    const budget = item.withinBudget ? "within budget" : "over budget";
+    lines.push(`${item.id} ${item.gate} files ${item.files} lines ${item.lines} ${budget}`);
+  }
+  return lines.join("\n");
+}
+
+export function exitCode(report: EvalReport): 0 | 1 {
+  return report.meetsBaseline ? 0 : 1;
+}
+
+export function lineChangeCount(before: string, after: string): number {
+  const removed = sourceLines(before);
+  const added = sourceLines(after);
+  const shared = longestCommonSubsequence(removed, added);
+  return removed.length - shared + (added.length - shared);
+}
+
+function summarize(
+  cases: readonly CaseReport[],
+  minPassRate: number,
+  budget: EvalReport["budget"],
+): EvalReport {
+  const passed = cases.filter((item) => item.gate === "pass").length;
+  const total = cases.length;
+  const passRate = passed / total;
+  return {
+    cases,
+    passed,
+    total,
+    passRate,
+    minPassRate,
+    withinBudget: cases.filter((item) => item.withinBudget).length,
+    budget,
+    files: rangeStat(cases.map((item) => item.files)),
+    lines: rangeStat(cases.map((item) => item.lines)),
+    meetsBaseline: meetsBaseline(passed, total, minPassRate),
+  };
+}
+
+async function replay(
+  id: string,
+  workspace: string,
+  directory: string,
+  issueNumber: number,
+  payload: unknown,
+  response: RecordedResponse,
+): Promise<"pass" | "fail"> {
+  let result: Awaited<ReturnType<typeof runAction>>;
+  try {
+    result = await runAction({
+      payload,
+      workspace,
+      runId: `eval-${issueNumber}`,
+      logPath: join(directory, `${id}.sqlite`),
+      github: replayGitHub(),
+      model: new ReplayModelClient({
+        planner: JSON.stringify(response.plan),
+        implementer: JSON.stringify(response.implement),
+        tester: JSON.stringify(response.test),
+        reviewer: JSON.stringify(response.review),
+        "pr-writer": JSON.stringify(response.pullRequest),
+      }),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "replay failed";
+    throw new Error(`${id}: ${message}`, { cause: error });
+  }
+  if (result.status === "ignored") {
+    throw new Error(`${id}: issue is not a thin-pr label event`);
+  }
+  return result.status === "completed" ? "pass" : "fail";
+}
+
+function replayGitHub(): GitHubSurface {
+  let nextId = 1;
+  return {
+    async branchSha() {
+      return "abc123";
+    },
+    async createBranch() {
+      return undefined;
+    },
+    async startCheck() {
+      const id = nextId;
+      nextId += 1;
+      return id;
+    },
+    async finishCheck() {
+      return undefined;
+    },
+    async comment() {
+      return undefined;
+    },
+    async advanceBranch() {
+      return "def456";
+    },
+    async openDraft(input) {
+      return {
+        number: 1,
+        url: `https://example.test/${input.owner}/${input.repo}/pull/1`,
+      };
+    },
+  };
+}
+
+function scoreDiff(
+  id: string,
+  sampleRoot: string,
+  diffRoot: string,
+  changes: readonly string[],
+): { files: number; lines: number } {
+  let lines = 0;
+  for (const rel of changes) {
+    const before = readTreeFile(id, sampleRoot, rel, true);
+    const after = readTreeFile(id, diffRoot, rel, false);
+    lines += lineChangeCount(before, after);
+  }
+  return { files: changes.length, lines };
+}
+
+function readTreeFile(id: string, tree: string, rel: string, allowMissing: boolean): string {
+  const full = resolveInside(id, tree, rel);
+  if (!existsSync(full)) {
+    if (!allowMissing) {
+      throw new Error(`${id}: missing recorded file ${rel}`);
+    }
+    const parent = dirname(full);
+    if (!existsSync(parent) || !statSync(parent).isDirectory()) {
+      throw new Error(`${id}: ${rel} is outside the sample repo`);
+    }
+    return "";
+  }
+  if (!statSync(full).isFile()) {
+    throw new Error(`${id}: ${rel} is not a file`);
+  }
+  return readFileSync(full, "utf8");
+}
+
+function resolveInside(id: string, tree: string, rel: string): string {
+  if (rel.length === 0 || rel.startsWith("/") || rel.split(/[\\/]/).includes("..")) {
+    throw new Error(`${id}: diff path escapes the tree: ${rel}`);
+  }
+  const root = resolve(tree);
+  const full = resolve(root, rel);
+  const fromRoot = relative(root, full);
+  if (fromRoot.startsWith("..") || fromRoot === "" || fromRoot.includes(`..${sep}`)) {
+    throw new Error(`${id}: diff path escapes the tree: ${rel}`);
+  }
+  return full;
+}
+
+function readResponse(id: string, value: unknown): RecordedResponse {
+  const record = objectValue(value, `${id} response`);
+  const changes = stringList(record.changes, `${id} changes`);
+  if (new Set(changes).size !== changes.length) {
+    throw new Error(`${id}: duplicate diff path`);
+  }
+  const implement = implementerOutput.safeParse(record.implement);
+  if (implement.success && !samePaths(implement.data.files, changes)) {
+    throw new Error(`${id}: implement files do not match the recorded diff`);
+  }
+  return {
+    plan: record.plan,
+    implement: record.implement,
+    test: record.test,
+    review: record.review,
+    pullRequest: record.pullRequest,
+    changes,
+  };
+}
+
+function issueNumberOf(id: string, payload: unknown): number {
+  const event = objectValue(payload, `${id} issue`);
+  const issue = objectValue(event.issue, `${id} issue.issue`);
+  const repository = objectValue(event.repository, `${id} issue.repository`);
+  if (repository.name !== "sample-repo") {
+    throw new Error(`${id}: issue repository must be sample-repo`);
+  }
+  const number = issue.number;
+  if (typeof number !== "number" || !Number.isInteger(number) || number <= 0) {
+    throw new Error(`${id}: issue.number must be a positive integer`);
+  }
+  return number;
+}
+
+function issueIds(directory: string): string[] {
+  return readdirSync(directory)
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => name.slice(0, -".json".length))
+    .sort();
+}
+
+function readPassRate(value: unknown, file: string): number {
+  const record = objectValue(value, file);
+  const rate = record.minPassRate;
+  if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0 || rate > 1) {
+    throw new Error(`${file} minPassRate must be greater than 0 and at most 1`);
+  }
+  return rate;
+}
+
+function readBudget(value: unknown): { maxFiles: number; maxLines: number } {
+  const record = objectValue(value, "budget.json");
+  return {
+    maxFiles: positiveInteger(record.maxFiles, "budget maxFiles"),
+    maxLines: positiveInteger(record.maxLines, "budget maxLines"),
+  };
+}
+
+function rangeStat(values: readonly number[]): RangeStat {
+  const sorted = [...values].sort((left, right) => left - right);
+  const mid = Math.floor(sorted.length / 2);
+  const upper = sorted[mid] ?? 0;
+  const median = sorted.length % 2 === 1 ? upper : ((sorted[mid - 1] ?? 0) + upper) / 2;
+  return {
+    min: sorted[0] ?? 0,
+    median,
+    max: sorted[sorted.length - 1] ?? 0,
+  };
+}
+
+function longestCommonSubsequence(left: readonly string[], right: readonly string[]): number {
+  const prev = new Array<number>(right.length + 1).fill(0);
+  const curr = new Array<number>(right.length + 1).fill(0);
+  for (let i = 1; i <= left.length; i += 1) {
+    for (let j = 1; j <= right.length; j += 1) {
+      const above = prev[j] ?? 0;
+      const leftOf = curr[j - 1] ?? 0;
+      const diagonal = prev[j - 1] ?? 0;
+      curr[j] = left[i - 1] === right[j - 1] ? diagonal + 1 : Math.max(above, leftOf);
+    }
+    for (let j = 0; j <= right.length; j += 1) {
+      prev[j] = curr[j] ?? 0;
+    }
+  }
+  return prev[right.length] ?? 0;
+}
+
+function sourceLines(text: string): string[] {
+  if (text.length === 0) {
+    return [];
+  }
+  const lines = text.split("\n");
+  if (lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+  return lines;
+}
+
+function samePaths(left: readonly string[], right: readonly string[]): boolean {
+  const a = [...left].sort();
+  const b = [...right].sort();
+  return a.length === b.length && a.every((path, index) => path === b[index]);
+}
+
+function jsonFile(path: string): unknown {
+  return JSON.parse(readFileSync(path, "utf8")) as unknown;
+}
+
+function objectValue(value: unknown, field: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${field} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function stringList(value: unknown, field: string): string[] {
+  if (!Array.isArray(value) || value.length === 0 || value.some((item) => typeof item !== "string" || item.length === 0)) {
+    throw new Error(`${field} must be a non-empty list of paths`);
+  }
+  return value;
+}
+
+function positiveInteger(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    throw new Error(`${field} must be a positive integer`);
+  }
+  return value;
+}
+
+function percent(rate: number): string {
+  return `${(rate * 100).toFixed(1)}%`;
+}
+
+function formatNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function isDirectRun(): boolean {
+  const entry = process.argv[1];
+  if (!entry) {
+    return false;
+  }
+  return resolve(entry) === fileURLToPath(import.meta.url);
+}
+
+if (isDirectRun()) {
+  runEval()
+    .then((report) => {
+      process.stdout.write(`${formatReport(report)}\n`);
+      process.exitCode = exitCode(report);
+    })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : "eval failed";
+      process.stderr.write(`${message}\n`);
+      process.exitCode = 1;
+    });
+}

@@ -1,0 +1,36 @@
+{
+  "plan": {
+    "summary": "Mark each helper file.",
+    "steps": [
+      "Add a local note to the four helper files"
+    ]
+  },
+  "implement": {
+    "summary": "Mark the helper files.",
+    "files": [
+      "src/counter.ts",
+      "src/format.ts",
+      "src/notes.ts",
+      "src/parse.ts"
+    ]
+  },
+  "test": {
+    "summary": "Each helper file has the note.",
+    "passed": true
+  },
+  "review": {
+    "summary": "Behavior is unchanged.",
+    "notes": []
+  },
+  "pullRequest": {
+    "summary": "pass",
+    "title": "Mark every helper",
+    "body": "Each helper file has a local note."
+  },
+  "changes": [
+    "src/counter.ts",
+    "src/format.ts",
+    "src/notes.ts",
+    "src/parse.ts"
+  ]
+}
