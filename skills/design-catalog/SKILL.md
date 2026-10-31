@@ -9,7 +9,7 @@ description: >
 
 Local copy of the main skill (upstream name `emil-design-eng`):
 
-- `.agents/skills/design-engineering`
+- `skills/design-engineering`
 
 Index of the rest, including animation, review, performance, and native-feel skills:
 

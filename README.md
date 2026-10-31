@@ -74,7 +74,7 @@ That file feeds a reviewer payload whose `notes` entry is a number, then asserts
 
 ## Working notes
 
-See `AGENTS.md` and `.agents/skills/` for the rules that apply when changing this repo. The hard rule for `packages/core` is also documented in `.agents/skills/core-boundary`.
+See `WORKING.md` and `skills/` for the rules that apply when changing this repo. The hard rule for `packages/core` is also documented in `skills/core-boundary`.
 
 ## License
 
