@@ -10,11 +10,11 @@ Thin PR Orchestrator. Read this before changing the repo.
 
 Use ponytail and the working style on every change. Ponytail stops extra code. The working style says how to prove the code that remains.
 
-- `.agents/skills/ponytail` for the smallest complete diff.
-- `.agents/skills/working-style` for data shape, tests, and role budgets.
-- `.agents/skills/core-boundary` for any edit under `packages/core` or to lint.
-- `.agents/skills/make-interfaces-feel-better` and `.agents/skills/interface-catalog` when a change has UI.
-- `.agents/skills/design-engineering` and `.agents/skills/design-catalog` when a change has motion or component feel.
+- `skills/ponytail` for the smallest complete diff.
+- `skills/working-style` for data shape, tests, and role budgets.
+- `skills/core-boundary` for any edit under `packages/core` or to lint.
+- `skills/make-interfaces-feel-better` and `skills/interface-catalog` when a change has UI.
+- `skills/design-engineering` and `skills/design-catalog` when a change has motion or component feel.
 
 ## Commands
 
@@ -22,4 +22,4 @@ Use ponytail and the working style on every change. Ponytail stops extra code. T
 
 ## Hard rule
 
-No model-client import in `packages/core`. ESLint and `scripts/check-core-boundary.ts` both fail the build on one. See `.agents/skills/core-boundary`.
+No model-client import in `packages/core`. ESLint and `scripts/check-core-boundary.ts` both fail the build on one. See `skills/core-boundary`.

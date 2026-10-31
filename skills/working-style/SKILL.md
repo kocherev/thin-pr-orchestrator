@@ -8,7 +8,7 @@ description: >
 
 # Working style
 
-Use this with `.agents/skills/ponytail`. Ponytail picks the smallest complete change. This file says how to shape that change and how to check it. The two apply together. ponytail-mode is the source of the sequencing and verification rules. pstack is the source of the per-role budget.
+Use this with `skills/ponytail`. Ponytail picks the smallest complete change. This file says how to shape that change and how to check it. The two apply together. ponytail-mode is the source of the sequencing and verification rules. pstack is the source of the per-role budget.
 
 ## Before code
 
