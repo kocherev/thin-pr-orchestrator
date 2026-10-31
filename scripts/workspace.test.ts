@@ -39,7 +39,7 @@ describe("workspace", () => {
       encoding: "utf8",
     });
 
-    for (const name of ["lint", "typecheck", "test", "build"]) {
+    for (const name of ["lint", "typecheck", "test", "build", "eval"]) {
       expect(manifest.scripts[name]).toBeTruthy();
       expect(listed).toContain(name);
     }
@@ -59,10 +59,12 @@ describe("workspace", () => {
     }
   });
 
-  it("describes replay fixtures without loading them", () => {
+  it("documents the replay eval command", () => {
     const text = readFileSync(join(root, "evals", "README.md"), "utf8");
     expect(text.toLowerCase()).toContain("replay");
-    expect(text).toContain("Nothing in the workspace loads this directory yet.");
+    expect(text).toContain("pnpm eval");
+    expect(text).toContain("evals/sample-repo");
+    expect(text).toContain("baseline");
   });
 
   it("finds no model client import under packages/core", () => {

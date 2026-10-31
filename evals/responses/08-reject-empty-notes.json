@@ -1,0 +1,32 @@
+{
+  "plan": {
+    "summary": "Return no lines for blank note text.",
+    "steps": [
+      "Guard empty text in src/notes.ts"
+    ]
+  },
+  "implement": {
+    "summary": "Return no lines for blank text.",
+    "files": [
+      "src/notes.ts"
+    ]
+  },
+  "test": {
+    "summary": "Blank text returns no lines.",
+    "passed": true
+  },
+  "review": {
+    "summary": "The guard runs before the split.",
+    "notes": [
+      "Blank text returns an empty list."
+    ]
+  },
+  "pullRequest": {
+    "summary": "pass",
+    "title": "Reject empty note text",
+    "body": "splitNotes returns no lines for blank text."
+  },
+  "changes": [
+    "src/notes.ts"
+  ]
+}

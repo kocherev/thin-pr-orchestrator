@@ -1,0 +1,30 @@
+{
+  "plan": {
+    "summary": "Stop decrement from going below zero.",
+    "steps": [
+      "Change decrement in src/counter.ts"
+    ]
+  },
+  "implement": {
+    "summary": "Clamp decrement at zero.",
+    "files": [
+      "src/counter.ts"
+    ]
+  },
+  "test": {
+    "summary": "Decrement stays at zero.",
+    "passed": true
+  },
+  "review": {
+    "summary": "The clamp matches the issue.",
+    "notes": []
+  },
+  "pullRequest": {
+    "summary": "pass",
+    "title": "Clamp decrement at zero",
+    "body": "decrement returns zero instead of a negative count."
+  },
+  "changes": [
+    "src/counter.ts"
+  ]
+}

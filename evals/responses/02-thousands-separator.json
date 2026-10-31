@@ -1,0 +1,30 @@
+{
+  "plan": {
+    "summary": "Group digits in formatCount.",
+    "steps": [
+      "Use a locale grouping in src/format.ts"
+    ]
+  },
+  "implement": {
+    "summary": "Group thousands in formatCount.",
+    "files": [
+      "src/format.ts"
+    ]
+  },
+  "test": {
+    "summary": "Grouped counts render.",
+    "passed": true
+  },
+  "review": {
+    "summary": "The formatter stays a pure function.",
+    "notes": []
+  },
+  "pullRequest": {
+    "summary": "pass",
+    "title": "Format counts with separators",
+    "body": "formatCount groups thousands."
+  },
+  "changes": [
+    "src/format.ts"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "plan": {
+    "summary": "Replace the sample readme.",
+    "steps": [
+      "Rewrite README.md"
+    ]
+  },
+  "implement": {
+    "summary": "Rewrite the readme.",
+    "files": [
+      "README.md"
+    ]
+  },
+  "test": {
+    "summary": "The new readme is in place.",
+    "passed": true
+  },
+  "review": {
+    "summary": "The guide covers each helper.",
+    "notes": []
+  },
+  "pullRequest": {
+    "summary": "pass",
+    "title": "Rewrite the readme",
+    "body": "README.md is a longer guide."
+  },
+  "changes": [
+    "README.md"
+  ]
+}

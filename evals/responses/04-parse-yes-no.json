@@ -1,0 +1,30 @@
+{
+  "plan": {
+    "summary": "Accept yes and no in parseFlag.",
+    "steps": [
+      "Extend the flag checks in src/parse.ts"
+    ]
+  },
+  "implement": {
+    "summary": "Accept yes and no.",
+    "files": [
+      "src/parse.ts"
+    ]
+  },
+  "test": {
+    "summary": "yes and no parse.",
+    "passed": true
+  },
+  "review": {
+    "summary": "The extra words stay explicit.",
+    "notes": []
+  },
+  "pullRequest": {
+    "summary": "pass",
+    "title": "Accept yes and no flags",
+    "body": "parseFlag accepts yes and no."
+  },
+  "changes": [
+    "src/parse.ts"
+  ]
+}

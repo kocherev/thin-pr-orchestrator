@@ -39,3 +39,6 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      - name: Eval
+        run: pnpm eval

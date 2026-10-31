@@ -1,0 +1,28 @@
+{
+  "plan": {
+    "summary": "Rename the helpers.",
+    "steps": []
+  },
+  "implement": {
+    "summary": "Add a name comment.",
+    "files": [
+      "src/counter.ts"
+    ]
+  },
+  "test": {
+    "summary": "The comment is present.",
+    "passed": true
+  },
+  "review": {
+    "summary": "No behavior changed.",
+    "notes": []
+  },
+  "pullRequest": {
+    "summary": "pass",
+    "title": "Rename the helpers",
+    "body": "The recorded plan has no steps."
+  },
+  "changes": [
+    "src/counter.ts"
+  ]
+}

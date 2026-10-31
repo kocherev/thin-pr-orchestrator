@@ -1,0 +1,32 @@
+{
+  "plan": {
+    "summary": "Accept TRUE in parseFlag.",
+    "steps": [
+      "Compare the uppercase token in src/parse.ts"
+    ]
+  },
+  "implement": {
+    "summary": "Compare TRUE.",
+    "files": [
+      "src/parse.ts"
+    ]
+  },
+  "test": {
+    "summary": "TRUE still fails the recorded check.",
+    "passed": false
+  },
+  "review": {
+    "summary": "The check is case-sensitive.",
+    "notes": [
+      "The recorded tests did not pass."
+    ]
+  },
+  "pullRequest": {
+    "summary": "pass",
+    "title": "Match uppercase true",
+    "body": "The recorded tests did not pass."
+  },
+  "changes": [
+    "src/parse.ts"
+  ]
+}

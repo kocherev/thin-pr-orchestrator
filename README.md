@@ -33,6 +33,7 @@ cp .env.example .env
 - `pnpm lint` runs ESLint, then `scripts/check-core-boundary.ts`.
 - `pnpm typecheck` runs `tsc -b`.
 - `pnpm test` runs Vitest.
+- `pnpm eval` replays `evals/` and prints the gate pass rate and diff-budget stats. It exits non-zero when the pass rate is below `evals/baseline.json`.
 - `pnpm build` runs `tsc -b` and writes `dist/` in each project.
 
 `typecheck` and `build` use the same compiler pass. A type error fails both.
@@ -46,7 +47,7 @@ cp .env.example .env
 
 `loadTemplate` reads `templates/stub-run.json` and the YAML workflows `bugfix`, `small-feature`, and `docs-update`. Zod checks each file when it loads. A bad template throws with the file line.
 
-`evals/` will hold replay fixtures. Nothing reads that directory yet.
+`evals/` holds the sample repo, labeled issues, and recorded specialist responses. `pnpm eval` replays that set offline.
 
 ## Run and replay
 
@@ -93,7 +94,7 @@ After the workflow is on the default branch of a repository:
 
 ## CI
 
-`.github/workflows/ci.yml` runs lint, typecheck, and test on pull requests and on pushes to `main`.
+`.github/workflows/ci.yml` runs lint, typecheck, test, and eval on pull requests and on pushes to `main`. Eval fails when the gate pass rate drops below `evals/baseline.json`.
 
 ## Working notes
 
