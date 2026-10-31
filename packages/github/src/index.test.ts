@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { entrypoint, packageId } from "./index.js";
+import { entrypoint, packageId, TRIGGER_LABEL } from "./index.js";
 
 describe("@thin-pr/github", () => {
-  it("reports that the GitHub entry is not wired", () => {
+  it("starts from an issue label", () => {
     expect(packageId).toBe("@thin-pr/github");
-    expect(entrypoint()).toBe("not-wired");
+    expect(entrypoint()).toBe("issue-label");
+    expect(TRIGGER_LABEL).toBe("thin-pr");
   });
 });

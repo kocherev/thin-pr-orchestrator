@@ -1,8 +1,8 @@
 # Thin PR Orchestrator
 
-A GitHub issue goes in. A thin control plane runs a fixed workflow, calls specialized workers through a typed boundary, and opens a draft pull request for a person to review.
+A GitHub issue goes in. A thin control plane runs a fixed workflow and calls specialized workers through a typed boundary. A person reviews the result.
 
-The control plane is ordinary TypeScript. It does not call a model. Model clients are injected into `packages/specialists`. This tree uses a replay client that returns fixture JSON. Gate rules and the GitHub entry are not implemented yet.
+The control plane is ordinary TypeScript. It does not call a model. Model clients are injected into `packages/specialists`. This tree uses a replay client that returns fixture JSON. Labeling an issue `thin-pr` creates a branch and posts a check per step. Opening a draft pull request is not implemented yet.
 
 ## Requirements
 
@@ -42,7 +42,7 @@ cp .env.example .env
 - `packages/core` is the control plane. Typed code only. No model client imports. `runWorkflow` follows a template and appends every transition to SQLite. `replay` folds that log back into a run state. `ping` still returns `"pong"`.
 - `packages/specialists` defines planner, implementer, tester, reviewer, and pr-writer. Each one checks its input and output with Zod. A replay model client returns fixture JSON. Invalid output fails the step.
 - `packages/gate` exports `decide()`, which returns `"pass"`. Real review rules are not written yet. `readiness()` stays `unconfigured`.
-- `packages/github` will hold the Octokit client and the Action entry. It reports `not-wired`.
+- `packages/github` is the only package that calls GitHub. An issue labeled `thin-pr` creates branch `thin-pr/<issue number>` and posts one check per step. A failed run comments the run report on the issue. Specialists do not import this package.
 
 `loadTemplate` reads `templates/stub-run.json` and the YAML workflows `bugfix`, `small-feature`, and `docs-update`. Zod checks each file when it loads. A bad template throws with the file line.
 
@@ -67,6 +67,25 @@ pnpm exec vitest run packages/specialists/src/schema.test.ts
 ```
 
 That file feeds a reviewer payload whose `notes` entry is a number, then asserts the error path `notes.0`. `packages/core/src/run.test.ts` covers the same failure on the plan step and checks that the log stops after the step is entered.
+
+## Issue label
+
+`.github/workflows/thin-pr.yml` runs when an issue receives the label `thin-pr`. GitHub reads that workflow from the default branch, so the file has to be on the default branch before a label starts a run.
+
+The run creates `thin-pr/<issue number>` from the default branch tip and posts one Checks API check per template step on that commit. The check name is `thin-pr / <step>`. A failed step is marked failure, and the issue gets a comment that starts with `## Run report`. This slice does not open a pull request.
+
+`fixtures/sample-issue-labeled.json` is a sample `issues.labeled` payload for `example/sample-repo`. The test runs that payload through the action entry with an in-memory GitHub client.
+
+```bash
+pnpm exec vitest run packages/github/src/run.test.ts
+```
+
+After the workflow is on the default branch of a repository:
+
+1. Create the label `thin-pr`.
+2. Open an issue.
+3. Add the label `thin-pr`.
+4. The Actions run creates the branch and the checks. The checks sit on the default branch tip until a later change commits files. Adding the label again tries to create the same branch. If that ref already exists, the run fails and the issue gets another report.
 
 ## CI
 

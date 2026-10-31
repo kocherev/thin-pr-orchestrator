@@ -12,7 +12,7 @@ Specialist input and output are validated with Zod at the boundary. `packages/ga
 
 ## GitHub Actions
 
-`.github/workflows/ci.yml` runs lint, typecheck, and Vitest. `packages/github` is the reserved entry for a later Action and API client.
+`.github/workflows/ci.yml` runs lint, typecheck, and Vitest. `.github/workflows/thin-pr.yml` starts a run when an issue is labeled `thin-pr`. `packages/github` calls Octokit for the branch, the checks, and a failure comment. The other packages do not.
 
 ## Tesla, forward deployed
 

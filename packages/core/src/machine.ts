@@ -12,6 +12,12 @@ import type {
 
 export type GateHook = () => "pass" | "fail" | Promise<"pass" | "fail">;
 
+export type Transition = {
+  readonly from: Phase;
+  readonly to: Phase;
+  readonly output: SpecialistOutput | null;
+};
+
 export type RunInput = {
   readonly runId: string;
   readonly issue: string;
@@ -19,6 +25,7 @@ export type RunInput = {
   readonly specialists: SpecialistMap;
   readonly log: EventLog;
   readonly gates?: Readonly<Record<string, GateHook>>;
+  readonly onTransition?: (transition: Transition) => void | Promise<void>;
 };
 
 export async function runWorkflow(input: RunInput): Promise<RunState> {
@@ -45,10 +52,10 @@ export async function runWorkflow(input: RunInput): Promise<RunState> {
       throw new Error(`missing specialist for ${step.specialist}`);
     }
 
-    phase = record(input, phase, step.id, null);
+    phase = await record(input, phase, step.id, null);
     const output = await runStep(input, step, specialist, outputs);
     const next = input.template.steps[index + 1]?.id ?? "complete";
-    phase = record(input, phase, next, output);
+    phase = await record(input, phase, next, output);
     outputs.push(output);
   }
 
@@ -145,12 +152,12 @@ async function applyGate(gates: RunInput["gates"], name: string): Promise<void> 
   }
 }
 
-function record(
+async function record(
   input: RunInput,
   from: Phase,
   to: Phase,
   output: SpecialistOutput | null,
-): Phase {
+): Promise<Phase> {
   const event: NewLogEvent = {
     runId: input.runId,
     templateId: input.template.id,
@@ -160,5 +167,6 @@ function record(
     output,
   };
   input.log.append(event);
+  await input.onTransition?.({ from, to, output });
   return to;
 }

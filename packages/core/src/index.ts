@@ -1,5 +1,5 @@
 export { openEventLog, type EventLog, type NewLogEvent } from "./log.js";
-export { replay, runWorkflow, type GateHook, type RunInput } from "./machine.js";
+export { replay, runWorkflow, type GateHook, type RunInput, type Transition } from "./machine.js";
 export { loadTemplate, parseTemplate, TemplateError } from "./template.js";
 export {
   isPhase,

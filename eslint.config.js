@@ -13,6 +13,10 @@ const MODEL_CLIENTS = [
 
 const modelClientMessage = "Model clients are not allowed in packages/core.";
 
+const GITHUB_CLIENTS = ["@octokit/rest", "@actions/core", "@actions/github"];
+
+const githubClientMessage = "GitHub clients belong in packages/github.";
+
 export default tseslint.config(
   {
     ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**"],
@@ -25,10 +29,34 @@ export default tseslint.config(
       "no-restricted-imports": [
         "error",
         {
-          paths: MODEL_CLIENTS.map((name) => ({ name, message: modelClientMessage })),
-          patterns: MODEL_CLIENTS.map((name) => ({
+          paths: [
+            ...MODEL_CLIENTS.map((name) => ({ name, message: modelClientMessage })),
+            ...GITHUB_CLIENTS.map((name) => ({ name, message: githubClientMessage })),
+          ],
+          patterns: [
+            ...MODEL_CLIENTS.map((name) => ({
+              group: [`${name}/*`],
+              message: modelClientMessage,
+            })),
+            ...GITHUB_CLIENTS.map((name) => ({
+              group: [`${name}/*`],
+              message: githubClientMessage,
+            })),
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["packages/specialists/**/*.ts", "packages/gate/**/*.ts", "scripts/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: GITHUB_CLIENTS.map((name) => ({ name, message: githubClientMessage })),
+          patterns: GITHUB_CLIENTS.map((name) => ({
             group: [`${name}/*`],
-            message: modelClientMessage,
+            message: githubClientMessage,
           })),
         },
       ],

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { loadTemplate, packageId as coreId, ping } from "@thin-pr/core";
 import { packageId as gateId, readiness } from "@thin-pr/gate";
-import { packageId as githubId, entrypoint } from "@thin-pr/github";
+import { packageId as githubId, entrypoint, TRIGGER_LABEL } from "@thin-pr/github";
 import { listSpecialists, packageId as specialistsId } from "@thin-pr/specialists";
 import { scanDirectory } from "./check-core-boundary.js";
 
@@ -26,7 +26,8 @@ describe("workspace", () => {
     expect(gateId).toBe("@thin-pr/gate");
     expect(readiness()).toBe("unconfigured");
     expect(githubId).toBe("@thin-pr/github");
-    expect(entrypoint()).toBe("not-wired");
+    expect(entrypoint()).toBe("issue-label");
+    expect(TRIGGER_LABEL).toBe("thin-pr");
   });
 
   it("resolves the root scripts through pnpm", () => {
