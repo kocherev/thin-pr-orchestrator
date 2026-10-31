@@ -2,6 +2,13 @@ export const STEP_NAMES = ["plan", "implement", "test", "review", "gate"] as con
 
 export type StepName = (typeof STEP_NAMES)[number];
 
+export type TemplateSpecialist =
+  | "planner"
+  | "implementer"
+  | "tester"
+  | "reviewer"
+  | "pr-writer";
+
 export type Phase = "idle" | StepName | "complete";
 
 export type SpecialistOutput = {
@@ -20,11 +27,20 @@ export type Specialist = {
   run(input: SpecialistInput): SpecialistOutput | Promise<SpecialistOutput>;
 };
 
-export type SpecialistMap = Partial<Record<StepName, Specialist>>;
+export type SpecialistMap = Partial<Record<TemplateSpecialist, Specialist>>;
+
+export type WorkflowStep = {
+  readonly id: StepName;
+  readonly specialist: TemplateSpecialist;
+  readonly retries: number;
+  readonly inputs: readonly string[];
+  readonly outputs: readonly string[];
+  readonly gate?: string;
+};
 
 export type WorkflowTemplate = {
   readonly id: string;
-  readonly steps: readonly StepName[];
+  readonly steps: readonly WorkflowStep[];
 };
 
 export type RunState = {

@@ -6,5 +6,5 @@
     "rootDir": "src"
   },
   "include": ["src"],
-  "references": [{ "path": "../specialists" }]
+  "references": [{ "path": "../gate" }, { "path": "../specialists" }]
 }

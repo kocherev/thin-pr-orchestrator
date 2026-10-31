@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { packageId as coreId, ping } from "@thin-pr/core";
+import { loadTemplate, packageId as coreId, ping } from "@thin-pr/core";
 import { packageId as gateId, readiness } from "@thin-pr/gate";
 import { packageId as githubId, entrypoint } from "@thin-pr/github";
 import { listSpecialists, packageId as specialistsId } from "@thin-pr/specialists";
@@ -44,11 +44,17 @@ describe("workspace", () => {
     }
   });
 
-  it("keeps workflow templates unloaded", () => {
+  it("loads workflow templates", () => {
     for (const name of ["bugfix", "small-feature", "docs-update"]) {
-      const text = readFileSync(join(root, "templates", `${name}.yaml`), "utf8");
-      expect(text).toContain(`id: ${name}`);
-      expect(text).toContain("status: not-loaded");
+      const template = loadTemplate(join(root, "templates", `${name}.yaml`));
+      expect(template.id).toBe(name);
+      expect(template.steps.map((step) => step.specialist)).toEqual([
+        "planner",
+        "implementer",
+        "tester",
+        "reviewer",
+        "pr-writer",
+      ]);
     }
   });
 

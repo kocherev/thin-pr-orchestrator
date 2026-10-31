@@ -1,5 +1,4 @@
-import { decide } from "@thin-pr/gate";
-import { executeSpecialist, type ModelClient } from "./contract.js";
+import { executeSpecialist, type ModelClient, type SpecialistName } from "./contract.js";
 import {
   implementer,
   planner,
@@ -32,13 +31,13 @@ export type StubSpecialist = {
 
 export function createStubSpecialists(
   model: ModelClient = new ReplayModelClient(),
-): Record<StubStep, StubSpecialist> {
+): Record<SpecialistName, StubSpecialist> {
   return {
-    plan: adapt("plan", model),
-    implement: adapt("implement", model),
-    test: adapt("test", model),
-    review: adapt("review", model),
-    gate: adapt("gate", model),
+    planner: adapt("plan", model),
+    implementer: adapt("implement", model),
+    tester: adapt("test", model),
+    reviewer: adapt("review", model),
+    "pr-writer": adapt("gate", model),
   };
 }
 
@@ -47,9 +46,6 @@ function adapt(step: StubStep, model: ModelClient): StubSpecialist {
     step,
     async run(input) {
       const summary = await runStep(step, model, input);
-      if (step === "gate" && decide() !== "pass") {
-        throw new Error("gate stub did not pass");
-      }
       return { step, summary };
     },
   };

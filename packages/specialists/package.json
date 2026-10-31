@@ -7,7 +7,6 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@thin-pr/gate": "workspace:*",
     "zod": "^4.6.7"
   }
 }
