@@ -5,5 +5,13 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.1",
+    "@octokit/rest": "^22.0.0",
+    "@thin-pr/core": "workspace:*",
+    "@thin-pr/gate": "workspace:*",
+    "@thin-pr/specialists": "workspace:*"
   }
 }

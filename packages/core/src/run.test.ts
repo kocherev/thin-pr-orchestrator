@@ -148,6 +148,37 @@ describe("orchestrator run", () => {
     ).toThrow(/template invalid at steps\.0\.id/);
   });
 
+  it("reports a transition before the specialist runs", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "thin-pr-"));
+    directories.push(directory);
+    const log = openEventLog(join(directory, "events.sqlite"));
+    const seen: string[] = [];
+    try {
+      await runWorkflow({
+        runId: "run-1",
+        issue: "Fix the stub.",
+        template: planTemplate(),
+        specialists: {
+          planner: {
+            async run() {
+              seen.push("specialist");
+              return { step: "plan", summary: "done" };
+            },
+          },
+        },
+        log,
+        onTransition(transition) {
+          const mark =
+            transition.output === null ? `enter:${transition.to}` : `leave:${transition.output.step}`;
+          seen.push(mark);
+        },
+      });
+      expect(seen).toEqual(["enter:plan", "specialist", "leave:plan"]);
+    } finally {
+      log.close();
+    }
+  });
+
   it("writes nothing when a specialist is missing", async () => {
     const directory = mkdtempSync(join(tmpdir(), "thin-pr-"));
     directories.push(directory);
