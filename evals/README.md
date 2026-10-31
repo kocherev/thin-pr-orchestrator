@@ -8,4 +8,4 @@ Offline replay over the sample repo. No live model call.
 pnpm eval
 ```
 
-The command replays each issue through the small-feature workflow and the gate. It prints the gate pass rate and the diff-budget stats. The process exits non-zero when the pass rate is below the committed baseline.
+The command replays each issue through the small-feature workflow and the gate. It prints the gate pass rate and the diff-budget stats. The process exits non-zero when the pass rate is below the committed baseline. On the committed fixtures that rate is 10/12, printed as 83.3%. The case table is in `README.md`.
