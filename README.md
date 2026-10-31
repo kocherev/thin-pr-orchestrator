@@ -186,6 +186,10 @@ The core replay test writes a SQLite log, closes it, opens it again, and expects
 
 See `WORKING.md` and `skills/` before changing the repo. The import ban for `packages/core` is `skills/core-boundary`.
 
+- `packages/core` runs a template, appends every transition to SQLite, and imports no model client. `pnpm lint` fails when that package imports one. `packages/core/src/run.test.ts` expects `replay` to match `runWorkflow`.
+- `packages/github` opens a draft pull request only when every gate rule passes. A failed rule comments `## Run report` on the issue and does not open a pull request. The check is `packages/github/src/run.test.ts`.
+- `pnpm eval` replays 12 labeled issues offline. The floor in `evals/baseline.json` is 10/12, and the report prints `gate pass rate: 10/12 (83.3%)`.
+
 ## License
 
 MIT. See `LICENSE`.
