@@ -16,7 +16,7 @@ export type RunInput = {
   readonly log: EventLog;
 };
 
-export function runWorkflow(input: RunInput): RunState {
+export async function runWorkflow(input: RunInput): Promise<RunState> {
   if (input.runId.length === 0) {
     throw new Error("runId must be a non-empty string");
   }
@@ -41,7 +41,7 @@ export function runWorkflow(input: RunInput): RunState {
     }
 
     phase = record(input, phase, step, null);
-    const output = specialist.run({
+    const output = await specialist.run({
       step,
       issue: input.issue,
       templateId: input.template.id,

@@ -2,7 +2,7 @@
 
 A GitHub issue goes in. A thin control plane runs a fixed workflow, calls specialized workers through a typed boundary, and opens a draft pull request for a person to review.
 
-The control plane is ordinary TypeScript. It does not call a model. Model clients belong in `packages/specialists`, and only once that package has a real worker. Gate rules and the GitHub entry are not implemented yet.
+The control plane is ordinary TypeScript. It does not call a model. Model clients are injected into `packages/specialists`. This tree uses a replay client that returns fixture JSON. Gate rules and the GitHub entry are not implemented yet.
 
 ## Requirements
 
@@ -40,7 +40,7 @@ cp .env.example .env
 ## Packages
 
 - `packages/core` is the control plane. Typed code only. No model client imports. `runWorkflow` follows a template and appends every transition to SQLite. `replay` folds that log back into a run state. `ping` still returns `"pong"`.
-- `packages/specialists` exports stub workers for plan, implement, test, review, and gate. Each one returns a fixed string. Zod schemas for real workers come later.
+- `packages/specialists` defines planner, implementer, tester, reviewer, and pr-writer. Each one checks its input and output with Zod. A replay model client returns fixture JSON. Invalid output fails the step.
 - `packages/gate` exports `decide()`, which returns `"pass"`. Real review rules are not written yet. `readiness()` stays `unconfigured`.
 - `packages/github` will hold the Octokit client and the Action entry. It reports `not-wired`.
 
@@ -59,6 +59,14 @@ pnpm exec vitest run packages/core/src/run.test.ts
 ```
 
 The test writes a SQLite log, closes it, opens it again, and expects `replay` to return the same final state as `runWorkflow`. A second run with the same inputs produces that same state.
+
+To run the invalid-output failure test on its own:
+
+```bash
+pnpm exec vitest run packages/specialists/src/schema.test.ts
+```
+
+That file feeds a reviewer payload whose `notes` entry is a number, then asserts the error path `notes.0`. `packages/core/src/run.test.ts` covers the same failure on the plan step and checks that the log stops after the step is entered.
 
 ## CI
 

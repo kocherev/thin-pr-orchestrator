@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { createStubSpecialists } from "@thin-pr/specialists";
+import { createStubSpecialists, ReplayModelClient } from "@thin-pr/specialists";
 import { loadTemplate, openEventLog, parseTemplate, replay, runWorkflow } from "./index.js";
 
 const templatePath = fileURLToPath(new URL("../../../templates/stub-run.json", import.meta.url));
@@ -16,8 +16,8 @@ afterEach(() => {
 });
 
 describe("orchestrator run", () => {
-  it("replays the stored log to the same final state", () => {
-    const first = runInNewLog();
+  it("replays the stored log to the same final state", async () => {
+    const first = await runInNewLog();
     const reopened = openEventLog(first.path);
     try {
       const fromDisk = replay(reopened.read(first.state.runId));
@@ -34,7 +34,7 @@ describe("orchestrator run", () => {
       reopened.close();
     }
 
-    const second = runInNewLog();
+    const second = await runInNewLog();
     expect(second.state).toEqual(first.state);
     expect(second.events).toEqual(first.events);
 
@@ -48,13 +48,13 @@ describe("orchestrator run", () => {
     );
   });
 
-  it("writes nothing when a specialist is missing", () => {
+  it("writes nothing when a specialist is missing", async () => {
     const directory = mkdtempSync(join(tmpdir(), "thin-pr-"));
     directories.push(directory);
     const path = join(directory, "events.sqlite");
     const log = openEventLog(path);
     try {
-      expect(() =>
+      await expect(
         runWorkflow({
           runId: "run-1",
           issue: "Fix the stub.",
@@ -62,21 +62,48 @@ describe("orchestrator run", () => {
           specialists: {},
           log,
         }),
-      ).toThrow(/missing specialist/);
+      ).rejects.toThrow(/missing specialist/);
       expect(log.read("run-1")).toEqual([]);
+    } finally {
+      log.close();
+    }
+  });
+
+  it("fails the step when specialist output does not match the schema", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "thin-pr-"));
+    directories.push(directory);
+    const path = join(directory, "events.sqlite");
+    const log = openEventLog(path);
+    try {
+      await expect(
+        runWorkflow({
+          runId: "run-1",
+          issue: "Fix the stub.",
+          template: parseTemplate({ id: "one", steps: ["plan"] }),
+          specialists: createStubSpecialists(
+            new ReplayModelClient({
+              planner: JSON.stringify({ summary: 1, steps: ["edit the stub"] }),
+            }),
+          ),
+          log,
+        }),
+      ).rejects.toThrow("planner output invalid at summary: Invalid input: expected string, received number");
+      expect(log.read("run-1")).toEqual([
+        expect.objectContaining({ from: "idle", to: "plan", output: null }),
+      ]);
     } finally {
       log.close();
     }
   });
 });
 
-function runInNewLog() {
+async function runInNewLog() {
   const directory = mkdtempSync(join(tmpdir(), "thin-pr-"));
   directories.push(directory);
   const path = join(directory, "events.sqlite");
   const log = openEventLog(path);
   try {
-    const state = runWorkflow({
+    const state = await runWorkflow({
       runId: "run-1",
       issue: "Fix the stub.",
       template: loadTemplate(templatePath),

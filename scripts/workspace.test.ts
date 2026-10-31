@@ -17,11 +17,11 @@ describe("workspace", () => {
     expect(ping()).toBe("pong");
     expect(specialistsId).toBe("@thin-pr/specialists");
     expect(listSpecialists().map((specialist) => specialist.id)).toEqual([
-      "plan",
-      "implement",
-      "test",
-      "review",
-      "gate",
+      "planner",
+      "implementer",
+      "tester",
+      "reviewer",
+      "pr-writer",
     ]);
     expect(gateId).toBe("@thin-pr/gate");
     expect(readiness()).toBe("unconfigured");
