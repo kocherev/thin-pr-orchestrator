@@ -18,12 +18,12 @@ describe("@thin-pr/specialists", () => {
       templateId: "stub-run",
       prior: [],
     };
-    await expect(specialists.plan.run({ ...input, step: "plan" })).resolves.toEqual({
+    await expect(specialists.planner.run({ ...input, step: "plan" })).resolves.toEqual({
       step: "plan",
       summary: "Plan the stub change.",
     });
     await expect(
-      specialists.gate.run({
+      specialists["pr-writer"].run({
         ...input,
         step: "gate",
         prior: [

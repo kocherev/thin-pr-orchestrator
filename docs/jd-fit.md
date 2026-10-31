@@ -16,4 +16,4 @@ Specialist input and output are validated with Zod at the boundary. `packages/ga
 
 ## Tesla, forward deployed
 
-`templates/stub-run.json` is the workflow the control plane loads. `bugfix`, `small-feature`, and `docs-update` are still unloaded names. `evals/` is reserved for later replay fixtures. The run log itself is SQLite, checked by the replay test in `packages/core`.
+`templates/bugfix.yaml`, `templates/small-feature.yaml`, and `templates/docs-update.yaml` load through the same check as `templates/stub-run.json`. `evals/` is reserved for later replay fixtures. The run log itself is SQLite, checked by the replay test in `packages/core`.

@@ -3,10 +3,14 @@ import type {
   LogEvent,
   Phase,
   RunState,
+  Specialist,
   SpecialistMap,
   SpecialistOutput,
+  WorkflowStep,
   WorkflowTemplate,
 } from "./types.js";
+
+export type GateHook = () => "pass" | "fail" | Promise<"pass" | "fail">;
 
 export type RunInput = {
   readonly runId: string;
@@ -14,6 +18,7 @@ export type RunInput = {
   readonly template: WorkflowTemplate;
   readonly specialists: SpecialistMap;
   readonly log: EventLog;
+  readonly gates?: Readonly<Record<string, GateHook>>;
 };
 
 export async function runWorkflow(input: RunInput): Promise<RunState> {
@@ -35,22 +40,14 @@ export async function runWorkflow(input: RunInput): Promise<RunState> {
     if (!step) {
       throw new Error("template step is missing");
     }
-    const specialist = input.specialists[step];
+    const specialist = input.specialists[step.specialist];
     if (!specialist) {
-      throw new Error(`missing specialist for ${step}`);
+      throw new Error(`missing specialist for ${step.specialist}`);
     }
 
-    phase = record(input, phase, step, null);
-    const output = await specialist.run({
-      step,
-      issue: input.issue,
-      templateId: input.template.id,
-      prior: [...outputs],
-    });
-    if (output.step !== step) {
-      throw new Error(`specialist for ${step} returned step ${output.step}`);
-    }
-    const next = input.template.steps[index + 1] ?? "complete";
+    phase = record(input, phase, step.id, null);
+    const output = await runStep(input, step, specialist, outputs);
+    const next = input.template.steps[index + 1]?.id ?? "complete";
     phase = record(input, phase, next, output);
     outputs.push(output);
   }
@@ -102,6 +99,50 @@ export function replay(events: readonly LogEvent[]): RunState {
   }
 
   return state;
+}
+
+async function runStep(
+  input: RunInput,
+  step: WorkflowStep,
+  specialist: Specialist,
+  outputs: readonly SpecialistOutput[],
+): Promise<SpecialistOutput> {
+  const attempts = step.retries + 1;
+  let last: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const output = await specialist.run({
+        step: step.id,
+        issue: input.issue,
+        templateId: input.template.id,
+        prior: [...outputs],
+      });
+      if (output.step !== step.id) {
+        throw new Error(`specialist for ${step.id} returned step ${output.step}`);
+      }
+      if (step.gate) {
+        await applyGate(input.gates, step.gate);
+      }
+      return output;
+    } catch (error) {
+      last = error;
+    }
+  }
+  if (last instanceof Error) {
+    throw last;
+  }
+  throw new Error("step failed");
+}
+
+async function applyGate(gates: RunInput["gates"], name: string): Promise<void> {
+  const hook = gates?.[name];
+  if (!hook) {
+    throw new Error(`missing gate hook ${name}`);
+  }
+  const decision = await hook();
+  if (decision !== "pass") {
+    throw new Error(`gate ${name} returned ${decision}`);
+  }
 }
 
 function record(

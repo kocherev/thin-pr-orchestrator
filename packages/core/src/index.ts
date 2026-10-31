@@ -1,6 +1,6 @@
 export { openEventLog, type EventLog, type NewLogEvent } from "./log.js";
-export { replay, runWorkflow, type RunInput } from "./machine.js";
-export { loadTemplate, parseTemplate } from "./template.js";
+export { replay, runWorkflow, type GateHook, type RunInput } from "./machine.js";
+export { loadTemplate, parseTemplate, TemplateError } from "./template.js";
 export {
   isPhase,
   isStepName,
@@ -13,6 +13,8 @@ export {
   type SpecialistMap,
   type SpecialistOutput,
   type StepName,
+  type TemplateSpecialist,
+  type WorkflowStep,
   type WorkflowTemplate,
 } from "./types.js";
 

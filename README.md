@@ -44,7 +44,7 @@ cp .env.example .env
 - `packages/gate` exports `decide()`, which returns `"pass"`. Real review rules are not written yet. `readiness()` stays `unconfigured`.
 - `packages/github` will hold the Octokit client and the Action entry. It reports `not-wired`.
 
-`templates/stub-run.json` is the template the control plane loads. `bugfix`, `small-feature`, and `docs-update` remain unloaded YAML names.
+`loadTemplate` reads `templates/stub-run.json` and the YAML workflows `bugfix`, `small-feature`, and `docs-update`. Zod checks each file when it loads. A bad template throws with the file line.
 
 `evals/` will hold replay fixtures. Nothing reads that directory yet.
 

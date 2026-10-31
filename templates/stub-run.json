@@ -1,4 +1,41 @@
 {
   "id": "stub-run",
-  "steps": ["plan", "implement", "test", "review", "gate"]
+  "steps": [
+    {
+      "id": "plan",
+      "specialist": "planner",
+      "retries": 0,
+      "inputs": ["issue", "templateId"],
+      "outputs": ["summary", "steps"]
+    },
+    {
+      "id": "implement",
+      "specialist": "implementer",
+      "retries": 0,
+      "inputs": ["issue", "planSummary"],
+      "outputs": ["summary", "files"]
+    },
+    {
+      "id": "test",
+      "specialist": "tester",
+      "retries": 0,
+      "inputs": ["issue", "changeSummary"],
+      "outputs": ["summary", "passed"]
+    },
+    {
+      "id": "review",
+      "specialist": "reviewer",
+      "retries": 0,
+      "inputs": ["issue", "testSummary"],
+      "outputs": ["summary", "notes"]
+    },
+    {
+      "id": "gate",
+      "specialist": "pr-writer",
+      "retries": 0,
+      "inputs": ["issue", "reviewSummary"],
+      "outputs": ["summary", "title", "body"],
+      "gate": "decide"
+    }
+  ]
 }
