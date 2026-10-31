@@ -29,29 +29,53 @@ export type StubSpecialist = {
   run(input: StubInput): Promise<StubOutput>;
 };
 
-export function createStubSpecialists(
-  model: ModelClient = new ReplayModelClient(),
-): Record<SpecialistName, StubSpecialist> {
+export type CapturedRun = {
+  plan: { summary: string; steps: string[] } | null;
+  implement: { summary: string; files: string[] } | null;
+  test: { summary: string; passed: boolean } | null;
+  review: { summary: string; notes: string[] } | null;
+  pullRequest: { summary: string; title: string; body: string } | null;
+};
+
+export function createRunCapture(): CapturedRun {
   return {
-    planner: adapt("plan", model),
-    implementer: adapt("implement", model),
-    tester: adapt("test", model),
-    reviewer: adapt("review", model),
-    "pr-writer": adapt("gate", model),
+    plan: null,
+    implement: null,
+    test: null,
+    review: null,
+    pullRequest: null,
   };
 }
 
-function adapt(step: StubStep, model: ModelClient): StubSpecialist {
+export function createStubSpecialists(
+  model: ModelClient = new ReplayModelClient(),
+  capture?: CapturedRun,
+): Record<SpecialistName, StubSpecialist> {
+  return {
+    planner: adapt("plan", model, capture),
+    implementer: adapt("implement", model, capture),
+    tester: adapt("test", model, capture),
+    reviewer: adapt("review", model, capture),
+    "pr-writer": adapt("gate", model, capture),
+  };
+}
+
+function adapt(step: StubStep, model: ModelClient, capture?: CapturedRun): StubSpecialist {
   return {
     step,
     async run(input) {
-      const summary = await runStep(step, model, input);
+      const summary = await runStep(step, model, input, capture);
       return { step, summary };
     },
   };
 }
 
-async function runStep(step: StubStep, model: ModelClient, input: StubInput): Promise<string> {
+async function runStep(
+  step: StubStep,
+  model: ModelClient,
+  input: StubInput,
+  capture?: CapturedRun,
+): Promise<string> {
   const ctx = {
     workdir: ".",
     model,
@@ -68,6 +92,9 @@ async function runStep(step: StubStep, model: ModelClient, input: StubInput): Pr
         issue: input.issue,
         templateId: input.templateId,
       });
+      if (capture) {
+        capture.plan = output;
+      }
       return output.summary;
     }
     case "implement": {
@@ -75,6 +102,9 @@ async function runStep(step: StubStep, model: ModelClient, input: StubInput): Pr
         issue: input.issue,
         planSummary: prior("plan"),
       });
+      if (capture) {
+        capture.implement = output;
+      }
       return output.summary;
     }
     case "test": {
@@ -82,6 +112,9 @@ async function runStep(step: StubStep, model: ModelClient, input: StubInput): Pr
         issue: input.issue,
         changeSummary: prior("implement"),
       });
+      if (capture) {
+        capture.test = output;
+      }
       return output.summary;
     }
     case "review": {
@@ -89,6 +122,9 @@ async function runStep(step: StubStep, model: ModelClient, input: StubInput): Pr
         issue: input.issue,
         testSummary: prior("test"),
       });
+      if (capture) {
+        capture.review = output;
+      }
       return output.summary;
     }
     case "gate": {
@@ -96,6 +132,9 @@ async function runStep(step: StubStep, model: ModelClient, input: StubInput): Pr
         issue: input.issue,
         reviewSummary: prior("review"),
       });
+      if (capture) {
+        capture.pullRequest = output;
+      }
       return output.summary;
     }
   }

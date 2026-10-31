@@ -11,6 +11,35 @@ export type GitHubRest = {
       readonly ref: string;
       readonly sha: string;
     }): Promise<unknown>;
+    getCommit(params: {
+      readonly owner: string;
+      readonly repo: string;
+      readonly commit_sha: string;
+    }): Promise<{ data: { tree: { sha: string } } }>;
+    createCommit(params: {
+      readonly owner: string;
+      readonly repo: string;
+      readonly message: string;
+      readonly tree: string;
+      readonly parents: string[];
+    }): Promise<{ data: { sha: string } }>;
+    updateRef(params: {
+      readonly owner: string;
+      readonly repo: string;
+      readonly ref: string;
+      readonly sha: string;
+    }): Promise<unknown>;
+  };
+  pulls: {
+    create(params: {
+      readonly owner: string;
+      readonly repo: string;
+      readonly title: string;
+      readonly head: string;
+      readonly base: string;
+      readonly body: string;
+      readonly draft: true;
+    }): Promise<{ data: { number: number; html_url: string } }>;
   };
   checks: {
     create(params: {
@@ -56,6 +85,7 @@ export type GitHubSurface = {
     readonly checkRunId: number;
     readonly conclusion: "success" | "failure";
     readonly summary: string;
+    readonly title?: string;
   }): Promise<void>;
   comment(input: {
     readonly owner: string;
@@ -63,6 +93,22 @@ export type GitHubSurface = {
     readonly issue: number;
     readonly body: string;
   }): Promise<void>;
+  advanceBranch(input: {
+    readonly owner: string;
+    readonly repo: string;
+    readonly branch: string;
+    readonly sha: string;
+    readonly message: string;
+  }): Promise<string>;
+  openDraft(input: {
+    readonly owner: string;
+    readonly repo: string;
+    readonly title: string;
+    readonly head: string;
+    readonly base: string;
+    readonly body: string;
+    readonly draft: true;
+  }): Promise<{ readonly number: number; readonly url: string }>;
 };
 
 export function createGitHubSurface(octokit: GitHubRest): GitHubSurface {
@@ -106,7 +152,7 @@ export function createGitHubSurface(octokit: GitHubRest): GitHubSurface {
         conclusion: input.conclusion,
         completed_at: new Date().toISOString(),
         output: {
-          title: input.conclusion === "success" ? "Passed" : "Failed",
+          title: input.title ?? (input.conclusion === "success" ? "Passed" : "Failed"),
           summary: input.summary,
         },
       });
@@ -118,6 +164,43 @@ export function createGitHubSurface(octokit: GitHubRest): GitHubSurface {
         issue_number: input.issue,
         body: input.body,
       });
+    },
+    async advanceBranch(input) {
+      const { data: parent } = await octokit.git.getCommit({
+        owner: input.owner,
+        repo: input.repo,
+        commit_sha: input.sha,
+      });
+      const tree = parent.tree.sha;
+      if (tree.length === 0) {
+        throw new Error(`commit ${input.sha} has no tree`);
+      }
+      const { data: commit } = await octokit.git.createCommit({
+        owner: input.owner,
+        repo: input.repo,
+        message: input.message,
+        tree,
+        parents: [input.sha],
+      });
+      await octokit.git.updateRef({
+        owner: input.owner,
+        repo: input.repo,
+        ref: `heads/${input.branch}`,
+        sha: commit.sha,
+      });
+      return commit.sha;
+    },
+    async openDraft(input) {
+      const { data } = await octokit.pulls.create({
+        owner: input.owner,
+        repo: input.repo,
+        title: input.title,
+        head: input.head,
+        base: input.base,
+        body: input.body,
+        draft: true,
+      });
+      return { number: data.number, url: data.html_url };
     },
   };
 }

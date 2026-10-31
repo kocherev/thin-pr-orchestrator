@@ -9,8 +9,13 @@ import {
   type SpecialistMap,
   type WorkflowTemplate,
 } from "@thin-pr/core";
-import { decide } from "@thin-pr/gate";
-import { createStubSpecialists } from "@thin-pr/specialists";
+import { decide, evaluate, type GateRuleResult } from "@thin-pr/gate";
+import {
+  createRunCapture,
+  createStubSpecialists,
+  type CapturedRun,
+  type ModelClient,
+} from "@thin-pr/specialists";
 import type { GitHubSurface } from "./surface.js";
 
 export const TRIGGER_LABEL = "thin-pr" as const;
@@ -47,6 +52,7 @@ export type LabelRunResult =
       readonly branch: string;
       readonly headSha: string;
       readonly checks: readonly StepReport[];
+      readonly pullRequest: { readonly number: number; readonly url: string };
     }
   | {
       readonly status: "failed";
@@ -60,6 +66,7 @@ export type LabelRunDeps = {
   readonly template: WorkflowTemplate;
   readonly specialists: SpecialistMap;
   readonly gates?: Readonly<Record<string, GateHook>>;
+  readonly capture?: CapturedRun;
   readonly log: EventLog;
   readonly runId: string;
 };
@@ -80,10 +87,11 @@ export function formatRunReport(report: RunReport): string {
     `- Template: ${report.templateId}`,
     `- Issue: ${report.issueNumber}`,
     `- Branch: ${report.branch}`,
-    `- Error: ${report.error}`,
-    "",
-    "### Steps",
   ];
+  if (report.error.length > 0) {
+    lines.push(`- Error: ${report.error}`);
+  }
+  lines.push("", "### Steps");
   if (report.steps.length === 0) {
     lines.push("", "No step finished.");
   } else {
@@ -124,11 +132,19 @@ export async function runOnLabel(event: LabelEvent, deps: LabelRunDeps): Promise
   let current: { readonly step: string; readonly id: number } | null = null;
   let branch = "not created";
   let headSha: string | null = null;
+  const capture = deps.capture ?? createRunCapture();
 
   try {
-    headSha = await deps.github.branchSha(event.owner, event.repo, event.defaultBranch);
+    const baseSha = await deps.github.branchSha(event.owner, event.repo, event.defaultBranch);
     branch = branchName(event.issueNumber);
-    await deps.github.createBranch(event.owner, event.repo, branch, headSha);
+    await deps.github.createBranch(event.owner, event.repo, branch, baseSha);
+    headSha = await deps.github.advanceBranch({
+      owner: event.owner,
+      repo: event.repo,
+      branch,
+      sha: baseSha,
+      message: `Prepare thin-pr/#${event.issueNumber}`,
+    });
     const sha = headSha;
 
     await runWorkflow({
@@ -136,7 +152,7 @@ export async function runOnLabel(event: LabelEvent, deps: LabelRunDeps): Promise
       issue: event.issueText,
       template: deps.template,
       specialists: deps.specialists,
-      gates: deps.gates,
+      gates: deps.gates ?? { decide: () => applyRules(deps, event, sha, capture, steps) },
       log: deps.log,
       async onTransition(transition) {
         if (transition.output === null) {
@@ -175,7 +191,23 @@ export async function runOnLabel(event: LabelEvent, deps: LabelRunDeps): Promise
       },
     });
 
-    return { status: "completed", branch, headSha, checks: [...steps] };
+    const pullRequest = await deps.github.openDraft({
+      owner: event.owner,
+      repo: event.repo,
+      title: capture.pullRequest?.title ?? `thin-pr #${event.issueNumber}`,
+      head: branch,
+      base: event.defaultBranch,
+      body: formatDraftBody(capture, formatRunReport({
+        runId: deps.runId,
+        templateId: deps.template.id,
+        issueNumber: event.issueNumber,
+        branch,
+        error: "",
+        steps,
+      })),
+      draft: true,
+    });
+    return { status: "completed", branch, headSha, checks: [...steps], pullRequest };
   } catch (error) {
     const message = errorText(error);
     if (current) {
@@ -221,21 +253,89 @@ export async function runAction(input: {
   readonly logPath: string;
   readonly github: GitHubSurface;
   readonly gates?: Readonly<Record<string, GateHook>>;
+  readonly model?: ModelClient;
 }): Promise<LabelRunResult> {
   const event = readLabelEvent(input.payload);
   const log = openEventLog(input.logPath);
+  const capture = createRunCapture();
   try {
     return await runOnLabel(event, {
       github: input.github,
       template: loadTemplate(join(input.workspace, "templates", "small-feature.yaml")),
-      specialists: createStubSpecialists(),
-      gates: input.gates ?? { decide },
+      specialists: createStubSpecialists(input.model, capture),
+      gates: input.gates,
+      capture,
       log,
       runId: input.runId,
     });
   } finally {
     log.close();
   }
+}
+
+async function applyRules(
+  deps: LabelRunDeps,
+  event: LabelEvent,
+  sha: string,
+  capture: CapturedRun,
+  steps: StepReport[],
+): Promise<"pass" | "fail"> {
+  const results = evaluate(capture);
+  for (const result of results) {
+    await postRule(deps, event, sha, result, steps);
+  }
+  return decide(capture);
+}
+
+async function postRule(
+  deps: LabelRunDeps,
+  event: LabelEvent,
+  sha: string,
+  result: GateRuleResult,
+  steps: StepReport[],
+): Promise<void> {
+  const summary = `${result.verdict}: ${result.reason}`;
+  const id = await deps.github.startCheck({
+    owner: event.owner,
+    repo: event.repo,
+    name: checkName(`gate / ${result.rule}`),
+    sha,
+  });
+  await deps.github.finishCheck({
+    owner: event.owner,
+    repo: event.repo,
+    checkRunId: id,
+    conclusion: result.verdict === "PASS" ? "success" : "failure",
+    summary,
+    title: result.verdict,
+  });
+  steps.push({
+    step: `gate/${result.rule}`,
+    conclusion: result.verdict === "PASS" ? "success" : "failure",
+    summary,
+  });
+}
+
+function formatDraftBody(capture: CapturedRun, report: string): string {
+  return ["## Plan", "", formatPlan(capture.plan), "", "## Test results", "", formatTests(capture.test), "", report].join(
+    "\n",
+  );
+}
+
+function formatPlan(plan: CapturedRun["plan"]): string {
+  if (!plan) {
+    return "Plan is missing.";
+  }
+  const steps = plan.steps.map((step) => `- ${step}`).join("\n");
+  return steps.length === 0 ? plan.summary : `${plan.summary}\n\n${steps}`;
+}
+
+function formatTests(test: CapturedRun["test"]): string {
+  if (!test) {
+    return "Test result is missing.";
+  }
+  const result = test.passed ? "Tests passed." : "Tests did not pass.";
+  return `${test.summary}\n\n${result}`;
 }
 
 function errorText(error: unknown): string {

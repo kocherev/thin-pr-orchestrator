@@ -24,7 +24,7 @@ describe("workspace", () => {
       "pr-writer",
     ]);
     expect(gateId).toBe("@thin-pr/gate");
-    expect(readiness()).toBe("unconfigured");
+    expect(readiness()).toBe("ready");
     expect(githubId).toBe("@thin-pr/github");
     expect(entrypoint()).toBe("issue-label");
     expect(TRIGGER_LABEL).toBe("thin-pr");

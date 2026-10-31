@@ -10,7 +10,16 @@ export function listSpecialists(): readonly SpecialistDescriptor[] {
   return SPECIALIST_NAMES.map((id) => ({ id }));
 }
 
-export { createStubSpecialists, type StubInput, type StubOutput, type StubSpecialist, type StubStep, STUB_STEPS } from "./adapter.js";
+export {
+  createRunCapture,
+  createStubSpecialists,
+  type CapturedRun,
+  type StubInput,
+  type StubOutput,
+  type StubSpecialist,
+  type StubStep,
+  STUB_STEPS,
+} from "./adapter.js";
 export {
   createStepContext,
   executeSpecialist,
@@ -26,10 +35,15 @@ export {
 export {
   FIXTURES,
   implementer,
+  implementerOutput,
   planner,
+  plannerOutput,
   prWriter,
+  prWriterOutput,
   ReplayModelClient,
   reviewer,
+  reviewerOutput,
   specialists,
   tester,
+  testerOutput,
 } from "./specialists.js";

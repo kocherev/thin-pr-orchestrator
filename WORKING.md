@@ -4,7 +4,7 @@ Thin PR Orchestrator. Read this before changing the repo.
 
 ## Layout
 
-`packages/core` is the control plane. It runs a typed state machine, appends each transition to SQLite, and does not call a model. `packages/specialists` holds stub workers for now. `packages/gate` exposes a fixed `decide()` stub. `packages/github` is the only package that calls GitHub. It creates the branch and the checks for an issue labeled `thin-pr`. Specialists do not import it. `templates/stub-run.json` and the YAML workflows under `templates/` are loaded by the machine. A step names its specialist, fields, retry limit, and optional gate hook. `evals/` is still for later fixtures.
+`packages/core` is the control plane. It runs a typed state machine, appends each transition to SQLite, and does not call a model. `packages/specialists` holds stub workers for now. `packages/gate` evaluates plan, tests, and specialist contracts. Each rule returns PASS or FAIL and a reason. `packages/github` is the only package that calls GitHub. It creates the branch, the checks, and a draft pull request when every gate rule passes. A failure comments the run report and does not open a pull request. Specialists do not import it. `templates/stub-run.json` and the YAML workflows under `templates/` are loaded by the machine. A step names its specialist, fields, retry limit, and optional gate hook. `evals/` is still for later fixtures.
 
 ## Skills
 
