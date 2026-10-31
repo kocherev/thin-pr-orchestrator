@@ -2,7 +2,7 @@
 
 A GitHub issue goes in. A thin control plane runs a fixed workflow, calls specialized workers through a typed boundary, and opens a draft pull request for a person to review.
 
-The control plane is ordinary TypeScript. It does not call a model. Model clients belong in `packages/specialists`, and only once that package has a real worker. This repository is the workspace skeleton. The state machine, worker contracts, gate rules, and GitHub entry are not implemented yet.
+The control plane is ordinary TypeScript. It does not call a model. Model clients belong in `packages/specialists`, and only once that package has a real worker. Gate rules and the GitHub entry are not implemented yet.
 
 ## Requirements
 
@@ -39,14 +39,26 @@ cp .env.example .env
 
 ## Packages
 
-- `packages/core` is the control plane. Typed code only. No model client imports. It exports `ping`, which returns `"pong"`.
-- `packages/specialists` will hold worker input and output schemas. It exports an empty registry.
-- `packages/gate` will hold the rules that allow a draft to be reviewed. It reports `unconfigured`.
+- `packages/core` is the control plane. Typed code only. No model client imports. `runWorkflow` follows a template and appends every transition to SQLite. `replay` folds that log back into a run state. `ping` still returns `"pong"`.
+- `packages/specialists` exports stub workers for plan, implement, test, review, and gate. Each one returns a fixed string. Zod schemas for real workers come later.
+- `packages/gate` exports `decide()`, which returns `"pass"`. Real review rules are not written yet. `readiness()` stays `unconfigured`.
 - `packages/github` will hold the Octokit client and the Action entry. It reports `not-wired`.
 
-`templates/` reserves `bugfix`, `small-feature`, and `docs-update`. The YAML files are not loaded.
+`templates/stub-run.json` is the template the control plane loads. `bugfix`, `small-feature`, and `docs-update` remain unloaded YAML names.
 
 `evals/` will hold replay fixtures. Nothing reads that directory yet.
+
+## Run and replay
+
+`pnpm test` runs the replay test. Node 22 needs `--experimental-sqlite` for `node:sqlite`. `vitest.config.ts` passes that flag to the test workers.
+
+To run the replay file on its own:
+
+```bash
+pnpm exec vitest run packages/core/src/run.test.ts
+```
+
+The test writes a SQLite log, closes it, opens it again, and expects `replay` to return the same final state as `runWorkflow`. A second run with the same inputs produces that same state.
 
 ## CI
 

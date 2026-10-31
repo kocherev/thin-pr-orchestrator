@@ -1,0 +1,4 @@
+{
+  "id": "stub-run",
+  "steps": ["plan", "implement", "test", "review", "gate"]
+}

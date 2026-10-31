@@ -6,4 +6,4 @@ Workflow templates will live here as YAML. Planned names:
 - `small-feature.yaml`
 - `docs-update.yaml`
 
-The files in this directory are stubs. Each one sets `status: not-loaded`. No package reads them yet.
+`stub-run.json` is loaded by `packages/core`. The YAML files are stubs. Each one sets `status: not-loaded`. No package reads those three yet.
