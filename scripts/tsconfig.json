@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "dist",
+    "rootDir": "."
+  },
+  "include": ["*.ts"],
+  "references": [
+    { "path": "../packages/core" },
+    { "path": "../packages/specialists" },
+    { "path": "../packages/gate" },
+    { "path": "../packages/github" }
+  ]
+}

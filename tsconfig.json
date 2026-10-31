@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/core" },
+    { "path": "packages/specialists" },
+    { "path": "packages/gate" },
+    { "path": "packages/github" },
+    { "path": "scripts" }
+  ]
+}
