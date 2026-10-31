@@ -17,7 +17,7 @@ export type SpecialistInput = {
 };
 
 export type Specialist = {
-  run(input: SpecialistInput): SpecialistOutput;
+  run(input: SpecialistInput): SpecialistOutput | Promise<SpecialistOutput>;
 };
 
 export type SpecialistMap = Partial<Record<StepName, Specialist>>;

@@ -8,7 +8,7 @@ This file maps the repository layout to a few harness and field-engineering them
 
 ## Anthropic and OpenAI, forward deployed
 
-Specialist input and output will be validated at the boundary. `packages/gate` is where a draft becomes reviewable. `decide()` is a fixed stub. The import ban in `packages/core` is the line model clients must stay behind.
+Specialist input and output are validated with Zod at the boundary. `packages/gate` is where a draft becomes reviewable. `decide()` is a fixed stub. The import ban in `packages/core` is the line model clients must stay behind.
 
 ## GitHub Actions
 
