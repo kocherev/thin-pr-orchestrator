@@ -1,0 +1,23 @@
+{
+  "plan": {
+    "summary": "Plan the stub change.",
+    "steps": ["edit the stub"]
+  },
+  "implement": {
+    "summary": "Apply the stub change.",
+    "files": ["src/stub.ts"]
+  },
+  "test": {
+    "summary": "Stub checks failed.",
+    "passed": false
+  },
+  "review": {
+    "summary": "Stub review found nothing.",
+    "notes": []
+  },
+  "pullRequest": {
+    "summary": "pass",
+    "title": "Fix the stub",
+    "body": "Stub draft."
+  }
+}

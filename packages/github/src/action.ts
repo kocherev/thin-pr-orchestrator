@@ -29,6 +29,7 @@ async function main(): Promise<void> {
   }
   if (result.status === "completed") {
     core.info(`Created ${result.branch} at ${result.headSha}`);
+    core.info(`Draft pull request ${result.pullRequest.url}`);
   }
 }
 

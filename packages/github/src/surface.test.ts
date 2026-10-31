@@ -13,6 +13,23 @@ describe("Octokit surface", () => {
         async createRef(params) {
           calls.push(["createRef", params]);
         },
+        async getCommit(params) {
+          calls.push(["getCommit", params]);
+          return { data: { tree: { sha: "tree-1" } } };
+        },
+        async createCommit(params) {
+          calls.push(["createCommit", params]);
+          return { data: { sha: "sha-2" } };
+        },
+        async updateRef(params) {
+          calls.push(["updateRef", params]);
+        },
+      },
+      pulls: {
+        async create(params) {
+          calls.push(["pulls.create", params]);
+          return { data: { number: 11, html_url: "https://github.com/example/sample-repo/pull/11" } };
+        },
       },
       checks: {
         async create(params) {
@@ -44,6 +61,34 @@ describe("Octokit surface", () => {
       summary: "gate failed",
     });
     await github.comment({ owner: "example", repo: "sample-repo", issue: 7, body: "## Run report" });
+    await expect(
+      github.advanceBranch({
+        owner: "example",
+        repo: "sample-repo",
+        branch: "thin-pr/7",
+        sha: "sha-1",
+        message: "Prepare thin-pr/#7",
+      }),
+    ).resolves.toBe("sha-2");
+    await expect(
+      github.openDraft({
+        owner: "example",
+        repo: "sample-repo",
+        title: "Fix the stub",
+        head: "thin-pr/7",
+        base: "main",
+        body: "## Plan",
+        draft: true,
+      }),
+    ).resolves.toEqual({ number: 11, url: "https://github.com/example/sample-repo/pull/11" });
+    await github.finishCheck({
+      owner: "example",
+      repo: "sample-repo",
+      checkRunId: 42,
+      conclusion: "success",
+      summary: "PASS: Tests passed.",
+      title: "PASS",
+    });
 
     expect(calls[0]).toEqual(["getRef", { owner: "example", repo: "sample-repo", ref: "heads/main" }]);
     expect(calls[1]).toEqual([
@@ -75,6 +120,43 @@ describe("Octokit surface", () => {
       "issues.createComment",
       { owner: "example", repo: "sample-repo", issue_number: 7, body: "## Run report" },
     ]);
+    expect(calls[5]).toEqual([
+      "getCommit",
+      { owner: "example", repo: "sample-repo", commit_sha: "sha-1" },
+    ]);
+    expect(calls[6]).toEqual([
+      "createCommit",
+      {
+        owner: "example",
+        repo: "sample-repo",
+        message: "Prepare thin-pr/#7",
+        tree: "tree-1",
+        parents: ["sha-1"],
+      },
+    ]);
+    expect(calls[7]).toEqual([
+      "updateRef",
+      { owner: "example", repo: "sample-repo", ref: "heads/thin-pr/7", sha: "sha-2" },
+    ]);
+    expect(calls[8]).toEqual([
+      "pulls.create",
+      {
+        owner: "example",
+        repo: "sample-repo",
+        title: "Fix the stub",
+        head: "thin-pr/7",
+        base: "main",
+        body: "## Plan",
+        draft: true,
+      },
+    ]);
+    expect(calls[9]).toMatchObject({
+      0: "checks.update",
+      1: {
+        conclusion: "success",
+        output: { title: "PASS", summary: "PASS: Tests passed." },
+      },
+    });
   });
 
   it("rejects a ref that is not a commit", async () => {
@@ -85,6 +167,20 @@ describe("Octokit surface", () => {
         },
         async createRef() {
           return undefined;
+        },
+        async getCommit() {
+          return { data: { tree: { sha: "tree-1" } } };
+        },
+        async createCommit() {
+          return { data: { sha: "sha-2" } };
+        },
+        async updateRef() {
+          return undefined;
+        },
+      },
+      pulls: {
+        async create() {
+          return { data: { number: 1, html_url: "https://github.com/example/sample-repo/pull/1" } };
         },
       },
       checks: {

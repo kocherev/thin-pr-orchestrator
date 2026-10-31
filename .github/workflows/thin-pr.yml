@@ -8,6 +8,7 @@ permissions:
   contents: write
   checks: write
   issues: write
+  pull-requests: write
 
 concurrency:
   group: thin-pr-${{ github.event.issue.number }}

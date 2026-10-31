@@ -59,7 +59,11 @@ importers:
         specifier: workspace:*
         version: link:../specialists
 
-  packages/gate: {}
+  packages/gate:
+    dependencies:
+      '@thin-pr/specialists':
+        specifier: workspace:*
+        version: link:../specialists
 
   packages/github:
     dependencies:
