@@ -31,6 +31,14 @@ export class AnthropicModelClient implements ModelClient {
     readonly specialist: SpecialistName;
     readonly prompt: string;
   }): Promise<string> {
+    return this.send(wrapPrompt(request), request.specialist);
+  }
+
+  async completePrompt(prompt: string): Promise<string> {
+    return this.send(prompt, "judge");
+  }
+
+  private async send(prompt: string, label: string): Promise<string> {
     if (this.spent >= SPEND_LIMIT_USD) {
       throw new Error("live model spend reached 3 USD");
     }
@@ -39,7 +47,7 @@ export class AnthropicModelClient implements ModelClient {
       max_tokens: 4096,
       thinking: { type: "adaptive" },
       output_config: { effort: LIVE_EFFORT },
-      messages: [{ role: "user", content: wrapPrompt(request) }],
+      messages: [{ role: "user", content: prompt }],
     };
     const response = await this.fetchImpl("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -60,14 +68,14 @@ export class AnthropicModelClient implements ModelClient {
       throw new Error("live model spend reached 3 USD");
     }
     if (body.stop_reason === "max_tokens") {
-      throw new Error(`${request.specialist} model text was cut off`);
+      throw new Error(`${label} model text was cut off`);
     }
     const text = (body.content ?? [])
       .filter((block) => block.type === "text" && typeof block.text === "string")
       .map((block) => block.text)
       .join("");
     if (text.trim().length === 0) {
-      throw new Error(`${request.specialist} model text is empty`);
+      throw new Error(`${label} model text is empty`);
     }
     return text;
   }

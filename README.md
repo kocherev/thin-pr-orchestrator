@@ -138,6 +138,34 @@ Tests passed.
 
 `09-failing-tests` records `passed: false`, so the tests rule fails. `10-empty-plan` records `steps: []`. The planner schema requires at least one step, so the plan rule fails before the diff is committed. `11-wide-touch` changes 4 files. `12-long-readme` changes 31 lines. Both miss `evals/budget.json`, so the budget rule fails and `pnpm eval` counts them as fail. The within-budget count stays 10/12 because `09` and `10` are inside the file and line limits.
 
+## Traces
+
+`pnpm trace` replays `fixtures/sample-issue-labeled.json` and `fixtures/gate-pass.json` with run id `run-7`. That is the same pair as the draft example above. `packages/core` opens a span for the run and a span for each template step through `@opentelemetry/api`. `packages/github` starts `@opentelemetry/sdk-node` and posts OTLP JSON to a receiver on `127.0.0.1`. The receiver writes one JSON document.
+
+Set `THIN_PR_TRACE_PATH` to choose the file. With that variable empty, `pnpm trace` writes the JSON to stdout.
+
+`docs/demo/trace.json` is one local replay. The span names are `thin-pr.plan`, `thin-pr.implement`, `thin-pr.test`, `thin-pr.review`, `thin-pr.gate`, and `thin-pr.run`. The step spans are children of `thin-pr.run`. The resource attribute `service.name` is `thin-pr-orchestrator`. Each span status code is 1, which is OK. The gate step's `thin_pr.specialist` attribute is `pr-writer`.
+
+`@opentelemetry/sdk-node` 0.300.0 requires Node.js 22.15 or later. Lint, typecheck, test, and eval still run on Node.js 22.13 or later.
+
+The labeled-issue workflow sets `THIN_PR_TRACE_PATH` to `artifacts/trace.json` and uploads the artifact `thin-pr-trace`. CI does the same after `pnpm trace`.
+
+## Judge
+
+`pnpm eval:judge` scores the 12 replay cases with the rubric in `packages/specialists/src/judge.ts`. The rules are `plan`, `files`, `tests`, and `review`. A case passes when every rule passes. The command prints a verdict and a reason for each rule. It exits non-zero when the pass rate is below `evals/judge-baseline.json`.
+
+On the committed fixtures the rate is 9/12, printed as 75.0%. `09-failing-tests` passes the judge and fails the gate. The tester recorded `passed: false`, and the review notes say so. `10-empty-plan`, `11-wide-touch`, and `12-long-readme` fail the judge. The rubric report is `docs/demo/judge-report.txt`.
+
+CI runs `pnpm eval:judge` with `THIN_PR_JUDGE` and `THIN_PR_MODEL` unset. Unset means the rubric.
+
+The live judge runs when `THIN_PR_JUDGE` is `live`, `THIN_PR_MODEL` is `live`, and `ANTHROPIC_API_KEY` is set. `createJudge` sends the same rubric to `claude-haiku-5-5`, with `thinking` set to `{ "type": "adaptive" }` and `output_config.effort` set to `low`. The request omits `temperature`, `top_p`, and `top_k`. `docs/demo/judge-live.txt` is one live run of the 12 cases. The pass rate is 9/12. The spend line is `live spend: 0.002965 USD`.
+
+## Actions
+
+GitHub Actions is the runtime for this repo. `.github/workflows/thin-pr.yml` on the default branch starts a run when an issue is labeled `thin-pr`. `.github/workflows/ci.yml` runs lint, typecheck, test, `pnpm eval`, `pnpm eval:judge`, and `pnpm trace` on pull requests and on pushes to `main`. CI uploads `judge-report` and `thin-pr-trace`.
+
+The green CI run on `main` for the commit before this change is [run 41257533329](https://github.com/kocherev/thin-pr-orchestrator/actions/runs/41257533329). That run executed lint, typecheck, test, and `pnpm eval`. The Actions list has no completed run of the Thin PR workflow.
+
 ## Requirements
 
 - Node.js 22.13 or later. See `.nvmrc`.
@@ -159,6 +187,8 @@ corepack prepare pnpm@10.33.4 --activate
 - `pnpm typecheck` runs `tsc -b`.
 - `pnpm test` runs Vitest.
 - `pnpm eval` replays `evals/` and prints the report above. It exits non-zero when the gate pass rate is below `evals/baseline.json`.
+- `pnpm eval:judge` scores the same 12 cases with the judge rubric. It exits non-zero when the pass rate is below `evals/judge-baseline.json`.
+- `pnpm trace` writes an OTLP JSON trace for the `run-7` replay. Set `THIN_PR_TRACE_PATH` to choose the file.
 - `pnpm build` runs `tsc -b` and writes `dist/` in each project.
 
 `typecheck` and `build` use the same compiler pass. A type error fails both.
@@ -208,7 +238,7 @@ That image is a still of the live draft diff. It is not a screen recording of th
 
 ## CI
 
-`.github/workflows/ci.yml` runs lint, typecheck, test, and eval on pull requests and on pushes to `main`. Eval fails when the gate pass rate drops below `evals/baseline.json`.
+`.github/workflows/ci.yml` runs lint, typecheck, test, `pnpm eval`, `pnpm eval:judge`, and `pnpm trace` on pull requests and on pushes to `main`. Eval fails when the gate pass rate drops below `evals/baseline.json`. The judge fails when its pass rate drops below `evals/judge-baseline.json`. The trace step writes `artifacts/trace.json` and uploads it.
 
 ## Working notes
 
@@ -217,6 +247,8 @@ See `WORKING.md` and `skills/` before changing the repo. The import ban for `pac
 - `packages/core` runs a template, appends every transition to SQLite, and imports no model client. `pnpm lint` fails when that package imports one. `packages/core/src/run.test.ts` expects `replay` to match `runWorkflow`.
 - `packages/github` opens a draft pull request only when every gate rule passes. A failed rule comments `## Run report` on the issue and does not open a pull request. The check is `packages/github/src/run.test.ts`.
 - `pnpm eval` replays 12 labeled issues offline. The floor in `evals/baseline.json` is 8/12, and the report prints `gate pass rate: 8/12 (66.7%)`.
+- `pnpm eval:judge` prints `judge pass rate: 9/12 (75.0%)` on those cases. The rubric report is `docs/demo/judge-report.txt`. The live run is `docs/demo/judge-live.txt`.
+- `docs/demo/trace.json` is the OTLP JSON from one `pnpm trace` of run `run-7`.
 
 ## License
 

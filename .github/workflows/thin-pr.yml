@@ -5,6 +5,7 @@ on:
     types: [labeled]
 
 permissions:
+  actions: write
   contents: write
   checks: write
   issues: write
@@ -39,4 +40,14 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           THIN_PR_MODEL: ${{ secrets.ANTHROPIC_API_KEY != '' && 'live' || 'replay' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          THIN_PR_TRACE_PATH: artifacts/trace.json
         run: node --experimental-sqlite --disable-warning=ExperimentalWarning --import tsx packages/github/src/action.ts
+
+      - name: Upload trace
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: thin-pr-trace
+          path: artifacts/trace.json
+          if-no-files-found: error
+          retention-days: 14

@@ -1,4 +1,5 @@
 import type { EventLog, NewLogEvent } from "./log.js";
+import { withSpan } from "./span.js";
 import type {
   LogEvent,
   Phase,
@@ -39,33 +40,53 @@ export async function runWorkflow(input: RunInput): Promise<RunState> {
     throw new Error("template steps must be a non-empty list");
   }
 
-  let phase: Phase = "idle";
-  const outputs: SpecialistOutput[] = [];
+  return withSpan(
+    "thin-pr.run",
+    {
+      "thin_pr.run_id": input.runId,
+      "thin_pr.template_id": input.template.id,
+    },
+    async (span) => {
+      let phase: Phase = "idle";
+      const outputs: SpecialistOutput[] = [];
 
-  for (let index = 0; index < input.template.steps.length; index += 1) {
-    const step = input.template.steps[index];
-    if (!step) {
-      throw new Error("template step is missing");
-    }
-    const specialist = input.specialists[step.specialist];
-    if (!specialist) {
-      throw new Error(`missing specialist for ${step.specialist}`);
-    }
+      for (let index = 0; index < input.template.steps.length; index += 1) {
+        const step = input.template.steps[index];
+        if (!step) {
+          throw new Error("template step is missing");
+        }
+        const specialist = input.specialists[step.specialist];
+        if (!specialist) {
+          throw new Error(`missing specialist for ${step.specialist}`);
+        }
 
-    phase = await record(input, phase, step.id, null);
-    const output = await runStep(input, step, specialist, outputs);
-    const next = input.template.steps[index + 1]?.id ?? "complete";
-    phase = await record(input, phase, next, output);
-    outputs.push(output);
-  }
+        const started = phase;
+        phase = await record(input, phase, step.id, null);
+        span.addEvent("thin-pr.transition", { "thin_pr.from": started, "thin_pr.to": phase });
+        const output = await withSpan(
+          `thin-pr.${step.id}`,
+          {
+            "thin_pr.step": step.id,
+            "thin_pr.specialist": step.specialist,
+          },
+          async () => runStep(input, step, specialist, outputs),
+        );
+        const next = input.template.steps[index + 1]?.id ?? "complete";
+        const finished = phase;
+        phase = await record(input, phase, next, output);
+        span.addEvent("thin-pr.transition", { "thin_pr.from": finished, "thin_pr.to": phase });
+        outputs.push(output);
+      }
 
-  return {
-    runId: input.runId,
-    templateId: input.template.id,
-    issue: input.issue,
-    phase,
-    outputs,
-  };
+      return {
+        runId: input.runId,
+        templateId: input.template.id,
+        issue: input.issue,
+        phase,
+        outputs,
+      };
+    },
+  );
 }
 
 export function replay(events: readonly LogEvent[]): RunState {

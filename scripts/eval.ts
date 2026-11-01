@@ -44,9 +44,28 @@ type RecordedResponse = {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-export async function runEval(workspace = root): Promise<EvalReport> {
+export type ReplayCase = {
+  readonly id: string;
+  readonly payload: unknown;
+  readonly issueNumber: number;
+  readonly issueTitle: string;
+  readonly issueBody: string;
+  readonly plan: unknown;
+  readonly implement: unknown;
+  readonly test: unknown;
+  readonly review: unknown;
+  readonly pullRequest: unknown;
+  readonly changePaths: readonly string[];
+  readonly changes: readonly FileChange[];
+  readonly files: number;
+  readonly lines: number;
+  readonly withinBudget: boolean;
+  readonly maxFiles: number;
+  readonly maxLines: number;
+};
+
+export function loadReplayCases(workspace = root): ReplayCase[] {
   const evalsDir = join(workspace, "evals");
-  const minPassRate = readPassRate(jsonFile(join(evalsDir, "baseline.json")), "baseline.json");
   const budget = readBudget(jsonFile(join(evalsDir, "budget.json")));
   const sampleRoot = join(evalsDir, "sample-repo");
   const ids = issueIds(join(evalsDir, "issues"));
@@ -54,32 +73,63 @@ export async function runEval(workspace = root): Promise<EvalReport> {
     throw new Error(`evals need at least 10 issues, found ${ids.length}`);
   }
 
+  const cases: ReplayCase[] = [];
+  const seenIssues = new Set<number>();
+  for (const id of ids) {
+    const payload = jsonFile(join(evalsDir, "issues", `${id}.json`));
+    const response = readResponse(id, jsonFile(join(evalsDir, "responses", `${id}.json`)));
+    const issue = issueFields(id, payload);
+    if (seenIssues.has(issue.number)) {
+      throw new Error(`${id}: duplicate issue number ${issue.number}`);
+    }
+    seenIssues.add(issue.number);
+    const changes = readChanges(id, sampleRoot, join(evalsDir, "diffs", id), response.changes);
+    const diff = measureDiff(changes);
+    cases.push({
+      id,
+      payload,
+      issueNumber: issue.number,
+      issueTitle: issue.title,
+      issueBody: issue.body,
+      plan: response.plan,
+      implement: response.implement,
+      test: response.test,
+      review: response.review,
+      pullRequest: response.pullRequest,
+      changePaths: response.changes,
+      changes,
+      files: diff.files,
+      lines: diff.lines,
+      withinBudget: diff.files <= budget.maxFiles && diff.lines <= budget.maxLines,
+      maxFiles: budget.maxFiles,
+      maxLines: budget.maxLines,
+    });
+  }
+  return cases;
+}
+
+export async function runEval(workspace = root): Promise<EvalReport> {
+  const minPassRate = readPassRate(jsonFile(join(workspace, "evals", "baseline.json")), "baseline.json");
+  const loaded = loadReplayCases(workspace);
+  const first = loaded[0];
+  if (!first) {
+    throw new Error("evals need at least 10 issues, found 0");
+  }
+
   const directory = mkdtempSync(join(tmpdir(), "thin-pr-eval-"));
   try {
     const cases: CaseReport[] = [];
-    const seenIssues = new Set<number>();
-    for (const id of ids) {
-      const issuePath = join(evalsDir, "issues", `${id}.json`);
-      const responsePath = join(evalsDir, "responses", `${id}.json`);
-      const payload = jsonFile(issuePath);
-      const response = readResponse(id, jsonFile(responsePath));
-      const issueNumber = issueNumberOf(id, payload);
-      if (seenIssues.has(issueNumber)) {
-        throw new Error(`${id}: duplicate issue number ${issueNumber}`);
-      }
-      seenIssues.add(issueNumber);
-      const changes = readChanges(id, sampleRoot, join(evalsDir, "diffs", id), response.changes);
-      const diff = measureDiff(changes);
-      const gate = await replay(id, workspace, directory, issueNumber, payload, response, changes);
+    for (const item of loaded) {
+      const gate = await replay(workspace, directory, item);
       cases.push({
-        id,
+        id: item.id,
         gate,
-        files: diff.files,
-        lines: diff.lines,
-        withinBudget: diff.files <= budget.maxFiles && diff.lines <= budget.maxLines,
+        files: item.files,
+        lines: item.lines,
+        withinBudget: item.withinBudget,
       });
     }
-    return summarize(cases, minPassRate, budget);
+    return summarize(cases, minPassRate, { maxFiles: first.maxFiles, maxLines: first.maxLines });
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -140,43 +190,35 @@ function summarize(
   };
 }
 
-async function replay(
-  id: string,
-  workspace: string,
-  directory: string,
-  issueNumber: number,
-  payload: unknown,
-  response: RecordedResponse,
-  changes: readonly FileChange[],
-): Promise<"pass" | "fail"> {
+async function replay(workspace: string, directory: string, item: ReplayCase): Promise<"pass" | "fail"> {
   let result: Awaited<ReturnType<typeof runAction>>;
   try {
     result = await runAction({
-      payload,
+      payload: item.payload,
       workspace,
-      runId: `eval-${issueNumber}`,
-      logPath: join(directory, `${id}.sqlite`),
+      runId: `eval-${item.issueNumber}`,
+      logPath: join(directory, `${item.id}.sqlite`),
       github: replayGitHub(),
-      changes,
+      changes: item.changes,
       model: new ReplayModelClient({
-        planner: JSON.stringify(response.plan),
-        implementer: JSON.stringify(response.implement),
-        tester: JSON.stringify(response.test),
-        reviewer: JSON.stringify(response.review),
-        "pr-writer": JSON.stringify(response.pullRequest),
+        planner: JSON.stringify(item.plan),
+        implementer: JSON.stringify(item.implement),
+        tester: JSON.stringify(item.test),
+        reviewer: JSON.stringify(item.review),
+        "pr-writer": JSON.stringify(item.pullRequest),
       }),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "replay failed";
-    throw new Error(`${id}: ${message}`, { cause: error });
+    throw new Error(`${item.id}: ${message}`, { cause: error });
   }
   if (result.status === "ignored") {
-    throw new Error(`${id}: issue is not a thin-pr label event`);
+    throw new Error(`${item.id}: issue is not a thin-pr label event`);
   }
   return result.status === "completed" ? "pass" : "fail";
 }
 
-function replayGitHub(): GitHubSurface {
+export function replayGitHub(): GitHubSurface {
   let nextId = 1;
   return {
     async branchSha() {
@@ -270,7 +312,7 @@ function readResponse(id: string, value: unknown): RecordedResponse {
   };
 }
 
-function issueNumberOf(id: string, payload: unknown): number {
+function issueFields(id: string, payload: unknown): { number: number; title: string; body: string } {
   const event = objectValue(payload, `${id} issue`);
   const issue = objectValue(event.issue, `${id} issue.issue`);
   const repository = objectValue(event.repository, `${id} issue.repository`);
@@ -281,7 +323,15 @@ function issueNumberOf(id: string, payload: unknown): number {
   if (typeof number !== "number" || !Number.isInteger(number) || number <= 0) {
     throw new Error(`${id}: issue.number must be a positive integer`);
   }
-  return number;
+  const title = issue.title;
+  if (typeof title !== "string" || title.length === 0) {
+    throw new Error(`${id}: issue.title must be a non-empty string`);
+  }
+  const body = issue.body;
+  if (typeof body !== "string") {
+    throw new Error(`${id}: issue.body must be a string`);
+  }
+  return { number, title, body };
 }
 
 function issueIds(directory: string): string[] {

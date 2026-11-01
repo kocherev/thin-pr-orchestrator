@@ -48,3 +48,15 @@ export {
   testerOutput,
 } from "./specialists.js";
 export { AnthropicModelClient, createModelClient, LIVE_EFFORT, LIVE_MODEL_ID } from "./live.js";
+export {
+  createJudge,
+  judgePrompt,
+  judgeReplay,
+  JUDGE_RULES,
+  parseJudgeText,
+  type Judge,
+  type JudgeReason,
+  type JudgeRule,
+  type JudgeSubject,
+  type JudgeVerdict,
+} from "./judge.js";

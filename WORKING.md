@@ -54,7 +54,7 @@ pnpm exec vitest run packages/specialists/src/schema.test.ts
 pnpm exec vitest run scripts/eval.test.ts
 ```
 
-`packages/core/src/run.test.ts` writes a SQLite log, reopens it, and expects `replay` to match `runWorkflow`. `packages/github/src/run.test.ts` runs `fixtures/sample-issue-labeled.json` through an in-memory GitHub client. `scripts/eval.test.ts` runs the eval and expects the committed 8/12 report.
+`packages/core/src/run.test.ts` writes a SQLite log, reopens it, and expects `replay` to match `runWorkflow`. `packages/github/src/run.test.ts` runs `fixtures/sample-issue-labeled.json` through an in-memory GitHub client. `scripts/eval.test.ts` runs the eval and expects the committed 8/12 report. `scripts/judge.test.ts` expects the judge report at 9/12. `scripts/trace.test.ts` expects six span names in the OTLP file.
 
 ### pnpm eval
 
@@ -76,6 +76,29 @@ lines changed: min 1, median 2.5, max 31
 The command then prints one line per case: id, `pass` or `fail`, file count, line count, and `within budget` or `over budget`. The full table is in `README.md`. Exit 0 means the gate pass rate is at least `evals/baseline.json`. The budget rule is part of that gate, so an over-budget diff fails the case.
 
 Do not lower `evals/baseline.json`, and do not edit `scripts/eval.test.ts`, to turn a red eval green. If you change a fixture, update the README table in the same change and keep the test honest.
+
+### pnpm eval:judge
+
+Runs `node --disable-warning=ExperimentalWarning --import tsx scripts/judge.ts`.
+
+Stdout on the committed fixtures:
+
+```text
+Judge eval
+cases: 12
+judge pass rate: 9/12 (75.0%)
+baseline: 75.0%
+```
+
+The command then prints one block per case. The block is the case id, `pass` or `fail`, and four lines for `plan`, `files`, `tests`, and `review`. Each rule line is the verdict and the reason. Exit 0 means the pass rate is at least `evals/judge-baseline.json`. The committed report is `docs/demo/judge-report.txt`.
+
+`THIN_PR_JUDGE=live` with `THIN_PR_MODEL=live` and `ANTHROPIC_API_KEY` calls `claude-haiku-5-5`. CI leaves both mode variables unset, which selects the rubric. `docs/demo/judge-live.txt` records one live run. Its spend line is `live spend: 0.002965 USD`.
+
+### pnpm trace
+
+Runs `node --disable-warning=ExperimentalWarning --import tsx scripts/trace.ts`.
+
+The command replays run `run-7` and exports OTLP JSON. Set `THIN_PR_TRACE_PATH` to write a file. With the variable empty, the JSON goes to stdout. `docs/demo/trace.json` is one file from this command. `@opentelemetry/sdk-node` 0.300.0 requires Node.js 22.15 or later.
 
 ## Layout
 
