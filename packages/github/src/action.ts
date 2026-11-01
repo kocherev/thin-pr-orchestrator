@@ -1,9 +1,11 @@
+import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as core from "@actions/core";
 import * as github from "@actions/github";
 import { Octokit } from "@octokit/rest";
+import { AnthropicModelClient, createModelClient } from "@thin-pr/specialists";
 import { createGitHubSurface } from "./surface.js";
 import { runAction } from "./run.js";
 
@@ -14,6 +16,7 @@ async function main(): Promise<void> {
     return;
   }
 
+  const model = createModelClient();
   const runId = process.env.GITHUB_RUN_ID ? `gha-${process.env.GITHUB_RUN_ID}` : `local-${Date.now()}`;
   const result = await runAction({
     payload: github.context.payload,
@@ -21,7 +24,16 @@ async function main(): Promise<void> {
     runId,
     logPath: join(tmpdir(), `thin-pr-${runId}.sqlite`),
     github: createGitHubSurface(new Octokit({ auth: token })),
+    model,
   });
+  if (model instanceof AnthropicModelClient) {
+    const spend = { usd: model.spentUsd() };
+    core.info(`Live model spend estimate: ${spend.usd.toFixed(6)} USD`);
+    const spendPath = process.env.THIN_PR_SPEND_PATH;
+    if (spendPath) {
+      writeFileSync(spendPath, `${JSON.stringify(spend)}\n`);
+    }
+  }
 
   if (result.status === "failed") {
     core.setFailed(result.report.error);

@@ -47,3 +47,4 @@ export {
   tester,
   testerOutput,
 } from "./specialists.js";
+export { AnthropicModelClient, createModelClient, LIVE_EFFORT, LIVE_MODEL_ID } from "./live.js";

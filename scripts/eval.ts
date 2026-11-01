@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } 
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { measureDiff, type FileChange } from "@thin-pr/gate";
 import { runAction, type GitHubSurface } from "@thin-pr/github";
 import { implementerOutput, ReplayModelClient } from "@thin-pr/specialists";
 
@@ -67,8 +68,9 @@ export async function runEval(workspace = root): Promise<EvalReport> {
         throw new Error(`${id}: duplicate issue number ${issueNumber}`);
       }
       seenIssues.add(issueNumber);
-      const diff = scoreDiff(id, sampleRoot, join(evalsDir, "diffs", id), response.changes);
-      const gate = await replay(id, workspace, directory, issueNumber, payload, response);
+      const changes = readChanges(id, sampleRoot, join(evalsDir, "diffs", id), response.changes);
+      const diff = measureDiff(changes);
+      const gate = await replay(id, workspace, directory, issueNumber, payload, response, changes);
       cases.push({
         id,
         gate,
@@ -113,10 +115,7 @@ export function exitCode(report: EvalReport): 0 | 1 {
 }
 
 export function lineChangeCount(before: string, after: string): number {
-  const removed = sourceLines(before);
-  const added = sourceLines(after);
-  const shared = longestCommonSubsequence(removed, added);
-  return removed.length - shared + (added.length - shared);
+  return measureDiff([{ path: "file", before, after }]).lines;
 }
 
 function summarize(
@@ -148,6 +147,7 @@ async function replay(
   issueNumber: number,
   payload: unknown,
   response: RecordedResponse,
+  changes: readonly FileChange[],
 ): Promise<"pass" | "fail"> {
   let result: Awaited<ReturnType<typeof runAction>>;
   try {
@@ -157,6 +157,7 @@ async function replay(
       runId: `eval-${issueNumber}`,
       logPath: join(directory, `${id}.sqlite`),
       github: replayGitHub(),
+      changes,
       model: new ReplayModelClient({
         planner: JSON.stringify(response.plan),
         implementer: JSON.stringify(response.implement),
@@ -195,7 +196,10 @@ function replayGitHub(): GitHubSurface {
     async comment() {
       return undefined;
     },
-    async advanceBranch() {
+    async readText() {
+      return null;
+    },
+    async commitFiles() {
       return "def456";
     },
     async openDraft(input) {
@@ -207,19 +211,12 @@ function replayGitHub(): GitHubSurface {
   };
 }
 
-function scoreDiff(
-  id: string,
-  sampleRoot: string,
-  diffRoot: string,
-  changes: readonly string[],
-): { files: number; lines: number } {
-  let lines = 0;
-  for (const rel of changes) {
-    const before = readTreeFile(id, sampleRoot, rel, true);
-    const after = readTreeFile(id, diffRoot, rel, false);
-    lines += lineChangeCount(before, after);
-  }
-  return { files: changes.length, lines };
+function readChanges(id: string, sampleRoot: string, diffRoot: string, paths: readonly string[]): FileChange[] {
+  return paths.map((rel) => ({
+    path: rel,
+    before: readTreeFile(id, sampleRoot, rel, true),
+    after: readTreeFile(id, diffRoot, rel, false),
+  }));
 }
 
 function readTreeFile(id: string, tree: string, rel: string, allowMissing: boolean): string {
@@ -321,34 +318,6 @@ function rangeStat(values: readonly number[]): RangeStat {
     median,
     max: sorted[sorted.length - 1] ?? 0,
   };
-}
-
-function longestCommonSubsequence(left: readonly string[], right: readonly string[]): number {
-  const prev = new Array<number>(right.length + 1).fill(0);
-  const curr = new Array<number>(right.length + 1).fill(0);
-  for (let i = 1; i <= left.length; i += 1) {
-    for (let j = 1; j <= right.length; j += 1) {
-      const above = prev[j] ?? 0;
-      const leftOf = curr[j - 1] ?? 0;
-      const diagonal = prev[j - 1] ?? 0;
-      curr[j] = left[i - 1] === right[j - 1] ? diagonal + 1 : Math.max(above, leftOf);
-    }
-    for (let j = 0; j <= right.length; j += 1) {
-      prev[j] = curr[j] ?? 0;
-    }
-  }
-  return prev[right.length] ?? 0;
-}
-
-function sourceLines(text: string): string[] {
-  if (text.length === 0) {
-    return [];
-  }
-  const lines = text.split("\n");
-  if (lines[lines.length - 1] === "") {
-    lines.pop();
-  }
-  return lines;
 }
 
 function samePaths(left: readonly string[], right: readonly string[]): boolean {

@@ -85,6 +85,9 @@ importers:
       '@thin-pr/specialists':
         specifier: workspace:*
         version: link:../specialists
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
 
   packages/specialists:
     dependencies:

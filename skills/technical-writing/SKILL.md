@@ -31,7 +31,7 @@ Do not teach inside a reference table, and do not argue inside a how-to. Link to
 
 ## This repo
 
-Public docs name the command, the file, and the number the command prints. `pnpm eval` prints `gate pass rate: 10/12 (83.3%)` on the committed fixtures. Quote a string the program writes. Do not round it into a different figure.
+Public docs name the command, the file, and the number the command prints. `pnpm eval` prints `gate pass rate: 8/12 (66.7%)` on the committed fixtures. Quote a string the program writes. Do not round it into a different figure.
 
 Code is fenced. A UI label, if one appears, is bold. Pull request text is a short briefing: what changed, how you checked it, and the eval report when eval ran. Do not paste a log that the checks already store.
 

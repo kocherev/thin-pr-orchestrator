@@ -16,6 +16,23 @@ export type GitHubRest = {
       readonly repo: string;
       readonly commit_sha: string;
     }): Promise<{ data: { tree: { sha: string } } }>;
+    createBlob(params: {
+      readonly owner: string;
+      readonly repo: string;
+      readonly content: string;
+      readonly encoding: "utf-8";
+    }): Promise<{ data: { sha: string } }>;
+    createTree(params: {
+      readonly owner: string;
+      readonly repo: string;
+      readonly base_tree: string;
+      readonly tree: {
+        path: string;
+        mode: "100644";
+        type: "blob";
+        sha: string;
+      }[];
+    }): Promise<{ data: { sha: string } }>;
     createCommit(params: {
       readonly owner: string;
       readonly repo: string;
@@ -68,6 +85,18 @@ export type GitHubRest = {
       readonly body: string;
     }): Promise<unknown>;
   };
+  repos: {
+    getContent(params: {
+      readonly owner: string;
+      readonly repo: string;
+      readonly path: string;
+      readonly ref: string;
+    }): Promise<{
+      data:
+        | { readonly type: string; readonly content?: string; readonly encoding?: string }
+        | readonly unknown[];
+    }>;
+  };
 };
 
 export type GitHubSurface = {
@@ -93,12 +122,19 @@ export type GitHubSurface = {
     readonly issue: number;
     readonly body: string;
   }): Promise<void>;
-  advanceBranch(input: {
+  readText(input: {
+    readonly owner: string;
+    readonly repo: string;
+    readonly ref: string;
+    readonly path: string;
+  }): Promise<string | null>;
+  commitFiles(input: {
     readonly owner: string;
     readonly repo: string;
     readonly branch: string;
-    readonly sha: string;
+    readonly parentSha: string;
     readonly message: string;
+    readonly files: readonly { readonly path: string; readonly content: string }[];
   }): Promise<string>;
   openDraft(input: {
     readonly owner: string;
@@ -165,22 +201,60 @@ export function createGitHubSurface(octokit: GitHubRest): GitHubSurface {
         body: input.body,
       });
     },
-    async advanceBranch(input) {
+    async readText(input) {
+      try {
+        const { data } = await octokit.repos.getContent({
+          owner: input.owner,
+          repo: input.repo,
+          path: input.path,
+          ref: input.ref,
+        });
+        if (!isFileContent(data) || data.encoding !== "base64") {
+          return null;
+        }
+        return Buffer.from(data.content.replace(/\n/g, ""), "base64").toString("utf8");
+      } catch (error) {
+        if (typeof error === "object" && error !== null && "status" in error && error.status === 404) {
+          return null;
+        }
+        throw error;
+      }
+    },
+    async commitFiles(input) {
+      if (input.files.length === 0) {
+        throw new Error("commit has no files");
+      }
       const { data: parent } = await octokit.git.getCommit({
         owner: input.owner,
         repo: input.repo,
-        commit_sha: input.sha,
+        commit_sha: input.parentSha,
       });
-      const tree = parent.tree.sha;
-      if (tree.length === 0) {
-        throw new Error(`commit ${input.sha} has no tree`);
+      const baseTree = parent.tree.sha;
+      if (baseTree.length === 0) {
+        throw new Error(`commit ${input.parentSha} has no tree`);
       }
+      const tree: { path: string; mode: "100644"; type: "blob"; sha: string }[] = [];
+      for (const file of input.files) {
+        const { data: blob } = await octokit.git.createBlob({
+          owner: input.owner,
+          repo: input.repo,
+          content: file.content,
+          encoding: "utf-8",
+        });
+        tree.push({ path: file.path, mode: "100644", type: "blob", sha: blob.sha });
+      }
+      const { data: nextTree } = await octokit.git.createTree({
+        owner: input.owner,
+        repo: input.repo,
+        base_tree: baseTree,
+        tree,
+      });
       const { data: commit } = await octokit.git.createCommit({
         owner: input.owner,
         repo: input.repo,
         message: input.message,
-        tree,
-        parents: [input.sha],
+        tree: nextTree.sha,
+        parents: [input.parentSha],
       });
       await octokit.git.updateRef({
         owner: input.owner,
@@ -203,4 +277,13 @@ export function createGitHubSurface(octokit: GitHubRest): GitHubSurface {
       return { number: data.number, url: data.html_url };
     },
   };
+}
+
+function isFileContent(
+  data: { readonly type: string; readonly content?: string; readonly encoding?: string } | readonly unknown[],
+): data is { readonly type: "file"; readonly content: string; readonly encoding?: string } {
+  if (typeof data !== "object" || data === null || !("type" in data) || !("content" in data)) {
+    return false;
+  }
+  return data.type === "file" && typeof data.content === "string";
 }
