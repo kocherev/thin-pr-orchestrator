@@ -53,6 +53,12 @@ The budget is 2 files and 16 lines. Line counts are insertions plus deletions, f
 
 CI runs `pnpm eval` after the tests. Lowering `evals/baseline.json` to make a red run green hides the regression the file is there to catch.
 
+## Traces and the judge
+
+`runWorkflow` opens spans with `@opentelemetry/api`. A process that never starts the SDK records nothing. `packages/github` starts the SDK for `pnpm trace` and for the labeled-issue Action. The exported document is OTLP JSON. The sample is `docs/demo/trace.json`.
+
+The judge scores a finished replay. `decide()` still reads plan, tests, contracts, diff, and budget, and that result still chooses the draft. `pnpm eval:judge` applies the rubric in `packages/specialists/src/judge.ts` to the 12 recorded cases. The live client in that package runs when `THIN_PR_JUDGE` and `THIN_PR_MODEL` are both `live` and `ANTHROPIC_API_KEY` is set.
+
 ## Non-goals
 
 - CI and `pnpm eval` do not call a live model. The live client runs only when `THIN_PR_MODEL=live` and `ANTHROPIC_API_KEY` is set, and it stays in `packages/specialists`.

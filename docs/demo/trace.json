@@ -1,0 +1,408 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "thin-pr-orchestrator"
+            }
+          }
+        ],
+        "droppedAttributesCount": 0
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "@thin-pr/core"
+          },
+          "spans": [
+            {
+              "traceId": "22b2596d725548236a51f8752cd1e269",
+              "spanId": "8fbfcf92fc1076be",
+              "parentSpanId": "d54913da41609378",
+              "name": "thin-pr.plan",
+              "kind": 1,
+              "startTimeUnixNano": "1793558100838000000",
+              "endTimeUnixNano": "1793558100839142380",
+              "attributes": [
+                {
+                  "key": "thin_pr.step",
+                  "value": {
+                    "stringValue": "plan"
+                  }
+                },
+                {
+                  "key": "thin_pr.specialist",
+                  "value": {
+                    "stringValue": "planner"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "events": [],
+              "droppedEventsCount": 0,
+              "status": {
+                "code": 1
+              },
+              "links": [],
+              "droppedLinksCount": 0,
+              "flags": 257
+            },
+            {
+              "traceId": "22b2596d725548236a51f8752cd1e269",
+              "spanId": "f8a70316fd586df3",
+              "parentSpanId": "d54913da41609378",
+              "name": "thin-pr.implement",
+              "kind": 1,
+              "startTimeUnixNano": "1793558100843000000",
+              "endTimeUnixNano": "1793558100843779265",
+              "attributes": [
+                {
+                  "key": "thin_pr.step",
+                  "value": {
+                    "stringValue": "implement"
+                  }
+                },
+                {
+                  "key": "thin_pr.specialist",
+                  "value": {
+                    "stringValue": "implementer"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "events": [],
+              "droppedEventsCount": 0,
+              "status": {
+                "code": 1
+              },
+              "links": [],
+              "droppedLinksCount": 0,
+              "flags": 257
+            },
+            {
+              "traceId": "22b2596d725548236a51f8752cd1e269",
+              "spanId": "9bc9b13c00bbb6cc",
+              "parentSpanId": "d54913da41609378",
+              "name": "thin-pr.test",
+              "kind": 1,
+              "startTimeUnixNano": "1793558100873000000",
+              "endTimeUnixNano": "1793558100873564327",
+              "attributes": [
+                {
+                  "key": "thin_pr.step",
+                  "value": {
+                    "stringValue": "test"
+                  }
+                },
+                {
+                  "key": "thin_pr.specialist",
+                  "value": {
+                    "stringValue": "tester"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "events": [],
+              "droppedEventsCount": 0,
+              "status": {
+                "code": 1
+              },
+              "links": [],
+              "droppedLinksCount": 0,
+              "flags": 257
+            },
+            {
+              "traceId": "22b2596d725548236a51f8752cd1e269",
+              "spanId": "cf266aa852cbe93a",
+              "parentSpanId": "d54913da41609378",
+              "name": "thin-pr.review",
+              "kind": 1,
+              "startTimeUnixNano": "1793558100875000000",
+              "endTimeUnixNano": "1793558100875586524",
+              "attributes": [
+                {
+                  "key": "thin_pr.step",
+                  "value": {
+                    "stringValue": "review"
+                  }
+                },
+                {
+                  "key": "thin_pr.specialist",
+                  "value": {
+                    "stringValue": "reviewer"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "events": [],
+              "droppedEventsCount": 0,
+              "status": {
+                "code": 1
+              },
+              "links": [],
+              "droppedLinksCount": 0,
+              "flags": 257
+            },
+            {
+              "traceId": "22b2596d725548236a51f8752cd1e269",
+              "spanId": "9d14de01c913760d",
+              "parentSpanId": "d54913da41609378",
+              "name": "thin-pr.gate",
+              "kind": 1,
+              "startTimeUnixNano": "1793558100877000000",
+              "endTimeUnixNano": "1793558100878069092",
+              "attributes": [
+                {
+                  "key": "thin_pr.step",
+                  "value": {
+                    "stringValue": "gate"
+                  }
+                },
+                {
+                  "key": "thin_pr.specialist",
+                  "value": {
+                    "stringValue": "pr-writer"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "events": [],
+              "droppedEventsCount": 0,
+              "status": {
+                "code": 1
+              },
+              "links": [],
+              "droppedLinksCount": 0,
+              "flags": 257
+            },
+            {
+              "traceId": "22b2596d725548236a51f8752cd1e269",
+              "spanId": "d54913da41609378",
+              "name": "thin-pr.run",
+              "kind": 1,
+              "startTimeUnixNano": "1793558100835000000",
+              "endTimeUnixNano": "1793558100878484271",
+              "attributes": [
+                {
+                  "key": "thin_pr.run_id",
+                  "value": {
+                    "stringValue": "run-7"
+                  }
+                },
+                {
+                  "key": "thin_pr.template_id",
+                  "value": {
+                    "stringValue": "small-feature"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "events": [
+                {
+                  "attributes": [
+                    {
+                      "key": "thin_pr.from",
+                      "value": {
+                        "stringValue": "idle"
+                      }
+                    },
+                    {
+                      "key": "thin_pr.to",
+                      "value": {
+                        "stringValue": "plan"
+                      }
+                    }
+                  ],
+                  "name": "thin-pr.transition",
+                  "timeUnixNano": "1793558100838199225",
+                  "droppedAttributesCount": 0
+                },
+                {
+                  "attributes": [
+                    {
+                      "key": "thin_pr.from",
+                      "value": {
+                        "stringValue": "plan"
+                      }
+                    },
+                    {
+                      "key": "thin_pr.to",
+                      "value": {
+                        "stringValue": "implement"
+                      }
+                    }
+                  ],
+                  "name": "thin-pr.transition",
+                  "timeUnixNano": "1793558100841675927",
+                  "droppedAttributesCount": 0
+                },
+                {
+                  "attributes": [
+                    {
+                      "key": "thin_pr.from",
+                      "value": {
+                        "stringValue": "implement"
+                      }
+                    },
+                    {
+                      "key": "thin_pr.to",
+                      "value": {
+                        "stringValue": "implement"
+                      }
+                    }
+                  ],
+                  "name": "thin-pr.transition",
+                  "timeUnixNano": "1793558100843499618",
+                  "droppedAttributesCount": 0
+                },
+                {
+                  "attributes": [
+                    {
+                      "key": "thin_pr.from",
+                      "value": {
+                        "stringValue": "implement"
+                      }
+                    },
+                    {
+                      "key": "thin_pr.to",
+                      "value": {
+                        "stringValue": "test"
+                      }
+                    }
+                  ],
+                  "name": "thin-pr.transition",
+                  "timeUnixNano": "1793558100871102933",
+                  "droppedAttributesCount": 0
+                },
+                {
+                  "attributes": [
+                    {
+                      "key": "thin_pr.from",
+                      "value": {
+                        "stringValue": "test"
+                      }
+                    },
+                    {
+                      "key": "thin_pr.to",
+                      "value": {
+                        "stringValue": "test"
+                      }
+                    }
+                  ],
+                  "name": "thin-pr.transition",
+                  "timeUnixNano": "1793558100873020506",
+                  "droppedAttributesCount": 0
+                },
+                {
+                  "attributes": [
+                    {
+                      "key": "thin_pr.from",
+                      "value": {
+                        "stringValue": "test"
+                      }
+                    },
+                    {
+                      "key": "thin_pr.to",
+                      "value": {
+                        "stringValue": "review"
+                      }
+                    }
+                  ],
+                  "name": "thin-pr.transition",
+                  "timeUnixNano": "1793558100874963442",
+                  "droppedAttributesCount": 0
+                },
+                {
+                  "attributes": [
+                    {
+                      "key": "thin_pr.from",
+                      "value": {
+                        "stringValue": "review"
+                      }
+                    },
+                    {
+                      "key": "thin_pr.to",
+                      "value": {
+                        "stringValue": "review"
+                      }
+                    }
+                  ],
+                  "name": "thin-pr.transition",
+                  "timeUnixNano": "1793558100875309095",
+                  "droppedAttributesCount": 0
+                },
+                {
+                  "attributes": [
+                    {
+                      "key": "thin_pr.from",
+                      "value": {
+                        "stringValue": "review"
+                      }
+                    },
+                    {
+                      "key": "thin_pr.to",
+                      "value": {
+                        "stringValue": "gate"
+                      }
+                    }
+                  ],
+                  "name": "thin-pr.transition",
+                  "timeUnixNano": "1793558100876362775",
+                  "droppedAttributesCount": 0
+                },
+                {
+                  "attributes": [
+                    {
+                      "key": "thin_pr.from",
+                      "value": {
+                        "stringValue": "gate"
+                      }
+                    },
+                    {
+                      "key": "thin_pr.to",
+                      "value": {
+                        "stringValue": "gate"
+                      }
+                    }
+                  ],
+                  "name": "thin-pr.transition",
+                  "timeUnixNano": "1793558100876744575",
+                  "droppedAttributesCount": 0
+                },
+                {
+                  "attributes": [
+                    {
+                      "key": "thin_pr.from",
+                      "value": {
+                        "stringValue": "gate"
+                      }
+                    },
+                    {
+                      "key": "thin_pr.to",
+                      "value": {
+                        "stringValue": "complete"
+                      }
+                    }
+                  ],
+                  "name": "thin-pr.transition",
+                  "timeUnixNano": "1793558100878399453",
+                  "droppedAttributesCount": 0
+                }
+              ],
+              "droppedEventsCount": 0,
+              "status": {
+                "code": 1
+              },
+              "links": [],
+              "droppedLinksCount": 0,
+              "flags": 257
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

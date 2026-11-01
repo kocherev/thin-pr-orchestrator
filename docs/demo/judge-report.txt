@@ -1,0 +1,64 @@
+Judge eval
+cases: 12
+judge pass rate: 9/12 (75.0%)
+baseline: 75.0%
+01-clamp-decrement pass
+  plan: pass. Plan has 1 step.
+  files: pass. Implementer files match the recorded diff (1 file).
+  tests: pass. Tester recorded passed true.
+  review: pass. Review notes are empty on a passing run.
+02-thousands-separator pass
+  plan: pass. Plan has 1 step.
+  files: pass. Implementer files match the recorded diff (1 file).
+  tests: pass. Tester recorded passed true.
+  review: pass. Review notes are empty on a passing run.
+03-skip-blank-notes pass
+  plan: pass. Plan has 1 step.
+  files: pass. Implementer files match the recorded diff (1 file).
+  tests: pass. Tester recorded passed true.
+  review: pass. Review notes are empty on a passing run.
+04-parse-yes-no pass
+  plan: pass. Plan has 1 step.
+  files: pass. Implementer files match the recorded diff (1 file).
+  tests: pass. Tester recorded passed true.
+  review: pass. Review notes are empty on a passing run.
+05-add-reset pass
+  plan: pass. Plan has 1 step.
+  files: pass. Implementer files match the recorded diff (1 file).
+  tests: pass. Tester recorded passed true.
+  review: pass. Review notes are empty on a passing run.
+06-document-helpers pass
+  plan: pass. Plan has 1 step.
+  files: pass. Implementer files match the recorded diff (1 file).
+  tests: pass. Tester recorded passed true.
+  review: pass. Review notes are empty on a passing run.
+07-format-label pass
+  plan: pass. Plan has 1 step.
+  files: pass. Implementer files match the recorded diff (1 file).
+  tests: pass. Tester recorded passed true.
+  review: pass. Review notes are empty on a passing run.
+08-reject-empty-notes pass
+  plan: pass. Plan has 1 step.
+  files: pass. Implementer files match the recorded diff (1 file).
+  tests: pass. Tester recorded passed true.
+  review: pass. Review notes are empty on a passing run.
+09-failing-tests pass
+  plan: pass. Plan has 1 step.
+  files: pass. Implementer files match the recorded diff (1 file).
+  tests: pass. Tester recorded passed false and the review notes say so.
+  review: pass. Review notes cover the failed check.
+10-empty-plan fail
+  plan: fail. Plan has no steps.
+  files: pass. Implementer files match the recorded diff (1 file).
+  tests: fail. Tester recorded passed true without a plan.
+  review: fail. Review has no notes for an empty plan.
+11-wide-touch fail
+  plan: pass. Plan has 1 step.
+  files: pass. Implementer files match the recorded diff (4 files).
+  tests: pass. Tester recorded passed true.
+  review: fail. Review has no notes for a diff over the budget (4 files, 4 lines).
+12-long-readme fail
+  plan: pass. Plan has 1 step.
+  files: pass. Implementer files match the recorded diff (1 file).
+  tests: pass. Tester recorded passed true.
+  review: fail. Review has no notes for a diff over the budget (1 file, 31 lines).

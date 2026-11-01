@@ -7,6 +7,8 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm eval
+pnpm eval:judge
+pnpm trace
 ```
 
 Keep model client imports out of `packages/core`. `pnpm lint` runs that check.

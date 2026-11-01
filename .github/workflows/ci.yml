@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -42,3 +43,29 @@ jobs:
 
       - name: Eval
         run: pnpm eval
+
+      - name: Judge
+        env:
+          THIN_PR_JUDGE_REPORT: artifacts/judge-report.txt
+        run: pnpm eval:judge
+
+      - name: Upload judge report
+        uses: actions/upload-artifact@v7
+        with:
+          name: judge-report
+          path: artifacts/judge-report.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Trace
+        env:
+          THIN_PR_TRACE_PATH: artifacts/trace.json
+        run: pnpm trace
+
+      - name: Upload trace
+        uses: actions/upload-artifact@v7
+        with:
+          name: thin-pr-trace
+          path: artifacts/trace.json
+          if-no-files-found: error
+          retention-days: 14

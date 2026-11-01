@@ -12,6 +12,8 @@
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
     "eval": "node --disable-warning=ExperimentalWarning --import tsx scripts/eval.ts",
+    "eval:judge": "node --disable-warning=ExperimentalWarning --import tsx scripts/judge.ts",
+    "trace": "node --disable-warning=ExperimentalWarning --import tsx scripts/trace.ts",
     "build": "tsc -b --pretty false"
   },
   "dependencies": {

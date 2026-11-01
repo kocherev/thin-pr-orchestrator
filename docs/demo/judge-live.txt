@@ -1,0 +1,65 @@
+Judge eval
+cases: 12
+judge pass rate: 9/12 (75.0%)
+baseline: 75.0%
+live spend: 0.002965 USD
+01-clamp-decrement pass
+  plan: pass. The plan has a summary and one step, so it matches the planner contract.
+  files: pass. The implementer files list ["src/counter.ts"] equals the recorded change paths ["src/counter.ts"].
+  tests: pass. Tests passed is true and the plan has steps.
+  review: pass. No problem is present: the plan is not empty, the test passed, and the diff is within budget (1 of 2 files, 2 of 16 lines). Review notes are therefore not required, and the empty notes are acceptable.
+02-thousands-separator pass
+  plan: pass. The plan has a summary and one step, so steps is not empty and the plan matches the planner contract.
+  files: pass. The implementer files list ['src/format.ts'] equals the recorded change paths ['src/format.ts'].
+  tests: pass. Tests passed is true and the plan has steps, so the test rule is satisfied.
+  review: pass. The plan is not empty, tests did not fail, and the diff is within budget (1 file of 2 max, 2 lines of 16 max), so no review note is required and none is missing.
+03-skip-blank-notes pass
+  plan: pass. The plan has a summary and one step, matching the planner contract.
+  files: pass. The implementer files list ["src/notes.ts"] equals the recorded change paths ["src/notes.ts"].
+  tests: pass. Tests passed is true and the plan has steps.
+  review: pass. The plan is not empty, the tests did not fail, and the diff is within budget (1 file of 2, 2 lines of 16), so no review note is required.
+04-parse-yes-no pass
+  plan: pass. The plan has a summary and one step, so it matches the planner contract and steps is not empty.
+  files: pass. The implementer files list [src/parse.ts] equals the recorded change paths [src/parse.ts].
+  tests: pass. Tests passed is true and the plan has steps.
+  review: pass. The plan is not empty, tests did not fail, and the diff is within budget (1 of 2 files, 4 of 16 lines), so no review note is required.
+05-add-reset pass
+  plan: pass. The plan has a summary and one step, so it matches the planner contract.
+  files: pass. The implementer files list ['src/counter.ts'] equals the recorded change paths ['src/counter.ts'].
+  tests: pass. Tests passed and the plan has steps.
+  review: pass. No problem is present: the plan is not empty, the tests did not fail, and the diff is within budget (1 of 2 files, 4 of 16 lines), so no review note is required.
+06-document-helpers pass
+  plan: pass. The plan has a summary and one step, "Add a reset bullet to README.md", so steps is not empty.
+  files: pass. The implementer files list ["README.md"] matches the recorded change paths ["README.md"].
+  tests: pass. Tests passed is true and the plan has steps, which satisfies the passing condition.
+  review: pass. No problem is present: the plan is not empty, the test did not fail, and the diff is within budget (1 of 2 files, 1 of 16 lines), so no review note is required.
+07-format-label pass
+  plan: pass. The plan has a summary and one step, satisfying the requirement for at least one step.
+  files: pass. The implementer files list [src/format.ts] matches the recorded change paths [src/format.ts].
+  tests: pass. Tests passed is true and the plan has steps.
+  review: pass. No problem is present: the plan is not empty, tests did not fail, and the diff is within budget (1 of 2 files, 4 of 16 lines), so empty review notes are acceptable.
+08-reject-empty-notes pass
+  plan: pass. The plan has one step, 'Guard empty text in src/notes.ts', so it is non-empty and matches the planner contract.
+  files: pass. The implementer files list ['src/notes.ts'] equals the recorded change paths ['src/notes.ts'].
+  tests: pass. Tests passed is true and the plan has steps, which satisfies the passing condition.
+  review: pass. No problems are present: the plan is non-empty, the test did not fail, and the diff is within budget (1 of 2 files, 3 of 16 lines). The review notes are not required, and the run has one anyway.
+09-failing-tests pass
+  plan: pass. The plan has a summary and one step, matching the planner contract.
+  files: pass. The implementer files list ['src/parse.ts'] equals the recorded change paths ['src/parse.ts'].
+  tests: pass. passed is false and the review notes are non-empty, so this rule passes.
+  review: pass. A failed test is present and notes contains 'The recorded tests did not pass.', so this rule passes. The diff (1 file, 2 lines) is within budget (maxFiles 2, maxLines 16) and the plan is not empty.
+10-empty-plan fail
+  plan: fail. The plan has an empty steps array, so it does not include the required at least one step.
+  files: pass. The implementer files list ["src/counter.ts"] matches the recorded change paths ["src/counter.ts"].
+  tests: fail. Tests passed is true, but the plan has no steps, which fails this rule.
+  review: fail. The empty plan is a problem present in this run, but review notes is empty.
+11-wide-touch fail
+  plan: pass. The plan has a summary and one step, so it matches the planner contract.
+  files: pass. The implementer files list matches the recorded change paths exactly: counter.ts, format.ts, notes.ts, and parse.ts.
+  tests: pass. Tests passed is true and the plan has steps.
+  review: fail. The diff is over budget: 4 files against maxFiles 2. The lines count of 4 is within maxLines 16. The review notes are empty, so the problem has no supporting note.
+12-long-readme fail
+  plan: pass. The plan has a summary and one step, so it matches the planner contract.
+  files: pass. The implementer files list ['README.md'] equals the recorded change paths ['README.md'].
+  tests: pass. Tests passed is true and the plan has steps.
+  review: fail. The diff is over budget: 31 lines exceeds maxLines of 16 (files 1 is within maxFiles of 2). That problem requires at least one review note, but review notes are empty.
