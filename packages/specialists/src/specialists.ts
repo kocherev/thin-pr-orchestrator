@@ -14,9 +14,15 @@ export const plannerOutput = z
   .object({ summary: text, steps: z.array(text).min(1) })
   .strict();
 
+const fileEdit = z.object({ path: text, content: z.string() }).strict();
+
 export const implementerInput = z.object({ issue: text, planSummary: text }).strict();
 export const implementerOutput = z
-  .object({ summary: text, files: z.array(text).min(1) })
+  .object({
+    summary: text,
+    files: z.array(text).min(1),
+    edits: z.array(fileEdit).min(1).optional(),
+  })
   .strict();
 
 export const testerInput = z.object({ issue: text, changeSummary: text }).strict();
@@ -96,8 +102,11 @@ function assertContext(name: SpecialistName, ctx: StepContext): void {
 }
 
 function readJson(name: SpecialistName, text: string): unknown {
+  const trimmed = text.trim();
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(trimmed);
+  const body = fenced?.[1] ?? trimmed;
   try {
-    return JSON.parse(text) as unknown;
+    return JSON.parse(body) as unknown;
   } catch {
     throw new Error(`${name} model text is not JSON`);
   }

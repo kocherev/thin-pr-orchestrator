@@ -16,7 +16,7 @@ describe("replay eval", () => {
     const text = formatReport(report);
 
     expect(report.total).toBeGreaterThanOrEqual(10);
-    expect(report.passed).toBe(10);
+    expect(report.passed).toBe(8);
     expect(report.total).toBe(12);
     expect(report.passRate).toBe(baseline.minPassRate);
     expect(report.minPassRate).toBe(baseline.minPassRate);
@@ -30,8 +30,8 @@ describe("replay eval", () => {
     expect(byId.get("02-thousands-separator")).toMatchObject({ gate: "pass", files: 1, lines: 2, withinBudget: true });
     expect(byId.get("09-failing-tests")?.gate).toBe("fail");
     expect(byId.get("10-empty-plan")?.gate).toBe("fail");
-    expect(byId.get("11-wide-touch")).toMatchObject({ gate: "pass", files: 4, lines: 4, withinBudget: false });
-    expect(byId.get("12-long-readme")?.gate).toBe("pass");
+    expect(byId.get("11-wide-touch")).toMatchObject({ gate: "fail", files: 4, lines: 4, withinBudget: false });
+    expect(byId.get("12-long-readme")?.gate).toBe("fail");
     expect(byId.get("12-long-readme")?.files).toBe(1);
     expect(byId.get("12-long-readme")?.withinBudget).toBe(false);
     expect(report.withinBudget).toBe(10);
@@ -39,7 +39,7 @@ describe("replay eval", () => {
     expect(report.files.median).toBeLessThanOrEqual(report.files.max);
     expect(text).toContain(`gate pass rate: ${report.passed}/${report.total}`);
     expect(text).toContain(`diff budget: ${report.budget.maxFiles} files, ${report.budget.maxLines} lines`);
-    expect(text).toContain("11-wide-touch pass files 4 lines 4 over budget");
+    expect(text).toContain("11-wide-touch fail files 4 lines 4 over budget");
   });
 
   it("counts inserted and deleted lines", () => {
@@ -55,8 +55,8 @@ describe("replay eval", () => {
 
   it("prints the report from pnpm eval", () => {
     const output = execFileSync("pnpm", ["eval"], { cwd: root, encoding: "utf8" });
-    expect(output).toContain("gate pass rate: 10/12 (83.3%)");
-    expect(output).toContain("baseline: 83.3%");
+    expect(output).toContain("gate pass rate: 8/12 (66.7%)");
+    expect(output).toContain("baseline: 66.7%");
     expect(output).toContain("diff budget: 2 files, 16 lines");
     expect(output).toContain("within budget: 10/12");
   });

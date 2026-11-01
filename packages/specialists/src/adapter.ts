@@ -31,7 +31,7 @@ export type StubSpecialist = {
 
 export type CapturedRun = {
   plan: { summary: string; steps: string[] } | null;
-  implement: { summary: string; files: string[] } | null;
+  implement: { summary: string; files: string[]; edits?: { path: string; content: string }[] } | null;
   test: { summary: string; passed: boolean } | null;
   review: { summary: string; notes: string[] } | null;
   pullRequest: { summary: string; title: string; body: string } | null;

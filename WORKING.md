@@ -54,7 +54,7 @@ pnpm exec vitest run packages/specialists/src/schema.test.ts
 pnpm exec vitest run scripts/eval.test.ts
 ```
 
-`packages/core/src/run.test.ts` writes a SQLite log, reopens it, and expects `replay` to match `runWorkflow`. `packages/github/src/run.test.ts` runs `fixtures/sample-issue-labeled.json` through an in-memory GitHub client. `scripts/eval.test.ts` runs the eval and expects the committed 10/12 report.
+`packages/core/src/run.test.ts` writes a SQLite log, reopens it, and expects `replay` to match `runWorkflow`. `packages/github/src/run.test.ts` runs `fixtures/sample-issue-labeled.json` through an in-memory GitHub client. `scripts/eval.test.ts` runs the eval and expects the committed 8/12 report.
 
 ### pnpm eval
 
@@ -65,21 +65,21 @@ Stdout on the committed fixtures:
 ```text
 Replay eval
 cases: 12
-gate pass rate: 10/12 (83.3%)
-baseline: 83.3%
+gate pass rate: 8/12 (66.7%)
+baseline: 66.7%
 diff budget: 2 files, 16 lines
 within budget: 10/12
 files changed: min 1, median 1, max 4
 lines changed: min 1, median 2.5, max 31
 ```
 
-The command then prints one line per case: id, `pass` or `fail`, file count, line count, and `within budget` or `over budget`. The full table is in `README.md`. Exit 0 means the gate pass rate is at least `evals/baseline.json`. The diff budget is reported and does not by itself change the exit code.
+The command then prints one line per case: id, `pass` or `fail`, file count, line count, and `within budget` or `over budget`. The full table is in `README.md`. Exit 0 means the gate pass rate is at least `evals/baseline.json`. The budget rule is part of that gate, so an over-budget diff fails the case.
 
 Do not lower `evals/baseline.json`, and do not edit `scripts/eval.test.ts`, to turn a red eval green. If you change a fixture, update the README table in the same change and keep the test honest.
 
 ## Layout
 
-`packages/core` is the control plane. It runs the template, appends each transition to SQLite, and does not call a model. `packages/specialists` holds planner, implementer, tester, reviewer, and pr-writer. Their model client in this tree is `ReplayModelClient`. `packages/gate` evaluates plan, tests, and specialist contracts. Each rule returns `PASS` or `FAIL` and a reason. `packages/github` is the only package that calls GitHub. It creates the branch, the checks, and a draft pull request when every gate rule passes. A failure comments the run report and does not open a pull request. Specialists do not import it.
+`packages/core` is the control plane. It runs the template, appends each transition to SQLite, and does not call a model. `packages/specialists` holds planner, implementer, tester, reviewer, and pr-writer. The default model client is `ReplayModelClient`. `THIN_PR_MODEL=live` selects the live client in `packages/specialists/src/live.ts`. `packages/gate` evaluates plan, tests, contracts, the measured diff, and the diff budget. Each rule returns `PASS` or `FAIL` and a reason. The tests rule still reads the tester contract, and it also requires the runner's own file check. `packages/github` is the only package that calls GitHub. It creates the branch, the checks, and a draft pull request when every gate rule passes. A failure comments the run report and does not open a pull request. Specialists do not import it.
 
 `templates/stub-run.json` and the YAML workflows under `templates/` are loaded by the machine. A step names its specialist, fields, retry limit, and optional gate hook. The labeled-issue entry loads `templates/small-feature.yaml` only.
 

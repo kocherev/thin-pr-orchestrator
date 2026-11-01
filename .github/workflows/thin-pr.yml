@@ -20,13 +20,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -37,4 +37,6 @@ jobs:
       - name: Run labeled issue
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          THIN_PR_MODEL: ${{ secrets.ANTHROPIC_API_KEY != '' && 'live' || 'replay' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: node --experimental-sqlite --disable-warning=ExperimentalWarning --import tsx packages/github/src/action.ts

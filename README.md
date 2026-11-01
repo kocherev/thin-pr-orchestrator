@@ -43,9 +43,11 @@ GitHub reads `.github/workflows/thin-pr.yml` from the default branch. Push that 
 3. Open an issue.
 4. Add the label `thin-pr`.
 
-The run uses `GITHUB_TOKEN` from the workflow. It creates `thin-pr/<issue number>` from the default branch tip, then adds one commit with that same tree. The commit message is `Prepare thin-pr/#<issue number>`. Checks and the draft pull request use that commit as their head. The file diff stays empty. Recorded diffs under `evals/diffs` are scored offline. They are not pushed.
+The run uses `GITHUB_TOKEN` from the workflow. It creates `thin-pr/<issue number>` from the default branch tip. After implement, the runner reads the file bytes it would commit. It does not trust the model file list or the model `passed` flag. When that measured diff changes non-whitespace text and stays inside `evals/budget.json`, the runner commits those files. The commit message is `Apply thin-pr/#<issue number>`. Checks after that commit, and the draft pull request, use that commit as their head.
 
-Each template step posts a check named `thin-pr / <step>`. Each gate rule posts `thin-pr / gate / <rule>`. The rule check title is `PASS` or `FAIL`. The summary is that verdict, a colon, and the reason. The rules are `plan`, `tests`, and `contracts`.
+An empty diff, a whitespace-only diff, or a diff outside the budget fails the gate. The issue gets the run report, and no draft is opened. Recorded diffs under `evals/diffs` are what `pnpm eval` measures. The eval does not push them.
+
+Each template step posts a check named `thin-pr / <step>`. Each gate rule posts `thin-pr / gate / <rule>`. The rule check title is `PASS` or `FAIL`. The summary is that verdict, a colon, and the reason. The rules are `plan`, `tests`, `contracts`, `diff`, and `budget`.
 
 When every rule passes, the run opens a draft pull request into the default branch. The title comes from the pr-writer output. The body is the plan, the test results, and the run report, in that order. A failed step or a failed rule is marked failure, the issue gets a comment that starts with `## Run report`, and no pull request is opened.
 
@@ -60,11 +62,11 @@ pnpm eval
 pnpm test
 ```
 
-`pnpm eval` prints the gate pass rate and the diff-budget stats. It exits 0 when the pass rate is at least `evals/baseline.json`. The diff budget is printed and does not change the exit code. `pnpm test` runs Vitest, including the label-path test and the SQLite replay test.
+`pnpm eval` prints the gate pass rate and the diff-budget stats. It exits 0 when the pass rate is at least `evals/baseline.json`. The budget rule is part of that gate. `pnpm test` runs Vitest, including the label-path test and the SQLite replay test.
 
 ## Example draft pull request
 
-This is the body `packages/github` writes for `fixtures/gate-pass.json` and `fixtures/sample-issue-labeled.json`. The test in `packages/github/src/run.test.ts` drives that pair with run id `run-7`. The pull request title is `Fix the stub`. The head is `thin-pr/7`, the base is `main`, and `draft` is true.
+This is the body `packages/github` writes for `fixtures/gate-pass.json` and `fixtures/sample-issue-labeled.json`. The test in `packages/github/src/run.test.ts` drives that pair with run id `run-7` and a measured two-line change in `src/stub.ts`. The model fixture lists files, and the runner still measures the bytes. The pull request title is `Fix the stub`. The head is `thin-pr/7`, the base is `main`, and `draft` is true.
 
 The pr-writer field `body` is not copied into the pull request. The Action builds the body below.
 
@@ -98,6 +100,8 @@ Tests passed.
 - gate/plan: success. PASS: Plan is present (1 step).
 - gate/tests: success. PASS: Tests passed.
 - gate/contracts: success. PASS: Specialist outputs match their contracts.
+- gate/diff: success. PASS: Diff is present (1 file, 2 lines).
+- gate/budget: success. PASS: Diff is within the budget (1 file, 2 lines; limit 2 files, 16 lines).
 - gate: success. pass
 ```
 
@@ -105,13 +109,13 @@ Tests passed.
 
 ## Replay evals
 
-`pnpm eval` replays 12 labeled issues through `templates/small-feature.yaml` and the gate. The model text is the recorded JSON under `evals/responses`. The committed floor in `evals/baseline.json` is a pass rate of 10/12, which the report prints as 83.3%. `evals/budget.json` allows 2 files and 16 lines. `scripts/eval.test.ts` locks this report.
+`pnpm eval` replays 12 labeled issues through `templates/small-feature.yaml` and the gate. The model text is the recorded JSON under `evals/responses`. The committed floor in `evals/baseline.json` is a pass rate of 8/12, which the report prints as 66.7%. `evals/budget.json` allows 2 files and 16 lines. A miss fails the budget rule. `scripts/eval.test.ts` locks this report.
 
 | Stat | Value |
 | --- | --- |
 | Cases | 12 |
-| Gate pass | 10/12, 83.3% |
-| Baseline | 83.3% |
+| Gate pass | 8/12, 66.7% |
+| Baseline | 66.7% |
 | Diff budget | 2 files, 16 lines |
 | Within budget | 10/12 |
 | Files changed | min 1, median 1, max 4 |
@@ -129,10 +133,10 @@ Tests passed.
 | 08-reject-empty-notes | Reject empty note text | pass | 1 | 3 | within |
 | 09-failing-tests | Match uppercase true | fail | 1 | 2 | within |
 | 10-empty-plan | Rename the helpers | fail | 1 | 1 | within |
-| 11-wide-touch | Mark every helper | pass | 4 | 4 | over |
-| 12-long-readme | Rewrite the readme | pass | 1 | 31 | over |
+| 11-wide-touch | Mark every helper | fail | 4 | 4 | over |
+| 12-long-readme | Rewrite the readme | fail | 1 | 31 | over |
 
-`09-failing-tests` records `passed: false`, so the tests rule fails. `10-empty-plan` records `steps: []`. The planner schema requires at least one step, so the plan rule fails. `11-wide-touch` and `12-long-readme` pass the gate and miss the file or line budget. Missing the budget does not fail `pnpm eval`.
+`09-failing-tests` records `passed: false`, so the tests rule fails. `10-empty-plan` records `steps: []`. The planner schema requires at least one step, so the plan rule fails before the diff is committed. `11-wide-touch` changes 4 files. `12-long-readme` changes 31 lines. Both miss `evals/budget.json`, so the budget rule fails and `pnpm eval` counts them as fail. The within-budget count stays 10/12 because `09` and `10` are inside the file and line limits.
 
 ## Requirements
 
@@ -173,10 +177,30 @@ The core replay test writes a SQLite log, closes it, opens it again, and expects
 
 - `packages/core` is the control plane. Typed code only. No model client imports and no GitHub client imports. `runWorkflow` follows a template. `replay` folds the log back into a run state. `loadTemplate` reads `templates/stub-run.json` and the YAML workflows `bugfix`, `small-feature`, and `docs-update`. Zod checks each file when it loads. A bad template throws with the file line. `ping` returns `pong`.
 - `packages/specialists` defines planner, implementer, tester, reviewer, and pr-writer. Each one checks its input and output with Zod. `ReplayModelClient` returns fixture JSON. Invalid output fails the step.
-- `packages/gate` evaluates plan, tests, and specialist contracts. `evaluate()` returns `PASS` or `FAIL` and a reason for each rule. `decide(subject)` returns `pass` only when every rule passes. `readiness()` returns `ready`.
+- `packages/gate` evaluates plan, tests, contracts, the measured diff, and the diff budget. `evaluate()` returns `PASS` or `FAIL` and a reason for each rule. `decide(subject, runner)` returns `pass` only when every rule passes. `decide()` with no subject returns `pass`. `readiness()` returns `ready`.
 - `packages/github` creates the branch, the checks, and the draft pull request. Specialists do not import this package.
 
 `evals/` holds the sample repo, labeled issues, recorded specialist responses, and recorded file contents. See `evals/README.md`.
+
+## Replay and live
+
+`pnpm test`, `pnpm eval`, and `.github/workflows/ci.yml` use `ReplayModelClient`. They do not call a model API. `ReplayModelClient` returns fixture JSON from `evals/responses` or the built-in fixtures in `packages/specialists`.
+
+The labeled-issue workflow calls a live model only when `THIN_PR_MODEL` is `live` and `ANTHROPIC_API_KEY` is set. The workflow sets `THIN_PR_MODEL` to `live` when that secret is non-empty, and to `replay` otherwise. CI does not set either variable.
+
+The live client sends `model` `claude-haiku-5-5`, `thinking` `{ "type": "adaptive" }`, and `output_config.effort` `low`. The request omits `temperature`, `top_p`, and `top_k`. `claude-haiku-5-5` is the current Claude API id for Haiku 5.5.
+
+A model payload that lists files, or sets `passed` to true, does not open a draft. The runner measures the before and after bytes, parses changed TypeScript and JavaScript with the TypeScript parser, and the gate reads that measurement.
+
+## Demo
+
+[Draft pull request 13](https://github.com/kocherev/thin-pr-orchestrator/pull/13) is the live run for [issue 12](https://github.com/kocherev/thin-pr-orchestrator/issues/12). The head commit adds `examples/clamp.ts`. The measured diff is 1 file and 6 lines, inside the budget of 2 files and 16 lines. Plan, tests, contracts, diff, and budget all passed. The client reported a spend of $0.000661 for that run, using the published Haiku 5.5 rates of $0.10 per million input tokens and $0.50 per million output tokens.
+
+![Draft pull request diff for examples/clamp.ts](docs/demo/draft-pull-request.png)
+
+The same page as a GIF: [docs/demo/label-to-draft.gif](docs/demo/label-to-draft.gif).
+
+`pnpm test`, `pnpm eval`, and `.github/workflows/ci.yml` stayed on replay for this run. The workflow grants `checks: write`. The token that opened the draft could create the branch and the commit, and it could not create check runs, so the verdicts are in the pull request body.
 
 ## CI
 
@@ -188,7 +212,7 @@ See `WORKING.md` and `skills/` before changing the repo. The import ban for `pac
 
 - `packages/core` runs a template, appends every transition to SQLite, and imports no model client. `pnpm lint` fails when that package imports one. `packages/core/src/run.test.ts` expects `replay` to match `runWorkflow`.
 - `packages/github` opens a draft pull request only when every gate rule passes. A failed rule comments `## Run report` on the issue and does not open a pull request. The check is `packages/github/src/run.test.ts`.
-- `pnpm eval` replays 12 labeled issues offline. The floor in `evals/baseline.json` is 10/12, and the report prints `gate pass rate: 10/12 (83.3%)`.
+- `pnpm eval` replays 12 labeled issues offline. The floor in `evals/baseline.json` is 8/12, and the report prints `gate pass rate: 8/12 (66.7%)`.
 
 ## License
 

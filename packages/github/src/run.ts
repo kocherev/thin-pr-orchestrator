@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   isStepName,
@@ -9,13 +10,22 @@ import {
   type SpecialistMap,
   type WorkflowTemplate,
 } from "@thin-pr/core";
-import { decide, evaluate, type GateRuleResult } from "@thin-pr/gate";
+import {
+  decide,
+  evaluate,
+  measureDiff,
+  parseBudget,
+  type FileChange,
+  type GateRuleResult,
+  type RunnerEvidence,
+} from "@thin-pr/gate";
 import {
   createRunCapture,
   createStubSpecialists,
   type CapturedRun,
   type ModelClient,
 } from "@thin-pr/specialists";
+import { confirmSources } from "./runner.js";
 import type { GitHubSurface } from "./surface.js";
 
 export const TRIGGER_LABEL = "thin-pr" as const;
@@ -67,6 +77,8 @@ export type LabelRunDeps = {
   readonly specialists: SpecialistMap;
   readonly gates?: Readonly<Record<string, GateHook>>;
   readonly capture?: CapturedRun;
+  readonly changes?: readonly FileChange[];
+  readonly budget: RunnerEvidence["budget"];
   readonly log: EventLog;
   readonly runId: string;
 };
@@ -133,28 +145,36 @@ export async function runOnLabel(event: LabelEvent, deps: LabelRunDeps): Promise
   let branch = "not created";
   let headSha: string | null = null;
   const capture = deps.capture ?? createRunCapture();
+  let evidence: RunnerEvidence = {
+    diff: { files: 0, lines: 0, meaningful: false },
+    testsPassed: false,
+    budget: deps.budget,
+  };
+  let sha = "";
 
   try {
     const baseSha = await deps.github.branchSha(event.owner, event.repo, event.defaultBranch);
     branch = branchName(event.issueNumber);
     await deps.github.createBranch(event.owner, event.repo, branch, baseSha);
-    headSha = await deps.github.advanceBranch({
-      owner: event.owner,
-      repo: event.repo,
-      branch,
-      sha: baseSha,
-      message: `Prepare thin-pr/#${event.issueNumber}`,
-    });
-    const sha = headSha;
+    headSha = baseSha;
+    sha = baseSha;
 
     await runWorkflow({
       runId: deps.runId,
       issue: event.issueText,
       template: deps.template,
       specialists: deps.specialists,
-      gates: deps.gates ?? { decide: () => applyRules(deps, event, sha, capture, steps) },
+      gates: deps.gates ?? { decide: () => applyRules(deps, event, sha, capture, steps, evidence) },
       log: deps.log,
       async onTransition(transition) {
+        if (transition.output?.step === "implement") {
+          const applied = await applyImplementDiff(deps, event, baseSha, branch, capture);
+          evidence = applied.evidence;
+          if (applied.sha) {
+            sha = applied.sha;
+            headSha = applied.sha;
+          }
+        }
         if (transition.output === null) {
           if (!isStepName(transition.to)) {
             return;
@@ -254,6 +274,7 @@ export async function runAction(input: {
   readonly github: GitHubSurface;
   readonly gates?: Readonly<Record<string, GateHook>>;
   readonly model?: ModelClient;
+  readonly changes?: readonly FileChange[];
 }): Promise<LabelRunResult> {
   const event = readLabelEvent(input.payload);
   const log = openEventLog(input.logPath);
@@ -265,6 +286,8 @@ export async function runAction(input: {
       specialists: createStubSpecialists(input.model, capture),
       gates: input.gates,
       capture,
+      changes: input.changes,
+      budget: parseBudget(JSON.parse(readFileSync(join(input.workspace, "evals", "budget.json"), "utf8"))),
       log,
       runId: input.runId,
     });
@@ -273,18 +296,84 @@ export async function runAction(input: {
   }
 }
 
+async function applyImplementDiff(
+  deps: LabelRunDeps,
+  event: LabelEvent,
+  baseSha: string,
+  branch: string,
+  capture: CapturedRun,
+): Promise<{ readonly evidence: RunnerEvidence; readonly sha: string | null }> {
+  const changes = await collectChanges(deps, event, baseSha, capture);
+  const diff = measureDiff(changes);
+  const testsPassed =
+    diff.meaningful &&
+    confirmSources(
+      changes
+        .filter((change) => change.before !== change.after)
+        .map((change) => ({ path: change.path, source: change.after })),
+    );
+  const evidence: RunnerEvidence = { diff, testsPassed, budget: deps.budget };
+  const withinBudget = diff.files <= deps.budget.maxFiles && diff.lines <= deps.budget.maxLines;
+  if (!diff.meaningful || !withinBudget) {
+    return { evidence, sha: null };
+  }
+  const files = changes
+    .filter((change) => change.before !== change.after)
+    .map((change) => ({ path: change.path, content: change.after }));
+  const sha = await deps.github.commitFiles({
+    owner: event.owner,
+    repo: event.repo,
+    branch,
+    parentSha: baseSha,
+    message: `Apply thin-pr/#${event.issueNumber}`,
+    files,
+  });
+  return { evidence, sha };
+}
+
+async function collectChanges(
+  deps: LabelRunDeps,
+  event: LabelEvent,
+  baseSha: string,
+  capture: CapturedRun,
+): Promise<readonly FileChange[]> {
+  if (deps.changes) {
+    return deps.changes;
+  }
+  const edits = capture.implement?.edits ?? [];
+  const changes: FileChange[] = [];
+  for (const edit of edits) {
+    if (!safeRelative(edit.path)) {
+      throw new Error(`edit path escapes the tree: ${edit.path}`);
+    }
+    const before = await deps.github.readText({
+      owner: event.owner,
+      repo: event.repo,
+      ref: baseSha,
+      path: edit.path,
+    });
+    changes.push({ path: edit.path, before: before ?? "", after: edit.content });
+  }
+  return changes;
+}
+
+function safeRelative(path: string): boolean {
+  return path.length > 0 && !path.startsWith("/") && !path.split(/[\\/]/).includes("..");
+}
+
 async function applyRules(
   deps: LabelRunDeps,
   event: LabelEvent,
   sha: string,
   capture: CapturedRun,
   steps: StepReport[],
+  evidence: RunnerEvidence,
 ): Promise<"pass" | "fail"> {
-  const results = evaluate(capture);
+  const results = evaluate(capture, evidence);
   for (const result of results) {
     await postRule(deps, event, sha, result, steps);
   }
-  return decide(capture);
+  return decide(capture, evidence);
 }
 
 async function postRule(

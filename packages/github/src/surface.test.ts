@@ -17,6 +17,14 @@ describe("Octokit surface", () => {
           calls.push(["getCommit", params]);
           return { data: { tree: { sha: "tree-1" } } };
         },
+        async createBlob(params) {
+          calls.push(["createBlob", params]);
+          return { data: { sha: "blob-1" } };
+        },
+        async createTree(params) {
+          calls.push(["createTree", params]);
+          return { data: { sha: "tree-2" } };
+        },
         async createCommit(params) {
           calls.push(["createCommit", params]);
           return { data: { sha: "sha-2" } };
@@ -45,6 +53,12 @@ describe("Octokit surface", () => {
           calls.push(["issues.createComment", params]);
         },
       },
+      repos: {
+        async getContent(params) {
+          calls.push(["getContent", params]);
+          return { data: { type: "file", encoding: "base64", content: Buffer.from("export const stub = 1;\n").toString("base64") } };
+        },
+      },
     };
     const github = createGitHubSurface(octokit);
 
@@ -61,13 +75,17 @@ describe("Octokit surface", () => {
       summary: "gate failed",
     });
     await github.comment({ owner: "example", repo: "sample-repo", issue: 7, body: "## Run report" });
+    await expect(github.readText({ owner: "example", repo: "sample-repo", ref: "sha-1", path: "src/stub.ts" })).resolves.toBe(
+      "export const stub = 1;\n",
+    );
     await expect(
-      github.advanceBranch({
+      github.commitFiles({
         owner: "example",
         repo: "sample-repo",
         branch: "thin-pr/7",
-        sha: "sha-1",
-        message: "Prepare thin-pr/#7",
+        parentSha: "sha-1",
+        message: "Apply thin-pr/#7",
+        files: [{ path: "src/stub.ts", content: "export const stub = 2;\n" }],
       }),
     ).resolves.toBe("sha-2");
     await expect(
@@ -121,24 +139,41 @@ describe("Octokit surface", () => {
       { owner: "example", repo: "sample-repo", issue_number: 7, body: "## Run report" },
     ]);
     expect(calls[5]).toEqual([
+      "getContent",
+      { owner: "example", repo: "sample-repo", path: "src/stub.ts", ref: "sha-1" },
+    ]);
+    expect(calls[6]).toEqual([
       "getCommit",
       { owner: "example", repo: "sample-repo", commit_sha: "sha-1" },
     ]);
-    expect(calls[6]).toEqual([
+    expect(calls[7]).toEqual([
+      "createBlob",
+      { owner: "example", repo: "sample-repo", content: "export const stub = 2;\n", encoding: "utf-8" },
+    ]);
+    expect(calls[8]).toEqual([
+      "createTree",
+      {
+        owner: "example",
+        repo: "sample-repo",
+        base_tree: "tree-1",
+        tree: [{ path: "src/stub.ts", mode: "100644", type: "blob", sha: "blob-1" }],
+      },
+    ]);
+    expect(calls[9]).toEqual([
       "createCommit",
       {
         owner: "example",
         repo: "sample-repo",
-        message: "Prepare thin-pr/#7",
-        tree: "tree-1",
+        message: "Apply thin-pr/#7",
+        tree: "tree-2",
         parents: ["sha-1"],
       },
     ]);
-    expect(calls[7]).toEqual([
+    expect(calls[10]).toEqual([
       "updateRef",
       { owner: "example", repo: "sample-repo", ref: "heads/thin-pr/7", sha: "sha-2" },
     ]);
-    expect(calls[8]).toEqual([
+    expect(calls[11]).toEqual([
       "pulls.create",
       {
         owner: "example",
@@ -150,7 +185,7 @@ describe("Octokit surface", () => {
         draft: true,
       },
     ]);
-    expect(calls[9]).toMatchObject({
+    expect(calls[12]).toMatchObject({
       0: "checks.update",
       1: {
         conclusion: "success",
@@ -170,6 +205,12 @@ describe("Octokit surface", () => {
         },
         async getCommit() {
           return { data: { tree: { sha: "tree-1" } } };
+        },
+        async createBlob() {
+          return { data: { sha: "blob-1" } };
+        },
+        async createTree() {
+          return { data: { sha: "tree-2" } };
         },
         async createCommit() {
           return { data: { sha: "sha-2" } };
@@ -194,6 +235,11 @@ describe("Octokit surface", () => {
       issues: {
         async createComment() {
           return undefined;
+        },
+      },
+      repos: {
+        async getContent() {
+          return { data: { type: "file", encoding: "base64", content: "" } };
         },
       },
     };

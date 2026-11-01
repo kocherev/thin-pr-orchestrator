@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import type { FileChange } from "@thin-pr/gate";
 import { ReplayModelClient, type ModelClient } from "@thin-pr/specialists";
 import { runAction, type LabelRunResult } from "./index.js";
 import type { GitHubSurface } from "./surface.js";
@@ -19,7 +20,7 @@ type Payload = {
 };
 
 type Call = {
-  readonly op: "branchSha" | "createBranch" | "advanceBranch" | "startCheck" | "finishCheck" | "comment" | "openDraft";
+  readonly op: "branchSha" | "createBranch" | "commitFiles" | "readText" | "startCheck" | "finishCheck" | "comment" | "openDraft";
   readonly owner: string;
   readonly repo: string;
   readonly branch?: string;
@@ -32,9 +33,10 @@ type Call = {
   readonly title?: string;
   readonly issue?: number;
   readonly body?: string;
-  readonly head?: string;
+    readonly head?: string;
   readonly base?: string;
   readonly draft?: true;
+  readonly files?: readonly { readonly path: string; readonly content: string }[];
 };
 
 afterEach(() => {
@@ -46,7 +48,10 @@ afterEach(() => {
 describe("issue label", () => {
   it("opens a draft pull request when every gate rule passes", async () => {
     const memory = memoryGitHub();
-    const result = await runSample(memory.github, readFixture(), { model: modelFromFixture("gate-pass.json") });
+    const result = await runSample(memory.github, readFixture(), {
+      model: modelFromFixture("gate-pass.json"),
+      changes: [stubChange()],
+    });
 
     expect(result.status).toBe("completed");
     if (result.status !== "completed") {
@@ -66,21 +71,27 @@ describe("issue label", () => {
       ["gate/plan", "success"],
       ["gate/tests", "success"],
       ["gate/contracts", "success"],
+      ["gate/diff", "success"],
+      ["gate/budget", "success"],
       ["gate", "success"],
     ]);
     expect(memory.calls.map((call) => call.op)).toEqual([
       "branchSha",
       "createBranch",
-      "advanceBranch",
       "startCheck",
+      "finishCheck",
+      "startCheck",
+      "commitFiles",
       "finishCheck",
       "startCheck",
       "finishCheck",
       "startCheck",
       "finishCheck",
       "startCheck",
+      "startCheck",
       "finishCheck",
       "startCheck",
+      "finishCheck",
       "startCheck",
       "finishCheck",
       "startCheck",
@@ -98,11 +109,11 @@ describe("issue label", () => {
       branch: "thin-pr/7",
       sha: "abc123",
     });
-    expect(memory.calls[2]).toMatchObject({
-      op: "advanceBranch",
+    expect(memory.calls.find((call) => call.op === "commitFiles")).toMatchObject({
       branch: "thin-pr/7",
       sha: "abc123",
-      message: "Prepare thin-pr/#7",
+      message: "Apply thin-pr/#7",
+      files: [{ path: "src/stub.ts", content: stubChange().after }],
     });
     expect(memory.calls.filter((call) => call.op === "startCheck").map((call) => call.name)).toEqual([
       "thin-pr / plan",
@@ -113,13 +124,22 @@ describe("issue label", () => {
       "thin-pr / gate / plan",
       "thin-pr / gate / tests",
       "thin-pr / gate / contracts",
+      "thin-pr / gate / diff",
+      "thin-pr / gate / budget",
     ]);
-    expect(memory.calls.filter((call) => call.op === "startCheck").every((call) => call.sha === "def456")).toBe(true);
+    const checkShas = memory.calls.filter((call) => call.op === "startCheck").map((call) => [call.name, call.sha]);
+    expect(checkShas.slice(0, 2)).toEqual([
+      ["thin-pr / plan", "abc123"],
+      ["thin-pr / implement", "abc123"],
+    ]);
+    expect(checkShas.slice(2).every((entry) => entry[1] === "def456")).toBe(true);
     const ruleChecks = memory.calls.filter((call) => call.op === "finishCheck" && call.title === "PASS");
     expect(ruleChecks.map((call) => call.summary)).toEqual([
       "PASS: Plan is present (1 step).",
       "PASS: Tests passed.",
       "PASS: Specialist outputs match their contracts.",
+      "PASS: Diff is present (1 file, 2 lines).",
+      "PASS: Diff is within the budget (1 file, 2 lines; limit 2 files, 16 lines).",
     ]);
     expect(memory.calls.some((call) => call.op === "comment")).toBe(false);
     const draft = memory.calls.find((call) => call.op === "openDraft");
@@ -162,6 +182,8 @@ describe("issue label", () => {
       ["gate/plan", "success"],
       ["gate/tests", "failure"],
       ["gate/contracts", "success"],
+      ["gate/diff", "failure"],
+      ["gate/budget", "success"],
       ["gate", "failure"],
     ]);
     expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
@@ -174,6 +196,68 @@ describe("issue label", () => {
     expect(comment?.body).toContain("PASS: Plan is present (1 step).");
     expect(comment?.body).toContain("- gate/tests: failure. FAIL: Tests did not pass.");
     expect(comment?.body).toContain("PASS: Specialist outputs match their contracts.");
+  });
+
+  it("does not open a pull request when the model lists files and the diff is empty", async () => {
+    const memory = memoryGitHub();
+    const result = await runSample(memory.github, readFixture(), { model: modelFromFixture("gate-pass.json") });
+
+    expect(result.status).toBe("failed");
+    if (result.status !== "failed") {
+      return;
+    }
+    expect(result.report.error).toContain("gate decide returned fail");
+    expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
+    expect(memory.calls.some((call) => call.op === "commitFiles")).toBe(false);
+    const comment = memory.calls.find((call) => call.op === "comment");
+    expect(comment?.body).toContain("FAIL: Diff is empty.");
+    expect(comment?.body).toContain("FAIL: Runner did not confirm the tests.");
+  });
+
+  it("does not open a pull request for a whitespace-only diff", async () => {
+    const memory = memoryGitHub();
+    const change = stubChange();
+    const result = await runSample(memory.github, readFixture(), {
+      model: modelFromFixture("gate-pass.json"),
+      changes: [{ ...change, after: change.before.replace("return 0;", "return 0;   ") }],
+    });
+
+    expect(result.status).toBe("failed");
+    expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
+    expect(memory.calls.some((call) => call.op === "commitFiles")).toBe(false);
+    const comment = memory.calls.find((call) => call.op === "comment");
+    expect(comment?.body).toContain("FAIL: Diff has no meaningful change.");
+  });
+
+  it("does not open a pull request when the measured diff exceeds the budget", async () => {
+    const memory = memoryGitHub();
+    const before = "export const stub = 1;\n";
+    const after = `${before}${Array.from({ length: 20 }, (_, index) => `export const extra${index} = ${index};\n`).join("")}`;
+    const result = await runSample(memory.github, readFixture(), {
+      model: modelFromFixture("gate-pass.json"),
+      changes: [{ path: "src/stub.ts", before, after }],
+    });
+
+    expect(result.status).toBe("failed");
+    expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
+    expect(memory.calls.some((call) => call.op === "commitFiles")).toBe(false);
+    const comment = memory.calls.find((call) => call.op === "comment");
+    expect(comment?.body).toContain("FAIL: Diff exceeds the budget");
+  });
+
+  it("does not trust a passing model flag when the runner cannot parse the file", async () => {
+    const memory = memoryGitHub();
+    const change = stubChange();
+    const result = await runSample(memory.github, readFixture(), {
+      model: modelFromFixture("gate-pass.json"),
+      changes: [{ ...change, after: "export function stub( {\n" }],
+    });
+
+    expect(result.status).toBe("failed");
+    expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
+    const comment = memory.calls.find((call) => call.op === "comment");
+    expect(comment?.body).toContain("FAIL: Runner did not confirm the tests.");
+    expect(comment?.body).not.toContain("PASS: Tests passed.");
   });
 
   it("comments the run report when a step fails", async () => {
@@ -239,6 +323,16 @@ describe("issue label", () => {
     expect(workflow).toContain("types: [labeled]");
     expect(workflow).toContain("github.event.label.name == 'thin-pr'");
     expect(workflow).toContain("packages/github/src/action.ts");
+    expect(workflow).toContain("actions/checkout@v7");
+    expect(workflow).toContain("actions/setup-node@v7");
+    expect(workflow).toContain("pnpm/action-setup@v6");
+    expect(workflow).toContain("THIN_PR_MODEL:");
+    expect(workflow).toContain("|| 'replay'");
+    const ci = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
+    expect(ci).not.toContain("THIN_PR_MODEL");
+    expect(ci).not.toContain("ANTHROPIC_API_KEY");
+    const action = readFileSync(fileURLToPath(new URL("./action.ts", import.meta.url)), "utf8");
+    expect(action).toContain("createModelClient");
     expect(workflow).toContain("checks: write");
     expect(workflow).toContain("issues: write");
     expect(workflow).toContain("contents: write");
@@ -299,6 +393,7 @@ async function runSample(
   options?: {
     readonly gates?: { decide: () => "fail" };
     readonly model?: ModelClient;
+    readonly changes?: readonly FileChange[];
   },
 ): Promise<LabelRunResult> {
   const directory = mkdtempSync(join(tmpdir(), "thin-pr-label-"));
@@ -311,7 +406,16 @@ async function runSample(
     github,
     gates: options?.gates,
     model: options?.model,
+    changes: options?.changes,
   });
+}
+
+function stubChange(): FileChange {
+  return {
+    path: "src/stub.ts",
+    before: "export function stub(): number {\n  return 0;\n}\n",
+    after: "export function stub(): number {\n  return 1;\n}\n",
+  };
 }
 
 function memoryGitHub(options?: { readonly failCreate?: boolean }) {
@@ -348,14 +452,18 @@ function memoryGitHub(options?: { readonly failCreate?: boolean }) {
     async comment(input) {
       calls.push({ op: "comment", owner: input.owner, repo: input.repo, issue: input.issue, body: input.body });
     },
-    async advanceBranch(input) {
+    async readText() {
+      return null;
+    },
+    async commitFiles(input) {
       calls.push({
-        op: "advanceBranch",
+        op: "commitFiles",
         owner: input.owner,
         repo: input.repo,
         branch: input.branch,
-        sha: input.sha,
+        sha: input.parentSha,
         message: input.message,
+        files: input.files,
       });
       return "def456";
     },
