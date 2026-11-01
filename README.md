@@ -196,9 +196,13 @@ A model payload that lists files, or sets `passed` to true, does not open a draf
 
 [Draft pull request 13](https://github.com/kocherev/thin-pr-orchestrator/pull/13) is the live run for [issue 12](https://github.com/kocherev/thin-pr-orchestrator/issues/12). The head commit adds `examples/clamp.ts`. The measured diff is 1 file and 6 lines, inside the budget of 2 files and 16 lines. Plan, tests, contracts, diff, and budget all passed. The client reported a spend of $0.000661 for that run, using the published Haiku 5.5 rates of $0.10 per million input tokens and $0.50 per million output tokens.
 
-![Draft pull request diff for examples/clamp.ts](docs/demo/draft-pull-request.png)
+![Still of the Files tab on draft pull request 13, showing the diff for examples/clamp.ts](docs/demo/draft-pull-request.png)
 
-The same page as a GIF: [docs/demo/label-to-draft.gif](docs/demo/label-to-draft.gif).
+That image is a still of the live draft diff. It is not a screen recording of the label, the Actions log, or the draft opening.
+
+- The `thin-pr` label reaches a draft only after the runner measures the file bytes it would commit. The gate reads that measurement. A model file list or a model `passed` flag is not the diff.
+- The draft opens only after plan, tests, contracts, diff, and budget all pass. A failed rule comments `## Run report` on the issue and opens no pull request.
+- `ReplayModelClient` is the CI default. `pnpm test`, `pnpm eval`, and `.github/workflows/ci.yml` use it. The live client runs only when `THIN_PR_MODEL=live` and `ANTHROPIC_API_KEY` is set, and it sends `model` `claude-haiku-5-5`.
 
 `pnpm test`, `pnpm eval`, and `.github/workflows/ci.yml` stayed on replay for this run. The workflow grants `checks: write`. The token that opened the draft could create the branch and the commit, and it could not create check runs, so the verdicts are in the pull request body.
 
