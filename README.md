@@ -164,7 +164,7 @@ The live judge runs when `THIN_PR_JUDGE` is `live`, `THIN_PR_MODEL` is `live`, a
 
 GitHub Actions is the runtime for this repo. `.github/workflows/thin-pr.yml` on the default branch starts a run when an issue is labeled `thin-pr`. `.github/workflows/ci.yml` runs lint, typecheck, test, `pnpm eval`, `pnpm eval:judge`, and `pnpm trace` on pull requests and on pushes to `main`. CI uploads `judge-report` and `thin-pr-trace`.
 
-The green CI run on `main` for the commit before this change is [run 41257533329](https://github.com/kocherev/thin-pr-orchestrator/actions/runs/41257533329). That run executed lint, typecheck, test, and `pnpm eval`. The Actions list has no completed run of the Thin PR workflow.
+[Run 41337742137](https://github.com/kocherev/thin-pr-orchestrator/actions/runs/41337742137) is the green CI run for this branch. It executed lint, typecheck, test, `pnpm eval`, `pnpm eval:judge`, and `pnpm trace`, and it uploaded `judge-report` and `thin-pr-trace`. The Actions list has no completed run of the Thin PR workflow. That workflow runs from the default branch.
 
 ## Requirements
 
