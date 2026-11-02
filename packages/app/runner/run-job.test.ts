@@ -107,7 +107,7 @@ describe("runJob", () => {
     expect(draft?.authorization).toBe("token ghs_test");
     expect(JSON.parse(draft?.body ?? "{}")).toMatchObject({ head: "thin-pr/7", base: "main", draft: true });
     expect(github.calls.some((call) => call.path === "/v1/traces")).toBe(false);
-  }, 30_000);
+  });
 
   it("flushes the run's trace to the OTLP endpoint when one is set", async () => {
     const { github, env } = await sampleRepo();
@@ -122,7 +122,7 @@ describe("runJob", () => {
     const names = exports.flatMap((call) => spanNames(JSON.parse(call.body) as unknown));
     expect(names).toContain("thin-pr.run");
     expect(names).toContain("thin-pr.implement");
-  }, 30_000);
+  });
 
   it("refuses to start without an installation token", async () => {
     await expect(runJob(JOB, { ...process.env, GITHUB_TOKEN: "" })).rejects.toThrow("GITHUB_TOKEN is missing");

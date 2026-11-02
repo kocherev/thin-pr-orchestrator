@@ -260,8 +260,7 @@ describe("issue label", () => {
     expect(result.record.gate.find((rule) => rule.rule === "review")?.reason).toBe("Reviewer approved.");
   });
 
-  // Two full runs, a clone and three pushes take a few seconds on a busy machine.
-  it("resets the branch from the fresh base and updates the open draft when the label is added again", { timeout: 20_000 }, async () => {
+  it("resets the branch from the fresh base and updates the open draft when the label is added again", async () => {
     const repo = scratch(PASSING_CHECKS);
     const first = memoryGitHub();
     expect((await run(repo, first.github, { model: cassette("gate-pass") })).status).toBe("opened");

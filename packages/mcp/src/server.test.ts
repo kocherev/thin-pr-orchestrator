@@ -96,7 +96,8 @@ describe("thin-pr MCP server", () => {
   it("replays an eval case and blocks it on its hidden test, as expected.json says", { timeout: 90_000 }, async () => {
     const client = await connect(undefined);
 
-    const result = await client.callTool({ name: "replay_case", arguments: { caseId: "09-failing-hidden-test" } });
+    // The MCP client gives up on a request after 60 s unless the call sets its own timeout.
+    const result = await client.callTool({ name: "replay_case", arguments: { caseId: "09-failing-hidden-test" } }, { timeout: 90_000 });
 
     expect(result.isError).toBeFalsy();
     expect(result.structuredContent).toMatchObject({

@@ -19,7 +19,7 @@ afterEach(() => {
 
 describe("thin-pr run", () => {
   // tsc and vitest run for real on the sample package.
-  it("replays an eval case on a local checkout and leaves the change on a local branch", { timeout: 60_000 }, async () => {
+  it("replays an eval case on a local checkout and leaves the change on a local branch", async () => {
     const repo = sampleRepo();
     const issueFile = join(repo.dir, "..", "issue.md");
     writeFileSync(issueFile, "# Clamp decrement at zero\n\ndecrement in src/counter.ts should not return a negative count.\n");
