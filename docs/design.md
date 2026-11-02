@@ -18,17 +18,19 @@ The orchestrator in `packages/github` is the caller. It runs `verify`, posts the
 
 ## Specialist contract
 
-Four model specialists are fixed: `planner`, `implementer`, `reviewer`, and `pr-writer`. Each specialist has a Zod input schema and a Zod output schema, both `.strict()`. `createStepHandlers` turns each one into a step handler. The handler parses the input, calls the model, then parses the output. A bad value throws `SpecialistSchemaError` with the specialist name, the phase, and the path of the first issue. The step then uses its remaining retries or fails.
+Four model specialists are fixed: `planner`, `implementer`, `reviewer`, and `pr-writer`. Each one has a `.strict()` Zod output schema. `createStepHandlers` turns them into step handlers for `plan`, `implement`, `review`, and `write`. Each handler takes its model and effort from the template step, or the specialist default, and returns the usage of the calls it made.
 
-`ModelClient.complete` takes the specialist name and a prompt, and returns a string. The specialist parses that string as JSON. The default client is `ReplayModelClient`. It returns the override you passed, or the built-in fixture for that specialist. `createModelClient` returns that client unless `THIN_PR_MODEL` is `live`. The live client is `AnthropicModelClient` in `packages/specialists/src/live.ts`. It stays out of `packages/core`.
+Planner, reviewer, and pr-writer are structured-output calls built from their schema. A reply that still fails the schema throws `SpecialistSchemaError` with the specialist, the phase, and the path of the first issue. The reviewer reads the plan, the workspace patch, and the verify check results, and returns `approve` or `changes_requested` with notes. `changes_requested` loops back to implement with the notes as feedback while the template allows another loop.
 
-The prompt sent to the client is JSON with the step input and the feedback from a retry or a loop. The control plane never sees the prompt.
+The implementer runs in the SDK tool runner with six tools over the `Workspace`: `list_files`, `read_file`, `search`, `replace`, `create_file`, and `run_check`. Each tool is `strict`. The loop stops when the model stops asking for tools, and fails after 25 turns. Its output is the model's closing summary plus the changed paths from `workspace.diff()`. A model never reports which files changed.
 
-A table in `packages/specialists/src/specialists.ts` maps the steps `plan`, `implement`, `review`, and `write` onto those four specialists. The run log stores each parsed output. The gate and the draft body read those outputs. They do not read the model text a second time.
+`createAnthropicClient` in `packages/specialists/src/client.ts` is the only model client. SDK middleware replays a cassette, records one, or passes calls through. It prices each response with the table in `pricing.ts` and stops before a call that could pass the spend limit. A refusal fails the step with its category. A reply cut off at `max_tokens` is retried once with twice the room. Opus 5.5 and Sonnet 5.5 requests opt into the server-side fallback. The client stays out of `packages/core`.
+
+The run log stores each parsed output and its usage. The gate and the draft body read those outputs. They do not read the model text a second time.
 
 ## Workspace and verify
 
-A run edits one git checkout through the `Workspace` interface in `packages/specialists/src/workspace.ts`. `packages/workspace` implements it over a local checkout whose HEAD is the base commit. `createFile` refuses a path outside the `.thin-pr.yml` allow list or inside the deny list. `replace` needs the old text to match exactly once. Until the implementer edits through tools, `packages/github/src/steps.ts` writes each file the implementer returns as a new file or a full replace.
+A run edits one git checkout through the `Workspace` interface in `packages/specialists/src/workspace.ts`. `packages/workspace` implements it over a local checkout whose HEAD is the base commit. `createFile` refuses a path outside the `.thin-pr.yml` allow list or inside the deny list. `replace` needs the old text to match exactly once. The implementer edits only through these two calls.
 
 `verify` takes no model. On its first pass it runs `install` from `.thin-pr.yml` when the file sets one, and a failed install fails the step. Then it runs `typecheck` and `test`, each through `/bin/sh` in its own process group with a timeout. The environment drops every variable whose name contains `TOKEN`, `KEY`, `SECRET`, or `PASSWORD`, and every `GITHUB_` and `ANTHROPIC_` variable. A failed check loops back to implement with the command and the last 4 KB of its output. `context.loop` counts the passes over verify, and verify stops asking for a loop once it reaches the template's `loop.max`. That last pass finishes with the failed check, so the gate names it instead of core failing the run at the cap.
 
@@ -46,7 +48,7 @@ A run edits one git checkout through the `Workspace` interface in `packages/spec
 | `secrets` | No added line looks like a private key, an AWS access key id, a GitHub token, an Anthropic key, a Slack token, or a `password`, `secret`, or `token` assigned a quoted string of 12 or more characters. | A finding names the file, the line, and the kind. It never includes the value. |
 | `typecheck` | The typecheck command exited 0. | It did not run, or it exited non-zero. |
 | `tests` | The test command exited 0. | It did not run, or it exited non-zero. |
-| `review` | The reviewer output has `verdict: "approve"`, or it has no verdict and no notes. | The review is missing, it requests changes, or it has notes. |
+| `review` | The reviewer output has `verdict: "approve"`. | The review is missing, it does not match the reviewer schema, or it requests changes. |
 
 `decide(evidence)` returns `pass` only when all nine verdicts are `PASS`. A run that reaches the gate always passes `plan` and `contracts`, because each model step parses its output with the same schemas. Those two rules guard evidence that comes from somewhere other than a finished run.
 
@@ -56,7 +58,7 @@ If every rule passes, the orchestrator commits the checkout and runs `git push -
 
 ## Replay evals
 
-`pnpm eval` does not call a live model and does not call GitHub. For each directory in `evals/cases` it copies `evals/sample-repo` into a scratch git repo with a bare `origin`, replays the recorded model replies, writes the recorded files through the workspace, and copies `hidden/*.test.ts` into `test/hidden/` right before verify. `.git/info/exclude` keeps the hidden tests out of the diff and the commit. The checks are the real `tsc --noEmit` and `vitest run`, found on `PATH` in this repo's `node_modules/.bin`.
+`pnpm eval` does not call a live model and does not call GitHub. For each directory in `evals/cases` it copies `evals/sample-repo` into a scratch git repo with a bare `origin`, replays the model calls from the case's `cassette.jsonl`, lets the recorded tool calls edit the files through the workspace, and copies `hidden/*.test.ts` into `test/hidden/` right before verify. `.git/info/exclude` keeps the hidden tests out of the diff and the commit. The checks are the real `tsc --noEmit` and `vitest run`, found on `PATH` in this repo's `node_modules/.bin`.
 
 Each case has an `expected.json` with the verdict and, for most blocked cases, the gate rules that must fail. Eight cases open a draft. Nine are blocked: one per rule from `diff` to `review`, a second budget case, and `10-empty-plan`, which fails at the plan step. The floor in `evals/baseline.json` is 100% verdict accuracy. The process exits 1 when the accuracy is lower.
 
@@ -66,12 +68,12 @@ CI runs `pnpm eval` after the tests. Lowering `evals/baseline.json` to make a re
 
 `runWorkflow` opens a span for the run and one for each pass over a step with `@opentelemetry/api`. A process that never starts the SDK records nothing. `packages/github` starts the SDK for `pnpm trace` and for the labeled-issue Action. The exported document is OTLP JSON. The sample is `docs/demo/trace.json`.
 
-The judge scores a finished replay. `decide()` still chooses the draft. `pnpm eval:judge` replays the 17 cases and applies the rubric in `packages/specialists/src/judge.ts` to each run's recorded replies, diff, and check results. The live client in that package runs when `THIN_PR_JUDGE` and `THIN_PR_MODEL` are both `live` and `ANTHROPIC_API_KEY` is set.
+The judge scores a finished replay. `decide()` still chooses the draft. `pnpm eval:judge` replays the 17 cases and applies the rubric in `packages/specialists/src/judge.ts` to each run's step outputs, diff, and check results. The live judge in that package runs when `THIN_PR_JUDGE` and `THIN_PR_MODEL` are both `live` and `ANTHROPIC_API_KEY` is set.
 
 ## Non-goals
 
-- CI and `pnpm eval` do not call a live model. The live client runs only when `THIN_PR_MODEL=live` and `ANTHROPIC_API_KEY` is set, and it stays in `packages/specialists`.
+- CI and `pnpm eval` do not call a live model. They replay cassettes. A live call needs `THIN_PR_MODEL` set to `live` or `record` and `ANTHROPIC_API_KEY`, and the client stays in `packages/specialists`.
 - The Action pushes `thin-pr/<issue>` only after the gate passes. `pnpm eval` pushes to a scratch bare repo, never to GitHub.
 - The Action does not merge the pull request, request reviewers, or close the issue.
-- There is no chat UI, no second orchestrator, and no general agent loop.
+- There is no chat UI, no second orchestrator, and no general agent loop. The implementer's tool loop is capped, and its tools reach only the workspace. There is no shell tool.
 - `packages/core` does not grow a model SDK import or a GitHub client import. `.agents/skills/core-boundary` is the list.

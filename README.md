@@ -68,7 +68,7 @@ pnpm test
 
 ## Example draft pull request
 
-This is the body `packages/github` writes for `fixtures/gate-pass.json` and `fixtures/sample-issue-labeled.json`, on a scratch checkout whose `.thin-pr.yml` sets both checks to an `echo`. `pnpm trace` and the test in `packages/github/src/run.test.ts` drive that pair with run id `run-7`. The implementer replaces `src/stub.ts`, and the gate reads the two-line `git diff`. The pull request title is `Fix the stub`. The head is `thin-pr/7`, the base is `main`, and `draft` is true. The check durations change from run to run.
+This is the body `packages/github` writes for the cassette `fixtures/gate-pass.jsonl` and `fixtures/sample-issue-labeled.json`, on a scratch checkout whose `.thin-pr.yml` sets both checks to an `echo`. `pnpm trace` and the test in `packages/github/src/run.test.ts` drive that pair with run id `run-7`. The implementer reads `src/stub.ts` and edits it with the `replace` tool, and the gate reads the two-line `git diff`. The pull request title is `Fix the stub`. The head is `thin-pr/7`, the base is `main`, and `draft` is true. The check durations change from run to run.
 
 The pr-writer field `body` is not copied into the pull request. The Action builds the body below.
 
@@ -107,14 +107,14 @@ Plan the stub change.
 - gate/secrets: success. PASS: No added line looks like a secret.
 - gate/typecheck: success. PASS: Typecheck passed: echo typecheck ok
 - gate/tests: success. PASS: Tests passed: echo test ok
-- gate/review: success. PASS: Reviewer left no notes.
+- gate/review: success. PASS: Reviewer approved.
 ```
 
-`fixtures/gate-fail.json` is the other path. The reviewer leaves a note, the review rule fails, the issue gets the run report, and nothing is pushed.
+`fixtures/gate-fail.jsonl` is the other path. The reviewer requests changes, review loops back to implement twice, the review rule fails, the issue gets the run report, and nothing is pushed.
 
 ## Replay evals
 
-`pnpm eval` replays 17 labeled issues through `templates/small-feature.yaml` and the gate. Each case copies `evals/sample-repo` into a scratch git repo, writes the recorded implementer files through the workspace, copies the case's hidden tests in before `verify`, and runs `tsc --noEmit` and `vitest run` for real. The other model replies are the recorded JSON in the case's `responses.json`. A case is correct when its verdict matches `expected.json` and, when `expected.json` lists failed rules, the gate failed exactly those. The floor in `evals/baseline.json` is 100% verdict accuracy. `scripts/eval.test.ts` locks this report.
+`pnpm eval` replays 17 labeled issues through `templates/small-feature.yaml` and the gate. Each case copies `evals/sample-repo` into a scratch git repo, replays the model calls from the case's `cassette.jsonl`, copies the case's hidden tests in before `verify`, and runs `tsc --noEmit` and `vitest run` for real. The implementer's recorded tool calls edit the files through the workspace. A case is correct when its verdict matches `expected.json` and, when `expected.json` lists failed rules, the gate failed exactly those. The floor in `evals/baseline.json` is 100% verdict accuracy. `scripts/eval.test.ts` locks this report.
 
 | Stat | Value |
 | --- | --- |
@@ -144,11 +144,11 @@ Plan the stub change.
 | 16-whitespace-only | Tidy the counter | blocked | 1 | 4 | diff |
 | 17-review-notes | Add decrementBy | blocked | 1 | 4 | review |
 
-`09-failing-hidden-test` passes the visible tests and fails the hidden one. Verify loops back to implement twice, the recorded implementer returns the same file, and the last pass hands the failure to the gate. `13-type-error` passes `vitest run` and fails `tsc --noEmit`. `10-empty-plan` records `steps: []`, so the plan step fails its schema twice and the run stops before the gate. No case fails the `plan` or `contracts` rule. Each model step parses its output with the same schema those rules use, so a run that reaches the gate passes both.
+`09-failing-hidden-test` passes the visible tests and fails the hidden one. Verify loops back to implement twice, the recorded implementer makes no further edit, and the last pass hands the failure to the gate. `13-type-error` passes `vitest run` and fails `tsc --noEmit`. `10-empty-plan` replays `steps: []`, so the plan step fails its schema twice and the run stops before the gate. No case fails the `plan` or `contracts` rule. Each model step parses its output with the same schema those rules use, so a run that reaches the gate passes both.
 
 ## Traces
 
-`pnpm trace` replays `fixtures/sample-issue-labeled.json` and `fixtures/gate-pass.json` with run id `run-7`. That is the same pair as the draft example above. `packages/core` opens a span for the run and a span for each template step through `@opentelemetry/api`. `packages/github` starts `@opentelemetry/sdk-node` and posts OTLP JSON to a receiver on `127.0.0.1`. The receiver writes one JSON document.
+`pnpm trace` replays `fixtures/sample-issue-labeled.json` and `fixtures/gate-pass.jsonl` with run id `run-7`. That is the same pair as the draft example above. `packages/core` opens a span for the run and a span for each template step through `@opentelemetry/api`. `packages/github` starts `@opentelemetry/sdk-node` and posts OTLP JSON to a receiver on `127.0.0.1`. The receiver writes one JSON document.
 
 Set `THIN_PR_TRACE_PATH` to choose the file. With that variable empty, `pnpm trace` writes the JSON to stdout.
 
@@ -160,13 +160,13 @@ The labeled-issue workflow sets `THIN_PR_TRACE_PATH` to `artifacts/trace.json` a
 
 ## Judge
 
-`pnpm eval:judge` replays the 17 eval cases and scores each run with the rubric in `packages/specialists/src/judge.ts`. The judge reads the recorded replies, the measured diff, and the check results. The rules are `plan`, `files`, `tests`, and `review`. A case passes when every rule passes. The command prints a verdict and a reason for each rule. It exits non-zero when the pass rate is below `evals/judge-baseline.json`.
+`pnpm eval:judge` replays the 17 eval cases and scores each run with the rubric in `packages/specialists/src/judge.ts`. The judge reads each run's step outputs, the measured diff, and the check results. The rules are `plan`, `files`, `tests`, and `review`. A case passes when every rule passes. The command prints a verdict and a reason for each rule. It exits non-zero when the pass rate is below `evals/judge-baseline.json`.
 
 On the committed cases the rate is 12/17, printed as 70.6%. `09-failing-hidden-test` through `13-type-error` fail the judge. The rubric does not read paths, secrets, or whitespace, so `14-denied-path`, `15-planted-secret`, `16-whitespace-only`, and `17-review-notes` pass the judge and fail the gate. The rubric report is `docs/demo/judge-report.txt`.
 
 CI runs `pnpm eval:judge` with `THIN_PR_JUDGE` and `THIN_PR_MODEL` unset. Unset means the rubric.
 
-The live judge runs when `THIN_PR_JUDGE` is `live`, `THIN_PR_MODEL` is `live`, and `ANTHROPIC_API_KEY` is set. `createJudge` sends the same rubric to `claude-haiku-5-5`, with `thinking` set to `{ "type": "adaptive" }` and `output_config.effort` set to `low`. The request omits `temperature`, `top_p`, and `top_k`. `docs/demo/judge-live.txt` is one live run of the earlier set of 12 cases, before the checks ran for real. The pass rate is 9/12. The spend line is `live spend: 0.002965 USD`.
+The live judge runs when `THIN_PR_JUDGE` is `live`, `THIN_PR_MODEL` is `live`, and `ANTHROPIC_API_KEY` is set. `createJudge` sends the same rubric to `claude-haiku-5-5` as a structured-output request, with `thinking` set to `{ "type": "adaptive" }` and `output_config.effort` set to `low`. The request omits `temperature`, `top_p`, and `top_k`. `docs/demo/judge-live.txt` is one live run of the earlier set of 12 cases, before the checks ran for real. The pass rate is 9/12. The spend line is `live spend: 0.002965 USD`.
 
 ## Actions
 
@@ -206,15 +206,15 @@ To run one file:
 ```bash
 pnpm exec vitest run packages/core/src/run.test.ts
 pnpm exec vitest run packages/github/src/run.test.ts
-pnpm exec vitest run packages/specialists/src/schema.test.ts
+pnpm exec vitest run packages/specialists/src/client.test.ts
 ```
 
-The core replay test writes a SQLite log, closes it, opens it again, and expects `replay` to return the same final state as `runWorkflow`. The schema test feeds a reviewer payload whose `notes` entry is a number, then asserts the error path `notes.0`.
+The core replay test writes a SQLite log, closes it, opens it again, and expects `replay` to return the same final state as `runWorkflow`. The step tests replay a recorded implementer through a cassette against an in-memory workspace and check the edited files.
 
 ## Packages
 
 - `packages/core` is the control plane. Typed code only. No model client imports and no GitHub client imports. `runWorkflow` calls one handler per step, retries a failed step with the error as feedback, and caps loops. `replay` folds the log back into the run state: outputs, loops, and usage. `templateForLabel` picks one of the YAML templates `bugfix`, `small-feature`, and `docs-update` by label. Zod checks each file when it loads. A bad template throws with the file line.
-- `packages/specialists` defines planner, implementer, reviewer, and pr-writer, and exposes them as step handlers. Each one checks its input and output with Zod. `ReplayModelClient` returns fixture JSON. Invalid output fails the step. The `Workspace` interface and the `CheckResult` and `Diff` types live here.
+- `packages/specialists` defines planner, implementer, reviewer, and pr-writer, and exposes them as step handlers on the Anthropic SDK. Planner, reviewer, and pr-writer use structured outputs from their Zod schemas. The implementer edits through six workspace tools in the SDK tool runner. `createAnthropicClient` runs live, records a cassette, or replays one, and it prices every call against the spend limit. The `Workspace` interface and the `CheckResult` and `Diff` types live here.
 - `packages/workspace` opens a git checkout at a base commit. It reads, searches, replaces, and creates files, runs the checks from `.thin-pr.yml`, measures `git diff` against the base, and commits and pushes. `loadRepoConfig` reads `.thin-pr.yml` with defaults. `createMemoryWorkspace` is the in-memory version for tests.
 - `packages/gate` evaluates plan, contracts, diff, budget, paths, secrets, typecheck, tests, and review. `evaluate()` returns `PASS` or `FAIL` and a reason for each rule. `decide(evidence)` returns `pass` only when every rule passes.
 - `packages/github` runs the verify step, posts the checks, pushes the branch, and opens or updates the draft pull request. Specialists do not import this package.
@@ -223,11 +223,11 @@ The core replay test writes a SQLite log, closes it, opens it again, and expects
 
 ## Replay and live
 
-`pnpm test`, `pnpm eval`, and `.github/workflows/ci.yml` use `ReplayModelClient`. They do not call a model API. `ReplayModelClient` returns fixture JSON from `evals/cases/<id>/responses.json` or the built-in fixtures in `packages/specialists`.
+`pnpm test`, `pnpm eval`, and `.github/workflows/ci.yml` replay cassettes. They do not call a model API. A cassette is one JSON line per model call: the specialist, the model id, the messages sent, and the response. Replay hands out the calls in order per specialist and fails when a request asks for a different model or runs past the end. The eval cassettes and `fixtures/gate-*.jsonl` were converted from earlier recorded replies, so their usage numbers are estimates and each line says `"source":"converted"`.
 
-The labeled-issue workflow calls a live model only when `THIN_PR_MODEL` is `live` and `ANTHROPIC_API_KEY` is set. The workflow sets `THIN_PR_MODEL` to `live` when that secret is non-empty, and to `replay` otherwise. CI does not set either variable.
+`THIN_PR_MODEL` is `live`, `record`, or `replay`, and `replay` is the default. `record` and `replay` read the cassette path from `THIN_PR_CASSETTE`. Live and record calls stop before a request that could pass `THIN_PR_SPEND_LIMIT_USD`, 25 by default. The labeled-issue workflow sets `THIN_PR_MODEL` to `live` when the `ANTHROPIC_API_KEY` secret is non-empty, and to `replay` otherwise. CI does not set either variable.
 
-The live client sends `model` `claude-haiku-5-5`, `thinking` `{ "type": "adaptive" }`, and `output_config.effort` `low`. The request omits `temperature`, `top_p`, and `top_k`. `claude-haiku-5-5` is the current Claude API id for Haiku 5.5.
+Each model step takes its model and effort from the template step. The small-feature template sends plan and review to `claude-sonnet-5-5`, implement to `claude-opus-5-5`, and write to `claude-haiku-5-5`. Every request sets `thinking` `{ "type": "adaptive" }` and an explicit `output_config.effort`, and omits `temperature`, `top_p`, and `top_k`. The issue goes in its own `<issue>` block, and each system prompt says that block is untrusted data. A refusal fails the step with its category.
 
 A model payload that lists files does not open a draft. The gate reads `git diff` of the checkout and the exit codes of the checks that `verify` ran.
 
@@ -241,7 +241,7 @@ That image is a still of the live draft diff. It is not a screen recording of th
 
 - That run used the earlier five-rule gate. Today the `thin-pr` label reaches a draft only after typecheck and tests pass on the checkout and the gate reads `git diff`. A model file list is not the diff.
 - The draft opens only after all nine gate rules pass. A failed rule comments `## Run report` on the issue and opens no pull request.
-- `ReplayModelClient` is the CI default. `pnpm test`, `pnpm eval`, and `.github/workflows/ci.yml` use it. The live client runs only when `THIN_PR_MODEL=live` and `ANTHROPIC_API_KEY` is set, and it sends `model` `claude-haiku-5-5`.
+- That run used the earlier single-model client on `claude-haiku-5-5`. Today each step uses the model its template names.
 
 `pnpm test`, `pnpm eval`, and `.github/workflows/ci.yml` stayed on replay for this run. The workflow grants `checks: write`. The token that opened the draft could create the branch and the commit, and it could not create check runs, so the verdicts are in the pull request body.
 

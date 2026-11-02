@@ -51,11 +51,11 @@ Useful single files:
 ```bash
 pnpm exec vitest run packages/core/src/run.test.ts
 pnpm exec vitest run packages/github/src/run.test.ts
-pnpm exec vitest run packages/specialists/src/schema.test.ts
+pnpm exec vitest run packages/specialists/src/client.test.ts
 pnpm exec vitest run scripts/eval.test.ts
 ```
 
-`packages/core/src/run.test.ts` writes a SQLite log for a run that loops once, reopens it, and expects `replay` to rebuild the same outputs, loops, and usage. `packages/github/src/run.test.ts` runs `fixtures/sample-issue-labeled.json` against a scratch git checkout with an in-memory GitHub client. `packages/workspace/src/git.test.ts` edits, diffs, checks, and pushes a scratch checkout. `scripts/eval.test.ts` runs the eval and expects 17/17. `scripts/judge.test.ts` expects the judge report at 12/17. `scripts/trace.test.ts` expects six span names in the OTLP file.
+`packages/core/src/run.test.ts` writes a SQLite log for a run that loops once, reopens it, and expects `replay` to rebuild the same outputs, loops, and usage. `packages/github/src/run.test.ts` runs `fixtures/sample-issue-labeled.json` against a scratch git checkout with an in-memory GitHub client. `packages/specialists/src/client.test.ts` records and replays model calls against a fake API and checks pricing, the spend limit, and refusals. `packages/workspace/src/git.test.ts` edits, diffs, checks, and pushes a scratch checkout. `scripts/eval.test.ts` runs the eval and expects 17/17. `scripts/judge.test.ts` expects the judge report at 12/17. `scripts/trace.test.ts` expects six span names in the OTLP file.
 
 The eval and judge tests run `tsc` and `vitest` in scratch repos, so each takes tens of seconds. They set their own timeouts.
 
@@ -105,11 +105,11 @@ The command replays run `run-7` on a scratch checkout and exports OTLP JSON. Set
 
 ## Layout
 
-`packages/core` is the control plane. It runs the template, appends each step event to SQLite, and does not call a model. `packages/specialists` holds planner, implementer, reviewer, and pr-writer as step handlers, and the `Workspace` interface. The default model client is `ReplayModelClient`. `THIN_PR_MODEL=live` selects the live client in `packages/specialists/src/live.ts`. `packages/workspace` is the git checkout a run edits: file tools, the check runner with a scrubbed environment and a timeout, `git diff` against the base, commit and push, and `.thin-pr.yml`. `packages/gate` evaluates plan, contracts, diff, budget, paths, secrets, typecheck, tests, and review. Each rule returns `PASS` or `FAIL` and a reason. `packages/github` is the only package that calls GitHub. It runs `verify`, posts the checks, and pushes `thin-pr/<issue>` and opens or updates a draft pull request when every gate rule passes. A failure comments the run report and pushes nothing. Specialists do not import it.
+`packages/core` is the control plane. It runs the template, appends each step event to SQLite, and does not call a model. `packages/specialists` holds planner, implementer, reviewer, and pr-writer as step handlers, the `Workspace` interface, and `createAnthropicClient`. `THIN_PR_MODEL` is `live`, `record`, or `replay`, and `replay` is the default. `record` and `replay` read the cassette path from `THIN_PR_CASSETTE`. `packages/workspace` is the git checkout a run edits: file tools, the check runner with a scrubbed environment and a timeout, `git diff` against the base, commit and push, and `.thin-pr.yml`. `packages/gate` evaluates plan, contracts, diff, budget, paths, secrets, typecheck, tests, and review. Each rule returns `PASS` or `FAIL` and a reason. `packages/github` is the only package that calls GitHub. It runs `verify`, posts the checks, and pushes `thin-pr/<issue>` and opens or updates a draft pull request when every gate rule passes. A failure comments the run report and pushes nothing. Specialists do not import it.
 
 The YAML templates under `templates/` are data. A step names its id, optional model and effort, retry limit, and optional loop. The labeled-issue entry loads the template whose `label` matches the issue label.
 
-`evals/` holds the sample package and one directory per case under `evals/cases`. `pnpm eval` replays them. `fixtures/gate-pass.json` and `fixtures/gate-fail.json` are the recorded specialist replies for the draft path and the failed-rule path.
+`evals/` holds the sample package and one directory per case under `evals/cases`. `pnpm eval` replays each case's `cassette.jsonl`. `fixtures/gate-pass.jsonl` and `fixtures/gate-fail.jsonl` are the cassettes for the draft path and the failed-rule path.
 
 ## Skills
 
