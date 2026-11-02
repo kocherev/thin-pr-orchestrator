@@ -108,8 +108,6 @@ The command replays run `run-7` and exports OTLP JSON. Set `THIN_PR_TRACE_PATH` 
 
 `evals/` holds the sample repo, labeled issues, recorded responses, and recorded diffs. `pnpm eval` replays them. `fixtures/gate-pass.json` and `fixtures/gate-fail.json` are the specialist outputs for the draft path and the failed-rule path.
 
-`ping` in `packages/core` returns `pong`. The workspace test uses it as a smoke check.
-
 ## Skills
 
 Use ponytail and the working style on every change. Ponytail stops extra code. The working style says how to prove the code that remains.

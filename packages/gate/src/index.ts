@@ -6,14 +6,6 @@ import {
   testerOutput,
 } from "@thin-pr/specialists";
 
-export const packageId = "@thin-pr/gate" as const;
-
-export type GateReadiness = "ready";
-
-export function readiness(): GateReadiness {
-  return "ready";
-}
-
 export type GateVerdict = "PASS" | "FAIL";
 
 export type GateRuleResult = {

@@ -5,8 +5,6 @@ import {
   decide,
   evaluate,
   measureDiff,
-  packageId,
-  readiness,
   type GateSubject,
   type RunnerEvidence,
 } from "./index.js";
@@ -16,9 +14,6 @@ const failFixture = fileURLToPath(new URL("../../../fixtures/gate-fail.json", im
 
 describe("@thin-pr/gate", () => {
   it("evaluates the pass fixture as PASS for every rule", () => {
-    expect(packageId).toBe("@thin-pr/gate");
-    expect(readiness()).toBe("ready");
-
     const subject = readSubject(passFixture);
     const diff = measureDiff([
       {

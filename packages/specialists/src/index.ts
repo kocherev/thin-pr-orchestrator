@@ -1,15 +1,3 @@
-import { SPECIALIST_NAMES, type SpecialistName } from "./contract.js";
-
-export const packageId = "@thin-pr/specialists" as const;
-
-export type SpecialistDescriptor = {
-  readonly id: SpecialistName;
-};
-
-export function listSpecialists(): readonly SpecialistDescriptor[] {
-  return SPECIALIST_NAMES.map((id) => ({ id }));
-}
-
 export {
   createRunCapture,
   createStubSpecialists,

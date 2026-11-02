@@ -205,9 +205,9 @@ The core replay test writes a SQLite log, closes it, opens it again, and expects
 
 ## Packages
 
-- `packages/core` is the control plane. Typed code only. No model client imports and no GitHub client imports. `runWorkflow` follows a template. `replay` folds the log back into a run state. `loadTemplate` reads `templates/stub-run.json` and the YAML workflows `bugfix`, `small-feature`, and `docs-update`. Zod checks each file when it loads. A bad template throws with the file line. `ping` returns `pong`.
+- `packages/core` is the control plane. Typed code only. No model client imports and no GitHub client imports. `runWorkflow` follows a template. `replay` folds the log back into a run state. `loadTemplate` reads `templates/stub-run.json` and the YAML workflows `bugfix`, `small-feature`, and `docs-update`. Zod checks each file when it loads. A bad template throws with the file line.
 - `packages/specialists` defines planner, implementer, tester, reviewer, and pr-writer. Each one checks its input and output with Zod. `ReplayModelClient` returns fixture JSON. Invalid output fails the step.
-- `packages/gate` evaluates plan, tests, contracts, the measured diff, and the diff budget. `evaluate()` returns `PASS` or `FAIL` and a reason for each rule. `decide(subject, runner)` returns `pass` only when every rule passes. `decide()` with no subject returns `pass`. `readiness()` returns `ready`.
+- `packages/gate` evaluates plan, tests, contracts, the measured diff, and the diff budget. `evaluate()` returns `PASS` or `FAIL` and a reason for each rule. `decide(subject, runner)` returns `pass` only when every rule passes. `decide()` with no subject returns `pass`.
 - `packages/github` creates the branch, the checks, and the draft pull request. Specialists do not import this package.
 
 `evals/` holds the sample repo, labeled issues, recorded specialist responses, and recorded file contents. See `evals/README.md`.
