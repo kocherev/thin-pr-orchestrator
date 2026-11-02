@@ -85,6 +85,8 @@ To hand a repository to the App, run `gh workflow disable thin-pr.yml`. Run `gh 
 
 A run can outlast the 15 minutes a queue consumer may wait, so `POST /run` answers 202 at once and the run continues in the background. When `sleepAfter` passes, the Worker asks the container's `GET /status` and stops it only when no run is in progress.
 
+The container runs as the `node` user. When Cloudflare intercepts HTTPS egress, it writes its CA at start. A non-root process cannot update the system store, so the entrypoint appends that CA to a bundle in `/tmp` and points Node and git at it.
+
 ## Check before you deploy
 
 These run without a Cloudflare login:
