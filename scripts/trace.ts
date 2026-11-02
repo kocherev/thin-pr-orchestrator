@@ -29,7 +29,7 @@ export async function runTrace(workspace = root): Promise<string> {
       changes: [STUB_CHANGE],
       model: modelFromFixture(jsonFile(join(workspace, "fixtures", "gate-pass.json"))),
     });
-    if (result.status !== "completed") {
+    if (result.status !== "opened") {
       failure = new Error(`trace replay finished ${result.status}`);
     }
   } catch (error) {

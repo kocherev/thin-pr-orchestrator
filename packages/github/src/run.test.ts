@@ -53,28 +53,28 @@ describe("issue label", () => {
       changes: [stubChange()],
     });
 
-    expect(result.status).toBe("completed");
-    if (result.status !== "completed") {
+    expect(result.status).toBe("opened");
+    if (result.status !== "opened") {
       return;
     }
-    expect(result.branch).toBe("thin-pr/7");
-    expect(result.headSha).toBe("def456");
-    expect(result.pullRequest).toEqual({
-      number: 11,
-      url: "https://github.com/example/sample-repo/pull/11",
+    expect(result.record).toMatchObject({
+      version: 1,
+      runId: "run-7",
+      repo: "example/sample-repo",
+      issue: { number: 7, title: "Sample thin pull request", url: "https://github.com/example/sample-repo/issues/7" },
+      template: "small-feature",
+      status: "opened",
+      diff: { files: 1, lines: 2, meaningful: true },
+      pullRequest: { number: 11, url: "https://github.com/example/sample-repo/pull/11" },
     });
-    expect(result.checks.map((check) => [check.step, check.conclusion])).toEqual([
-      ["plan", "success"],
-      ["implement", "success"],
-      ["verify", "success"],
-      ["review", "success"],
-      ["write", "success"],
-      ["gate/plan", "success"],
-      ["gate/tests", "success"],
-      ["gate/contracts", "success"],
-      ["gate/diff", "success"],
-      ["gate/budget", "success"],
+    expect(result.record.steps.map((step) => [step.id, step.attempt, step.loop, step.outcome])).toEqual([
+      ["plan", 1, 0, "finished"],
+      ["implement", 1, 0, "finished"],
+      ["verify", 1, 0, "finished"],
+      ["review", 1, 0, "finished"],
+      ["write", 1, 0, "finished"],
     ]);
+    expect(result.record.gate.map((rule) => rule.verdict)).toEqual(["PASS", "PASS", "PASS", "PASS", "PASS"]);
     expect(memory.calls.map((call) => call.op)).toEqual([
       "branchSha",
       "createBranch",
@@ -168,23 +168,18 @@ describe("issue label", () => {
     const memory = memoryGitHub();
     const result = await runSample(memory.github, readFixture(), { model: modelFromFixture("gate-fail.json") });
 
-    expect(result.status).toBe("failed");
-    if (result.status !== "failed") {
+    expect(result.status).toBe("blocked");
+    if (result.status !== "blocked") {
       return;
     }
-    expect(result.branch).toBe("thin-pr/7");
-    expect(result.report.error).toContain("gate decide returned fail");
-    expect(result.report.steps.map((step) => [step.step, step.conclusion])).toEqual([
-      ["plan", "success"],
-      ["implement", "success"],
-      ["verify", "success"],
-      ["review", "success"],
-      ["write", "success"],
-      ["gate/plan", "success"],
-      ["gate/tests", "failure"],
-      ["gate/contracts", "success"],
-      ["gate/diff", "failure"],
-      ["gate/budget", "success"],
+    expect(result.error).toBe("gate failed: tests, diff");
+    expect(result.record.status).toBe("blocked");
+    expect(result.record.gate.map((rule) => [rule.rule, rule.verdict])).toEqual([
+      ["plan", "PASS"],
+      ["tests", "FAIL"],
+      ["contracts", "PASS"],
+      ["diff", "FAIL"],
+      ["budget", "PASS"],
     ]);
     expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
     const failedRule = memory.calls.find((call) => call.summary === "FAIL: Tests did not pass.");
@@ -192,7 +187,8 @@ describe("issue label", () => {
     const comment = memory.calls.find((call) => call.op === "comment");
     expect(comment).toMatchObject({ issue: 7, owner: "example", repo: "sample-repo" });
     expect(comment?.body).toContain("## Run report");
-    expect(comment?.body).toContain("- Error: gate decide returned fail");
+    expect(comment?.body).toContain("- Error: gate failed: tests, diff");
+    expect(comment?.body).toContain("- Branch: thin-pr/7");
     expect(comment?.body).toContain("PASS: Plan is present (1 step).");
     expect(comment?.body).toContain("- gate/tests: failure. FAIL: Tests did not pass.");
     expect(comment?.body).toContain("PASS: Specialist outputs match their contracts.");
@@ -202,11 +198,7 @@ describe("issue label", () => {
     const memory = memoryGitHub();
     const result = await runSample(memory.github, readFixture(), { model: modelFromFixture("gate-pass.json") });
 
-    expect(result.status).toBe("failed");
-    if (result.status !== "failed") {
-      return;
-    }
-    expect(result.report.error).toContain("gate decide returned fail");
+    expect(result.status).toBe("blocked");
     expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
     expect(memory.calls.some((call) => call.op === "commitFiles")).toBe(false);
     const comment = memory.calls.find((call) => call.op === "comment");
@@ -222,7 +214,7 @@ describe("issue label", () => {
       changes: [{ ...change, after: change.before.replace("return 0;", "return 0;   ") }],
     });
 
-    expect(result.status).toBe("failed");
+    expect(result.status).toBe("blocked");
     expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
     expect(memory.calls.some((call) => call.op === "commitFiles")).toBe(false);
     const comment = memory.calls.find((call) => call.op === "comment");
@@ -238,7 +230,7 @@ describe("issue label", () => {
       changes: [{ path: "src/stub.ts", before, after }],
     });
 
-    expect(result.status).toBe("failed");
+    expect(result.status).toBe("blocked");
     expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
     expect(memory.calls.some((call) => call.op === "commitFiles")).toBe(false);
     const comment = memory.calls.find((call) => call.op === "comment");
@@ -253,7 +245,7 @@ describe("issue label", () => {
       changes: [{ ...change, after: "export function stub( {\n" }],
     });
 
-    expect(result.status).toBe("failed");
+    expect(result.status).toBe("blocked");
     expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
     const comment = memory.calls.find((call) => call.op === "comment");
     expect(comment?.body).toContain("FAIL: Runner did not confirm the tests.");
@@ -270,18 +262,21 @@ describe("issue label", () => {
     if (result.status !== "failed") {
       return;
     }
-    expect(result.branch).toBe("thin-pr/7");
-    expect(result.report.error).toBe(
+    expect(result.error).toBe(
       "plan failed after 2 attempts: planner output invalid at summary: Invalid input: expected string, received number",
     );
-    expect(result.report.steps.map((step) => [step.step, step.conclusion])).toEqual([["plan", "failure"]]);
+    expect(result.record.steps.map((step) => [step.id, step.attempt, step.outcome])).toEqual([
+      ["plan", 1, "failed"],
+      ["plan", 2, "failed"],
+    ]);
     const comment = memory.calls.find((call) => call.op === "comment");
     expect(comment).toMatchObject({ issue: 7, owner: "example", repo: "sample-repo" });
     expect(comment?.body).toContain("## Run report");
     expect(comment?.body).toContain("Run: run-7");
     expect(comment?.body).toContain("Template: small-feature");
     expect(comment?.body).toContain("Branch: thin-pr/7");
-    expect(comment?.body).toContain("- plan: failure. plan failed after 2 attempts");
+    expect(comment?.body).toContain("- Error: plan failed after 2 attempts");
+    expect(comment?.body).toContain("- plan: failure. planner output invalid at summary");
     const planFinish = memory.calls.find((call) => call.op === "finishCheck" && call.conclusion === "failure");
     expect(planFinish?.summary).toContain("planner output invalid at summary");
     expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
@@ -295,8 +290,8 @@ describe("issue label", () => {
     if (result.status !== "failed") {
       return;
     }
-    expect(result.report.steps).toEqual([]);
-    expect(result.report.error).toBe("branch already exists");
+    expect(result.record.steps).toEqual([]);
+    expect(result.error).toBe("branch already exists");
     const comment = memory.calls.find((call) => call.op === "comment");
     expect(comment?.body).toContain("## Run report");
     expect(comment?.body).toContain("branch already exists");

@@ -215,7 +215,7 @@ async function replay(workspace: string, directory: string, item: ReplayCase): P
   if (result.status === "ignored") {
     throw new Error(`${item.id}: issue is not a thin-pr label event`);
   }
-  return result.status === "completed" ? "pass" : "fail";
+  return result.status === "opened" ? "pass" : "fail";
 }
 
 export function replayGitHub(): GitHubSurface {
