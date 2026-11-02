@@ -18,7 +18,7 @@ The orchestrator in `packages/github` is the caller. It runs `verify`, posts the
 
 ## Specialist contract
 
-Four model specialists are fixed: `planner`, `implementer`, `reviewer`, and `pr-writer`. Each one has a `.strict()` Zod output schema. `createStepHandlers` turns them into step handlers for `plan`, `implement`, `review`, and `write`. Each handler takes its model and effort from the template step, or the specialist default, and returns the usage of the calls it made.
+Four model specialists are fixed: `planner`, `implementer`, `reviewer`, and `pr-writer`. Each one has a `.strict()` Zod output schema. `createStepHandlers` turns them into step handlers for `plan`, `implement`, `review`, and `write`. Each handler takes its model and effort from the template step, or the specialist default, and returns the usage of the calls it made. An attempt that fails after a model call throws `StepError` with that usage, and core keeps it on the `failed` event, so the run totals count refused and retried calls.
 
 Planner, reviewer, and pr-writer are structured-output calls built from their schema. A reply that still fails the schema throws `SpecialistSchemaError` with the specialist, the phase, and the path of the first issue. The reviewer reads the plan, the workspace patch, and the verify check results, and returns `approve` or `changes_requested` with notes. `changes_requested` loops back to implement with the notes as feedback while the template allows another loop.
 

@@ -1,4 +1,4 @@
-import type { Json, StepContext, StepHandler, StepId } from "@thin-pr/core";
+import { StepError, type Json, type StepContext, type StepHandler, type StepId } from "@thin-pr/core";
 import { z } from "zod";
 import type { SpecialistName } from "./contract.js";
 import type { ModelSession } from "./client.js";
@@ -57,8 +57,13 @@ export function createStepHandlers(session: ModelSession, workspace: Workspace):
   const metered = (step: StepHandler): StepHandler => {
     return async (context) => {
       const before = meter.usage.length;
-      const result = await step(context);
-      return { ...result, usage: meter.usage.slice(before) };
+      try {
+        const result = await step(context);
+        return { ...result, usage: meter.usage.slice(before) };
+      } catch (error) {
+        const usage = meter.usage.slice(before);
+        throw usage.length > 0 ? new StepError(error, usage) : error;
+      }
     };
   };
 

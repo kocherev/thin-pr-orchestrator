@@ -222,6 +222,16 @@ describe("issue label", () => {
       error: "plan failed after 2 attempts: planner request was refused by claude-sonnet-5-5 (category: cyber)",
     });
     expect(memory.calls.find((call) => call.op === "comment")?.body).toContain("(category: cyber)");
+    if (result.status !== "failed") {
+      return;
+    }
+    // Both refused attempts were billed for their input, so the run totals count them.
+    expect(result.record.steps.map((step) => [step.id, step.outcome, step.usage.length])).toEqual([
+      ["plan", "failed", 1],
+      ["plan", "failed", 1],
+    ]);
+    expect(result.record.totals.inputTokens).toBe(600);
+    expect(result.record.totals.costUsd).toBeCloseTo((600 * 2) / 1_000_000, 12);
   });
 
   it("sends review notes back to implement once, then opens the draft when the reviewer approves", async () => {
