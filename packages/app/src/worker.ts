@@ -1,0 +1,83 @@
+import { Container, ContainerProxy, getContainer } from "@cloudflare/containers";
+import { readDelivery, type Job } from "./event.js";
+import { createInstallationToken } from "./installation-token.js";
+import { verifySignature } from "./signature.js";
+
+// The Container class routes allowedHosts through this entrypoint.
+export { ContainerProxy };
+
+export class Runner extends Container {
+  defaultPort = 8080;
+  sleepAfter = "15m";
+  enableInternet = false;
+  // HTTPS has to pass through ContainerProxy for allowedHosts to see the hostname.
+  interceptHttps = true;
+  allowedHosts = ["github.com", "api.github.com", "api.anthropic.com", "registry.npmjs.org"];
+}
+
+export default {
+  async fetch(request, env) {
+    if (request.method !== "POST") {
+      return new Response(null, { status: 405, headers: { allow: "POST" } });
+    }
+    const body = await request.arrayBuffer();
+    const signature = request.headers.get("x-hub-signature-256");
+    if (!(await verifySignature(env.GITHUB_WEBHOOK_SECRET, body, signature))) {
+      return new Response("bad signature", { status: 401 });
+    }
+    const delivery = readDelivery(request.headers, new TextDecoder().decode(body));
+    switch (delivery.kind) {
+      case "ignored":
+        return new Response(null, { status: 204 });
+      case "invalid":
+        return new Response(delivery.reason, { status: 400 });
+      case "job":
+        await env.JOBS.send(delivery.job);
+        return new Response(null, { status: 202 });
+      default: {
+        const unhandled: never = delivery;
+        return unhandled;
+      }
+    }
+  },
+
+  async queue(batch, env) {
+    for (const message of batch.messages) {
+      try {
+        const response = await dispatch(message.body, env);
+        await response.body?.cancel();
+        if (response.status === 202) {
+          message.ack();
+          continue;
+        }
+        console.error(`runner answered ${response.status} for delivery ${message.body.deliveryId}`);
+      } catch (error) {
+        console.error(`dispatch failed for delivery ${message.body.deliveryId}`, error);
+      }
+      message.retry();
+    }
+  },
+} satisfies ExportedHandler<Env, Job>;
+
+async function dispatch(job: Job, env: Env): Promise<Response> {
+  const installation = await createInstallationToken({
+    app: { clientId: env.GITHUB_APP_CLIENT_ID, privateKeyPem: env.GITHUB_APP_PRIVATE_KEY },
+    installationId: job.installationId,
+    repository: job.repo,
+    fetch: fetch.bind(globalThis),
+  });
+  const runner = getContainer(env.RUNNER, job.deliveryId);
+  await runner.start({
+    envVars: {
+      GITHUB_TOKEN: installation.token,
+      ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+      THIN_PR_MODEL: env.THIN_PR_MODEL,
+      THIN_PR_SPEND_LIMIT_USD: env.THIN_PR_SPEND_LIMIT_USD,
+    },
+  });
+  return runner.fetch("http://runner/run", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(job),
+  });
+}

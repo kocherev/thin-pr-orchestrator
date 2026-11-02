@@ -1,0 +1,141 @@
+import { createExecutionContext, createMessageBatch, getQueueResult } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Job } from "../src/event.js";
+import worker, { runner } from "./main.js";
+
+const IncomingRequest = Request<unknown, IncomingRequestCfProperties>;
+
+const DELIVERY_ID = "72d3162e-cc78-11e3-81ab-4c9367dc0958";
+
+const JOB: Job = {
+  deliveryId: DELIVERY_ID,
+  installationId: 42,
+  owner: "example",
+  repo: "sample-repo",
+  issueNumber: 7,
+  label: "thin-pr",
+};
+
+const LABELED = JSON.stringify({
+  action: "labeled",
+  label: { name: "thin-pr" },
+  issue: { number: 7, title: "Add a flag" },
+  repository: { name: "sample-repo", owner: { login: "example" } },
+  installation: { id: 42 },
+});
+
+async function sign(body: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(env.GITHUB_WEBHOOK_SECRET),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body)));
+  return `sha256=${Array.from(mac, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+async function deliver(event: string, body: string, signature?: string): Promise<Response> {
+  const request = new IncomingRequest("https://app.example/", {
+    method: "POST",
+    headers: {
+      "x-github-event": event,
+      "x-github-delivery": DELIVERY_ID,
+      "x-hub-signature-256": signature ?? (await sign(body)),
+    },
+    body,
+  });
+  return worker.fetch(request, env);
+}
+
+async function consume(job: Job): Promise<{ readonly acked: boolean; readonly retried: boolean }> {
+  const batch = createMessageBatch<Job>("pr-jobs", [{ id: "message-1", timestamp: new Date(), attempts: 1, body: job }]);
+  const ctx = createExecutionContext();
+  await worker.queue(batch, env);
+  const result = await getQueueResult(batch, ctx);
+  return {
+    acked: result.explicitAcks.includes("message-1"),
+    retried: result.retryMessages.some((message) => message.msgId === "message-1"),
+  };
+}
+
+const tokenRequests: { readonly url: string; readonly body: string }[] = [];
+
+beforeEach(() => {
+  runner.status = 202;
+  runner.starts.length = 0;
+  runner.runs.length = 0;
+  tokenRequests.length = 0;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const request = new Request(input, init);
+    tokenRequests.push({ url: request.url, body: await request.text() });
+    if (request.url === "https://api.github.com/app/installations/42/access_tokens") {
+      return Response.json({ token: "ghs_test", expires_at: "2026-11-02T13:00:00Z" }, { status: 201 });
+    }
+    return new Response("unexpected request", { status: 500 });
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("webhook intake", () => {
+  it("queues a thin-pr label and hands the job to a runner named after the delivery", async () => {
+    const response = await deliver("issues", LABELED);
+    expect(response.status).toBe(202);
+
+    await vi.waitFor(() => expect(runner.runs).toHaveLength(1), { timeout: 5000 });
+    expect(runner.runs[0]).toEqual({ name: DELIVERY_ID, url: "http://runner/run", job: JOB });
+    expect(runner.starts).toEqual([
+      {
+        name: DELIVERY_ID,
+        envVars: {
+          GITHUB_TOKEN: "ghs_test",
+          ANTHROPIC_API_KEY: "test-anthropic-key",
+          THIN_PR_MODEL: "live",
+          THIN_PR_SPEND_LIMIT_USD: "25",
+        },
+      },
+    ]);
+    expect(tokenRequests).toEqual([
+      {
+        url: "https://api.github.com/app/installations/42/access_tokens",
+        body: JSON.stringify({ repositories: ["sample-repo"] }),
+      },
+    ]);
+  });
+
+  it("rejects a delivery whose signature does not match", async () => {
+    const response = await deliver("issues", LABELED, await sign(`${LABELED} `));
+    expect(response.status).toBe(401);
+  });
+
+  it("answers 204 to events that do not start a run", async () => {
+    expect((await deliver("ping", JSON.stringify({ zen: "Keep it logically awesome." }))).status).toBe(204);
+    expect((await deliver("issues", LABELED.replace('"thin-pr"', '"bug"'))).status).toBe(204);
+  });
+
+  it("accepts only POST", async () => {
+    const response = await worker.fetch(new IncomingRequest("https://app.example/"), env);
+    expect(response.status).toBe(405);
+  });
+});
+
+describe("job consumer", () => {
+  it("acks the message once the runner accepts the job", async () => {
+    expect(await consume(JOB)).toEqual({ acked: true, retried: false });
+  });
+
+  it("retries the message when the runner refuses the job", async () => {
+    runner.status = 503;
+    expect(await consume(JOB)).toEqual({ acked: false, retried: true });
+  });
+
+  it("retries the message when GitHub refuses the installation token", async () => {
+    expect(await consume({ ...JOB, installationId: 7 })).toEqual({ acked: false, retried: true });
+    expect(runner.starts).toHaveLength(0);
+  });
+});
