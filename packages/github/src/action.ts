@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import * as core from "@actions/core";
 import * as github from "@actions/github";
 import { Octokit } from "@octokit/rest";
-import { AnthropicModelClient, createModelClient } from "@thin-pr/specialists";
+import { clientOptionsFromEnv, createAnthropicClient } from "@thin-pr/specialists";
 import { exportRunRecord } from "./record.js";
 import { runAction } from "./run.js";
 import { createGitHubSurface } from "./surface.js";
@@ -21,7 +21,8 @@ async function main(): Promise<void> {
   const tracing = await startTrace();
   let failure = "";
   try {
-    const model = createModelClient();
+    const options = clientOptionsFromEnv();
+    const model = createAnthropicClient(options);
     const runId = process.env.GITHUB_RUN_ID ? `gha-${process.env.GITHUB_RUN_ID}` : `local-${Date.now()}`;
     // actions/checkout leaves the default branch at the event's commit and stores no credentials; the push gets the token.
     const result = await runAction({
@@ -35,9 +36,9 @@ async function main(): Promise<void> {
       github: createGitHubSurface(new Octokit({ auth: token })),
       model,
     });
-    if (model instanceof AnthropicModelClient) {
-      const spend = { usd: model.spentUsd() };
-      core.info(`Live model spend estimate: ${spend.usd.toFixed(6)} USD`);
+    if (options.mode !== "replay") {
+      const spend = { usd: model.meter.spentUsd };
+      core.info(`Model spend: ${spend.usd.toFixed(6)} USD`);
       const spendPath = process.env.THIN_PR_SPEND_PATH;
       if (spendPath) {
         writeFileSync(spendPath, `${JSON.stringify(spend)}\n`);

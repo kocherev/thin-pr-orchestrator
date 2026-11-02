@@ -3,15 +3,16 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runAction, spanNames, startTrace } from "@thin-pr/github";
+import { createAnthropicClient } from "@thin-pr/specialists";
 import { createScratchRepo } from "@thin-pr/workspace";
-import { replayGitHub, replayModel } from "./eval.js";
+import { replayGitHub } from "./eval.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 async function runTrace(workspace = root): Promise<string> {
   const tracing = await startTrace();
   const directory = mkdtempSync(join(tmpdir(), "thin-pr-trace-"));
-  // gate-pass.json edits src/stub.ts. The checks only print, so the trace measures the orchestrator.
+  // gate-pass.jsonl edits src/stub.ts. The checks only print, so the trace measures the orchestrator.
   const repo = createScratchRepo({
     "src/stub.ts": "export function stub(): number {\n  return 0;\n}\n",
     ".thin-pr.yml": "checks:\n  typecheck: echo typecheck ok\n  test: echo test ok\n",
@@ -26,7 +27,7 @@ async function runTrace(workspace = root): Promise<string> {
       runId: "run-7",
       logPath: join(directory, "events.sqlite"),
       github: replayGitHub(),
-      model: replayModel(jsonFile(join(workspace, "fixtures", "gate-pass.json"))),
+      model: createAnthropicClient({ mode: "replay", cassettePath: join(workspace, "fixtures", "gate-pass.jsonl") }),
     });
     if (result.status !== "opened") {
       failure = new Error(`trace replay finished ${result.status}`);

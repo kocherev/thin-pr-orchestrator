@@ -13,18 +13,18 @@ import {
   implementerOutput,
   plannerOutput,
   prWriterOutput,
-  ReplayModelClient,
   reviewerOutput,
+  verifyOutput,
   type CheckResult,
   type Diff,
-  type ModelClient,
+  type ModelSession,
 } from "@thin-pr/specialists";
 import { loadRepoConfig, openWorkspace, type GitWorkspace, type RepoConfig } from "@thin-pr/workspace";
 import { createCheckRuns } from "./checks.js";
 import { readLabelEvent, type LabelEvent } from "./event.js";
 import { toRunRecord, type RunRecord, type TimedEvent } from "./record.js";
 import { formatDraftBody, formatRunReport } from "./report.js";
-import { createRunHandlers, verifyOutput } from "./steps.js";
+import { createRunHandlers } from "./steps.js";
 import type { GitHubSurface } from "./surface.js";
 
 export type LabelRunResult =
@@ -52,7 +52,7 @@ export async function runAction(input: {
   readonly runId: string;
   readonly logPath: string;
   readonly github: GitHubSurface;
-  readonly model?: ModelClient;
+  readonly model: ModelSession;
   /** Reaches only the push. The Action passes GITHUB_TOKEN because its checkout keeps no credentials. */
   readonly pushToken?: string;
 }): Promise<LabelRunResult> {
@@ -65,7 +65,7 @@ export async function runAction(input: {
   const workspace = await openWorkspace({ dir: input.checkout, baseSha: input.baseSha, config });
   const log = openEventLog(input.logPath);
   try {
-    const handlers = createRunHandlers(input.model ?? new ReplayModelClient(), workspace);
+    const handlers = createRunHandlers(input.model, workspace);
     return await runIssue({
       event,
       template,

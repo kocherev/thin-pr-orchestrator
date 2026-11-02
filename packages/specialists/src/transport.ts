@@ -4,7 +4,7 @@ import type { Usage } from "@thin-pr/core";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
-import { costOf, isPricedModel, type BilledUsage, type PricedModel } from "./pricing.js";
+import { costOf, pricedModel, type BilledUsage, type PricedModel } from "./pricing.js";
 
 /** Names the specialist behind a request. The transport reads it and strips it before anything is sent. */
 export const SPECIALIST_HEADER = "x-thin-pr-specialist";
@@ -15,10 +15,13 @@ export type TransportOptions =
 
 const cassetteEntry = z
   .object({
+    // "live" came from the API. "converted" was rebuilt from an older recording, with estimated usage.
+    source: z.enum(["live", "converted"]),
     specialist: z.string().min(1),
     model: z.string().min(1),
     durationMs: z.number().nonnegative(),
-    request: z.json(),
+    // The conversation sent. System prompts and tool schemas live in the code.
+    request: z.object({ messages: z.json() }).strict(),
     // A JSON body is stored parsed. A streamed body is stored as the raw event stream text.
     response: z.object({ contentType: z.string(), body: z.json() }).strict(),
   })
@@ -26,7 +29,7 @@ const cassetteEntry = z
 
 export type CassetteEntry = z.infer<typeof cassetteEntry>;
 
-const messageRequest = z.looseObject({ model: z.string(), max_tokens: z.number() });
+const messageRequest = z.looseObject({ model: z.string(), max_tokens: z.number(), messages: z.json() });
 
 export class CassetteError extends Error {
   constructor(message: string) {
@@ -109,11 +112,8 @@ export function createTransport(options: TransportOptions): { middleware: Middle
     if (typeof request.body !== "string") {
       throw new Error("model request body is not JSON text");
     }
-    const body = z.json().parse(JSON.parse(request.body));
-    const { model, max_tokens: maxTokens } = messageRequest.parse(body);
-    if (!isPricedModel(model)) {
-      throw new Error(`no price for model ${model}`);
-    }
+    const sent = messageRequest.parse(JSON.parse(request.body));
+    const model = pricedModel(sent.model);
 
     if (play) {
       const entry = play(specialist, model);
@@ -124,7 +124,7 @@ export function createTransport(options: TransportOptions): { middleware: Middle
       return response;
     }
 
-    meter.assertRoomFor(model, maxTokens);
+    meter.assertRoomFor(model, sent.max_tokens);
     const started = Date.now();
     const upstream = await next({ ...request, headers });
     if (!upstream.ok) {
@@ -138,7 +138,8 @@ export function createTransport(options: TransportOptions): { middleware: Middle
     if (write) {
       const contentType = upstream.headers.get("content-type") ?? "application/json";
       const stored = contentType.includes("json") ? z.json().parse(JSON.parse(text)) : text;
-      write({ specialist, model, durationMs, request: body, response: { contentType, body: stored } });
+      const entry = { source: "live", specialist, model, durationMs, request: { messages: sent.messages } } as const;
+      write({ ...entry, response: { contentType, body: stored } });
     }
     return response;
   };

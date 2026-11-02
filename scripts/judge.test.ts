@@ -22,7 +22,10 @@ describe("judge eval", () => {
     expect(byId.get("09-failing-hidden-test")?.reasons.find((reason) => reason.rule === "tests")?.reason).toBe(
       "Checks did not pass and the review has no notes.",
     );
-    expect(byId.get("10-empty-plan")?.reasons.find((reason) => reason.rule === "plan")?.reason).toBe("Plan has no steps.");
+    // The plan step fails on the empty plan, so the run keeps no plan output for the judge to read.
+    expect(byId.get("10-empty-plan")?.reasons.find((reason) => reason.rule === "plan")?.reason).toBe(
+      "Plan does not match the planner contract.",
+    );
     expect(byId.get("11-wide-touch")?.verdict).toBe("fail");
     // The rubric does not look at paths, secrets or whitespace, so it passes runs the gate blocks.
     expect(byId.get("15-planted-secret")?.verdict).toBe("pass");

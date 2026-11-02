@@ -53,29 +53,33 @@ const MAX_TOKENS = [16_000, 32_000] as const;
 const FALLBACK_MODELS: ReadonlySet<PricedModel> = new Set(["claude-opus-5-5", "claude-sonnet-5-5"]);
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 
+/** The server-side fallback opt-in for a model that has one, or nothing. */
+export function fallbackFor(model: PricedModel): { betas?: string[]; fallbacks?: "default" } {
+  return FALLBACK_MODELS.has(model) ? { betas: [FALLBACK_BETA], fallbacks: "default" } : {};
+}
+
+/** A system prompt as one cached block. */
+export function cachedSystem(text: string): Anthropic.Beta.Messages.BetaTextBlockParam[] {
+  return [{ type: "text", text, cache_control: { type: "ephemeral" } }];
+}
+
+/** The untrusted issue text in its own block, inside <issue> tags. */
+export function issueBlock(issue: string): Anthropic.Beta.Messages.BetaTextBlockParam {
+  return { type: "text", text: `<issue>\n${issue}\n</issue>` };
+}
+
 /** One structured-output call. Returns the reply parsed by `schema`. */
 export async function structured<T>(client: Anthropic, request: StructuredRequest<T>): Promise<T> {
-  const fallback = FALLBACK_MODELS.has(request.model)
-    ? { betas: [FALLBACK_BETA], fallbacks: "default" as const }
-    : {};
   for (const maxTokens of MAX_TOKENS) {
     const message = await client.beta.messages.create(
       {
-        ...fallback,
+        ...fallbackFor(request.model),
         model: request.model,
         max_tokens: maxTokens,
         thinking: { type: "adaptive" },
         output_config: { effort: request.effort, format: betaZodOutputFormat(request.schema) },
-        system: [{ type: "text", text: request.system, cache_control: { type: "ephemeral" } }],
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: `<issue>\n${request.issue}\n</issue>` },
-              { type: "text", text: request.input },
-            ],
-          },
-        ],
+        system: cachedSystem(request.system),
+        messages: [{ role: "user", content: [issueBlock(request.issue), { type: "text", text: request.input }] }],
       },
       { headers: { [SPECIALIST_HEADER]: request.specialist } },
     );

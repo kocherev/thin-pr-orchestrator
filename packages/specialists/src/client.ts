@@ -19,10 +19,13 @@ export type AnthropicClientOptions = (
   readonly fetch?: typeof fetch;
 };
 
+/** The client a run's model steps share, and the meter that prices its calls. */
+export type ModelSession = { readonly client: Anthropic; readonly meter: SpendMeter };
+
 export function createAnthropicClient(
   options: AnthropicClientOptions,
   env: Record<string, string | undefined> = process.env,
-): { client: Anthropic; meter: SpendMeter } {
+): ModelSession {
   const spendLimitUsd = options.spendLimitUsd ?? spendLimitFrom(env);
   const { middleware, meter } = createTransport(
     options.mode === "live"
@@ -36,8 +39,27 @@ export function createAnthropicClient(
     fetch: options.fetch,
     timeout: TIMEOUT_MS,
     maxRetries: options.mode === "replay" ? 0 : LIVE_MAX_RETRIES,
+    // shortcut: the SDK's own model and tool spans are off, so the run trace keeps one span per step. Turn them on
+    // when the trace exports model usage.
+    openTelemetry: false,
   });
   return { client, meter };
+}
+
+/** `THIN_PR_MODEL` picks the mode, replay by default. Record and replay read the cassette from `THIN_PR_CASSETTE`. */
+export function clientOptionsFromEnv(env: Record<string, string | undefined> = process.env): AnthropicClientOptions {
+  const mode = env.THIN_PR_MODEL || "replay";
+  if (mode === "live") {
+    return { mode };
+  }
+  if (mode !== "record" && mode !== "replay") {
+    throw new Error("THIN_PR_MODEL must be live, record or replay");
+  }
+  const cassettePath = env.THIN_PR_CASSETTE;
+  if (!cassettePath) {
+    throw new Error(`THIN_PR_CASSETTE is required when THIN_PR_MODEL is ${mode}`);
+  }
+  return { mode, cassettePath };
 }
 
 function requireKey(key: string | undefined): string {

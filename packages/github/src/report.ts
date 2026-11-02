@@ -1,7 +1,6 @@
 import type { Json, StepId } from "@thin-pr/core";
-import { plannerOutput } from "@thin-pr/specialists";
+import { plannerOutput, verifyOutput } from "@thin-pr/specialists";
 import type { RunRecord } from "./record.js";
-import { verifyOutput } from "./steps.js";
 
 /** The `## Run report` the run comments on the issue, and the last section of the draft body. */
 export function formatRunReport(record: RunRecord, branch: string, error: string | null): string {

@@ -30,6 +30,14 @@ export function isPricedModel(model: string): model is PricedModel {
   return Object.hasOwn(PRICES, model);
 }
 
+/** The model as a priced id, or an error naming it. A template may name any model. */
+export function pricedModel(model: string): PricedModel {
+  if (!isPricedModel(model)) {
+    throw new Error(`no price for model ${model}`);
+  }
+  return model;
+}
+
 export function costOf(model: PricedModel, usage: BilledUsage): number {
   const cacheRead = usage.cache_read_input_tokens ?? 0;
   const cacheWrite = usage.cache_creation_input_tokens ?? 0;

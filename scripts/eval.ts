@@ -2,22 +2,14 @@ import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSy
 import { availableParallelism, tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { openEventLog, templateForLabel, type StepHandler } from "@thin-pr/core";
+import { openEventLog, replay, templateForLabel, type RunState, type StepHandler } from "@thin-pr/core";
 import { GATE_RULES } from "@thin-pr/gate";
 import { createRunHandlers, readLabelEvent, runIssue, type GitHubSurface, type RunRecord } from "@thin-pr/github";
-import { implementerOutput, ReplayModelClient } from "@thin-pr/specialists";
+import { createAnthropicClient, type ModelSession } from "@thin-pr/specialists";
 import { createScratchRepo, loadRepoConfig, openWorkspace } from "@thin-pr/workspace";
 import { z } from "zod";
 
 type Verdict = "opened" | "blocked";
-
-/** Recorded model replies, keyed by the step that asked for them. */
-const recordingSchema = z.object({
-  plan: z.unknown(),
-  implement: z.unknown(),
-  review: z.unknown(),
-  pullRequest: z.unknown(),
-});
 
 const expectedSchema = z
   .object({ verdict: z.enum(["opened", "blocked"]), failedRules: z.array(z.enum(GATE_RULES)).min(1).optional() })
@@ -32,9 +24,8 @@ export type EvalCase = {
   readonly payload: unknown;
   readonly issueTitle: string;
   readonly issueBody: string;
-  readonly recording: z.infer<typeof recordingSchema>;
-  /** The recorded implementer output: whole files, applied through the workspace. */
-  readonly edits: readonly File[];
+  /** The recorded model calls, replayed in order per specialist. */
+  readonly cassette: string;
   /** Tests copied into `test/hidden/` right before verify. The implementer never sees them. */
   readonly hidden: readonly File[];
   readonly expected: z.infer<typeof expectedSchema>;
@@ -49,7 +40,14 @@ type CaseResult = {
   readonly error: string | null;
   readonly correct: boolean;
   readonly record: RunRecord;
+  /** Each step's last output, rebuilt from the run log. */
+  readonly outputs: RunState["outputs"];
 };
+
+/** The model session a case runs with. Evals replay each case's cassette. */
+export type SessionFor = (item: EvalCase) => ModelSession;
+
+const replayCassette: SessionFor = (item) => createAnthropicClient({ mode: "replay", cassettePath: item.cassette });
 
 type EvalReport = {
   readonly cases: readonly CaseResult[];
@@ -77,19 +75,12 @@ export function loadCases(workspace = root): EvalCase[] {
         throw new Error(`${id}: the issue must be a unique number on sample-repo`);
       }
       seen.add(event.issue.number);
-      const recording = recordingSchema.parse(jsonFile(join(dir, "responses.json")));
-      const edits = readTree(join(dir, "files"));
-      const listed = implementerOutput.safeParse(recording.implement).data?.files;
-      if (listed && !sameItems(listed, edits.map((edit) => edit.path))) {
-        throw new Error(`${id}: implement files do not match files/`);
-      }
       return {
         id,
         payload,
         issueTitle: event.issue.title,
         issueBody: event.issue.body,
-        recording,
-        edits,
+        cassette: join(dir, "cassette.jsonl"),
         hidden: readTree(join(dir, "hidden")),
         expected: expectedSchema.parse(jsonFile(join(dir, "expected.json"))),
       };
@@ -97,10 +88,10 @@ export function loadCases(workspace = root): EvalCase[] {
 }
 
 /**
- * Runs every case through the labeled-issue path on a scratch copy of `evals/sample-repo`. The model replies are
- * recorded. Typecheck and tests run for real, with this repo's `tsc` and `vitest` on PATH.
+ * Runs every case through the labeled-issue path on a scratch copy of `evals/sample-repo`. The model calls replay
+ * from each case's cassette. Typecheck and tests run for real, with this repo's `tsc` and `vitest` on PATH.
  */
-export async function runEval(workspace = root): Promise<EvalReport> {
+export async function runEval(workspace = root, sessionFor: SessionFor = replayCassette): Promise<EvalReport> {
   const { minVerdictAccuracy } = baselineSchema.parse(jsonFile(join(workspace, "evals", "baseline.json")));
   const sample = readTree(join(workspace, "evals", "sample-repo"));
   const logs = mkdtempSync(join(tmpdir(), "thin-pr-eval-"));
@@ -117,7 +108,7 @@ export async function runEval(workspace = root): Promise<EvalReport> {
         next += 1;
         const item = items[index];
         if (item) {
-          cases[index] = await runCase(workspace, item, sample, logs);
+          cases[index] = await runCase(workspace, item, sample, logs, sessionFor(item));
         }
       }
     };
@@ -161,18 +152,6 @@ export function exitCode(report: EvalReport): 0 | 1 {
   return report.meetsBaseline ? 0 : 1;
 }
 
-/** A replay client that answers each specialist with its recorded reply. `edits` become the implementer's files. */
-export function replayModel(value: unknown, edits?: readonly File[]): ReplayModelClient {
-  const recording = recordingSchema.parse(value);
-  const implement = edits && isRecord(recording.implement) ? { ...recording.implement, edits } : recording.implement;
-  return new ReplayModelClient({
-    planner: JSON.stringify(recording.plan),
-    implementer: JSON.stringify(implement),
-    reviewer: JSON.stringify(recording.review),
-    "pr-writer": JSON.stringify(recording.pullRequest),
-  });
-}
-
 /** A GitHub surface that accepts every call and opens draft 1. Evals and traces never reach GitHub. */
 export function replayGitHub(): GitHubSurface {
   let nextId = 1;
@@ -195,7 +174,13 @@ export function replayGitHub(): GitHubSurface {
   };
 }
 
-async function runCase(workspace: string, item: EvalCase, sample: readonly File[], logs: string): Promise<CaseResult> {
+async function runCase(
+  workspace: string,
+  item: EvalCase,
+  sample: readonly File[],
+  logs: string,
+  session: ModelSession,
+): Promise<CaseResult> {
   const repo = createScratchRepo(Object.fromEntries(sample.map((file) => [file.path, file.content])));
   const log = openEventLog(join(logs, `${item.id}.sqlite`));
   try {
@@ -207,7 +192,8 @@ async function runCase(workspace: string, item: EvalCase, sample: readonly File[
     }
     const config = loadRepoConfig(repo.dir);
     const checkout = await openWorkspace({ dir: repo.dir, baseSha: repo.baseSha, config });
-    const handlers = createRunHandlers(replayModel(item.recording, item.edits), checkout);
+    const handlers = createRunHandlers(session, checkout);
+    const runId = `eval-${item.id}`;
     const result = await runIssue({
       event,
       template,
@@ -216,7 +202,7 @@ async function runCase(workspace: string, item: EvalCase, sample: readonly File[
       handlers: { ...handlers, verify: withHiddenTests(handlers.verify, repo.dir, item.hidden) },
       github: replayGitHub(),
       log,
-      runId: `eval-${item.id}`,
+      runId,
     });
     if (result.status === "ignored") {
       throw new Error("the run ignored the issue");
@@ -232,6 +218,7 @@ async function runCase(workspace: string, item: EvalCase, sample: readonly File[
       error: result.status === "failed" ? result.error : null,
       correct: verdict === item.expected.verdict && rulesMatch,
       record: result.record,
+      outputs: replay(log.read(runId)).outputs,
     };
   } catch (error) {
     throw new Error(`${item.id}: ${error instanceof Error ? error.message : "replay failed"}`, { cause: error });
@@ -285,10 +272,6 @@ function readTree(dir: string): File[] {
 
 function sameItems(left: readonly string[], right: readonly string[]): boolean {
   return [...left].sort().join("\n") === [...right].sort().join("\n");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function jsonFile(path: string): unknown {
