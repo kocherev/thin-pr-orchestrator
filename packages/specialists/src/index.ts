@@ -18,3 +18,4 @@ export {
   type JudgeSubject,
   type JudgeVerdict,
 } from "./judge.js";
+export { costOf, type PricedModel } from "./pricing.js";
