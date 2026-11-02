@@ -34,3 +34,4 @@ export {
   type CassetteEntry,
   type SpendMeter,
 } from "./transport.js";
+export { scriptedUpstream, type Script, type ScriptedTurn } from "./scripted.js";
