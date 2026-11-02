@@ -31,20 +31,21 @@ export async function runJudge(
   const { minPassRate } = z.object({ minPassRate: z.number().gt(0).lte(1) }).parse(baseline);
   const session = createJudge(env, fetchImpl);
   const { budget } = loadRepoConfig(join(workspace, "evals", "sample-repo"));
-  // The judge scores what each replayed run did: the recorded replies plus the measured diff and checks.
-  const runs = new Map((await runEval(workspace)).cases.map((run) => [run.id, run.record]));
+  // The judge scores what each replayed run did: the step outputs plus the measured diff and checks.
+  const runs = new Map((await runEval(workspace)).cases.map((run) => [run.id, run]));
   const cases: JudgeCaseReport[] = [];
   for (const item of loadCases(workspace)) {
-    const record = runs.get(item.id);
+    const run = runs.get(item.id);
+    const record = run?.record;
     const files = record?.diff?.files ?? [];
     const verdict = await session.judge({
       id: item.id,
       issueTitle: item.issueTitle,
       issueBody: item.issueBody,
-      plan: item.recording.plan,
-      implement: item.recording.implement,
+      plan: run?.outputs.plan,
+      implement: run?.outputs.implement,
       checks: record?.checks ?? [],
-      review: item.recording.review,
+      review: run?.outputs.review,
       changes: files.map((file) => file.path),
       files: files.length,
       lines: files.reduce((sum, file) => sum + file.added + file.removed, 0),

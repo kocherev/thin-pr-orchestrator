@@ -3,8 +3,8 @@ import {
   createJudge,
   judgePrompt,
   judgeReplay,
-  LIVE_EFFORT,
-  LIVE_MODEL_ID,
+  JUDGE_EFFORT,
+  JUDGE_MODEL,
   parseJudgeText,
   type CheckResult,
   type JudgeSubject,
@@ -15,7 +15,7 @@ describe("judge rubric", () => {
     const verdict = judgeReplay(
       subject({
         plan: { summary: "Rename the helpers.", steps: [] },
-        review: { summary: "No behavior changed.", notes: [] },
+        review: { summary: "No behavior changed.", verdict: "approve", notes: [] },
       }),
     );
     expect(verdict.verdict).toBe("fail");
@@ -48,7 +48,11 @@ describe("judge rubric", () => {
     const verdict = judgeReplay(
       subject({
         checks: [check("typecheck", 0), check("test", 1)],
-        review: { summary: "The check is case-sensitive.", notes: ["The recorded tests did not pass."] },
+        review: {
+          summary: "The check is case-sensitive.",
+          verdict: "changes_requested",
+          notes: ["The recorded tests did not pass."],
+        },
       }),
     );
     expect(verdict.verdict).toBe("pass");
@@ -82,25 +86,27 @@ describe("judge rubric", () => {
       { THIN_PR_JUDGE: "live", THIN_PR_MODEL: "live", ANTHROPIC_API_KEY: "test-key" },
       async (_url, init) => {
         body = String(init?.body ?? "");
-        return new Response(
-          JSON.stringify({
-            stop_reason: "end_turn",
-            content: [
-              { type: "thinking", thinking: "skip" },
-              { type: "text", text: JSON.stringify(passingText()) },
-            ],
-            usage: { input_tokens: 100, output_tokens: 50 },
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
+        return Response.json({
+          id: "msg_1",
+          type: "message",
+          role: "assistant",
+          model: JUDGE_MODEL,
+          stop_reason: "end_turn",
+          stop_details: null,
+          content: [
+            { type: "thinking", thinking: "", signature: "sig" },
+            { type: "text", text: JSON.stringify(passingText()) },
+          ],
+          usage: { input_tokens: 100, output_tokens: 50 },
+        });
       },
     );
 
     await expect(session.judge(subject({}))).resolves.toMatchObject({ verdict: "pass" });
     const payload = JSON.parse(body) as Record<string, unknown>;
-    expect(payload.model).toBe(LIVE_MODEL_ID);
+    expect(payload.model).toBe(JUDGE_MODEL);
     expect(payload.thinking).toEqual({ type: "adaptive" });
-    expect(payload.output_config).toEqual({ effort: LIVE_EFFORT });
+    expect(payload.output_config).toMatchObject({ effort: JUDGE_EFFORT, format: { type: "json_schema" } });
     expect(payload).not.toHaveProperty("temperature");
     expect(payload).not.toHaveProperty("top_p");
     expect(payload).not.toHaveProperty("top_k");
@@ -148,7 +154,7 @@ function subject(overrides: Partial<JudgeSubject>): JudgeSubject {
     plan: { summary: "Stop decrement from going below zero.", steps: ["Change decrement in src/counter.ts"] },
     implement: { summary: "Clamp decrement at zero.", files: ["src/counter.ts"] },
     checks: [check("typecheck", 0), check("test", 0)],
-    review: { summary: "The clamp matches the issue.", notes: [] },
+    review: { summary: "The clamp matches the issue.", verdict: "approve", notes: [] },
     changes: ["src/counter.ts"],
     files: 1,
     lines: 2,

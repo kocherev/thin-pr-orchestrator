@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import * as core from "@actions/core";
 import * as github from "@actions/github";
 import { Octokit } from "@octokit/rest";
-import { AnthropicModelClient, createModelClient } from "@thin-pr/specialists";
+import { clientOptionsFromEnv, createAnthropicClient, type ModelSession } from "@thin-pr/specialists";
 import { exportRunRecord } from "./record.js";
 import { runAction } from "./run.js";
 import { createGitHubSurface } from "./surface.js";
@@ -21,7 +21,17 @@ async function main(): Promise<void> {
   const tracing = await startTrace();
   let failure = "";
   try {
-    const model = createModelClient();
+    const sessions: ModelSession[] = [];
+    // A labeled issue asks for a real change, so the Action calls the model unless THIN_PR_MODEL says otherwise.
+    const options = clientOptionsFromEnv({ ...process.env, THIN_PR_MODEL: process.env.THIN_PR_MODEL || "live" });
+    const model = (): ModelSession => {
+      if (options.mode !== "replay" && !process.env.ANTHROPIC_API_KEY) {
+        throw new Error("ANTHROPIC_API_KEY is missing. Add it as a repository secret so the thin-pr workflow can call the model.");
+      }
+      const session = createAnthropicClient(options);
+      sessions.push(session);
+      return session;
+    };
     const runId = process.env.GITHUB_RUN_ID ? `gha-${process.env.GITHUB_RUN_ID}` : `local-${Date.now()}`;
     // actions/checkout leaves the default branch at the event's commit and stores no credentials; the push gets the token.
     const result = await runAction({
@@ -35,9 +45,10 @@ async function main(): Promise<void> {
       github: createGitHubSurface(new Octokit({ auth: token })),
       model,
     });
-    if (model instanceof AnthropicModelClient) {
-      const spend = { usd: model.spentUsd() };
-      core.info(`Live model spend estimate: ${spend.usd.toFixed(6)} USD`);
+    const session = sessions[0];
+    if (session && options.mode !== "replay") {
+      const spend = { usd: session.meter.spentUsd };
+      core.info(`Model spend: ${spend.usd.toFixed(6)} USD`);
       const spendPath = process.env.THIN_PR_SPEND_PATH;
       if (spendPath) {
         writeFileSync(spendPath, `${JSON.stringify(spend)}\n`);

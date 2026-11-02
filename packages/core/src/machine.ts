@@ -1,7 +1,7 @@
 import type { EventLog, NewRunEvent } from "./log.js";
 import { withSpan } from "./span.js";
 import type { Template, TemplateStep } from "./template.js";
-import type { RunEvent, RunState, StepHandler, StepId, StepResult } from "./types.js";
+import type { RunEvent, RunState, StepHandler, StepId, StepResult, Usage } from "./types.js";
 
 type RunInput = {
   readonly runId: string;
@@ -14,6 +14,17 @@ type RunInput = {
 
 /** A step that ran out of retries or loops. The run records it and stops. */
 class StepFailure extends Error {}
+
+/** A failed attempt that already spent model calls. The `failed` event keeps its usage, so the run totals count it. */
+export class StepError extends Error {
+  readonly usage: readonly Usage[];
+
+  constructor(cause: unknown, usage: readonly Usage[]) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+    this.name = "StepError";
+    this.usage = usage;
+  }
+}
 
 export async function runWorkflow(input: RunInput): Promise<RunState> {
   const { runId, issue, template, handlers, log } = input;
@@ -61,7 +72,8 @@ export async function runWorkflow(input: RunInput): Promise<RunState> {
         });
       } catch (error) {
         lastError = error instanceof Error && error.message.length > 0 ? error.message : "step failed";
-        await emit({ step: step.id, kind: "failed", attempt, error: lastError });
+        const usage = error instanceof StepError ? error.usage : [];
+        await emit({ step: step.id, kind: "failed", attempt, error: lastError, usage });
         continue;
       }
 

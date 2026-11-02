@@ -1,12 +1,5 @@
 export type SpecialistName = "planner" | "implementer" | "reviewer" | "pr-writer";
 
-export interface ModelClient {
-  complete(request: {
-    readonly specialist: SpecialistName;
-    readonly prompt: string;
-  }): Promise<string>;
-}
-
 export class SpecialistSchemaError extends Error {
   readonly specialist: string;
   readonly phase: "input" | "output";

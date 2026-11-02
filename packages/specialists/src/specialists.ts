@@ -1,83 +1,113 @@
-import type { Json, StepContext, StepHandler, StepId } from "@thin-pr/core";
+import { StepError, type Json, type StepContext, type StepHandler, type StepId } from "@thin-pr/core";
 import { z } from "zod";
-import { SpecialistSchemaError, type ModelClient, type SpecialistName } from "./contract.js";
+import type { SpecialistName } from "./contract.js";
+import type { ModelSession } from "./client.js";
+import { runImplementer } from "./implementer.js";
+import { pricedModel, type PricedModel } from "./pricing.js";
+import { PLANNER_SYSTEM, PR_WRITER_SYSTEM, REVIEWER_SYSTEM } from "./prompts.js";
+import { structured, type Effort } from "./structured.js";
+import type { CheckResult, Workspace } from "./workspace.js";
 
 const text = z.string().min(1);
 
 export const plannerOutput = z.object({ summary: text, steps: z.array(text).min(1) }).strict();
 
-export const implementerOutput = z
+/** `files` comes from the workspace diff, never from the model. */
+export const implementerOutput = z.object({ summary: text, files: z.array(text) }).strict();
+
+export const checkResult = z
   .object({
-    summary: text,
-    files: z.array(text).min(1),
-    edits: z.array(z.object({ path: text, content: z.string() }).strict()).min(1).optional(),
+    name: z.enum(["typecheck", "test"]),
+    command: z.string(),
+    exitCode: z.number().int(),
+    durationMs: z.number(),
+    logTail: z.string(),
   })
+  .strict() satisfies z.ZodType<CheckResult>;
+
+/** The verify step's output: a one-line summary and each check result. */
+export const verifyOutput = z.object({ summary: text, checks: z.array(checkResult) }).strict();
+
+export const reviewerOutput = z
+  .object({ summary: text, verdict: z.enum(["approve", "changes_requested"]), notes: z.array(z.string()) })
   .strict();
 
-export const reviewerOutput = z.object({ summary: text, notes: z.array(z.string()) }).strict();
-
 export const prWriterOutput = z.object({ summary: text, title: text, body: text }).strict();
-
-type StepSpec = {
-  readonly specialist: SpecialistName;
-  readonly input: z.ZodType;
-  readonly output: z.ZodType<Json>;
-  readonly read: (context: StepContext) => unknown;
-};
 
 /** The steps a model answers. `verify` runs the repo's checks instead. */
 type ModelStepId = Exclude<StepId, "verify">;
 
-const STEPS: Record<ModelStepId, StepSpec> = {
-  plan: {
-    specialist: "planner",
-    input: z.object({ issue: text }).strict(),
-    output: plannerOutput,
-    read: (context) => ({ issue: context.issue }),
-  },
-  implement: {
-    specialist: "implementer",
-    input: z.object({ issue: text, planSummary: text }).strict(),
-    output: implementerOutput,
-    read: (context) => ({ issue: context.issue, planSummary: summaryOf(context.outputs.plan) }),
-  },
-  review: {
-    specialist: "reviewer",
-    input: z.object({ issue: text, testSummary: text }).strict(),
-    output: reviewerOutput,
-    read: (context) => ({ issue: context.issue, testSummary: summaryOf(context.outputs.verify) }),
-  },
-  write: {
-    specialist: "pr-writer",
-    input: z.object({ issue: text, reviewSummary: text }).strict(),
-    output: prWriterOutput,
-    read: (context) => ({ issue: context.issue, reviewSummary: summaryOf(context.outputs.review) }),
-  },
+// Used when a template step names no model or effort.
+const DEFAULTS: Record<ModelStepId, { readonly specialist: SpecialistName; readonly model: PricedModel; readonly effort: Effort }> = {
+  plan: { specialist: "planner", model: "claude-sonnet-5-5", effort: "medium" },
+  implement: { specialist: "implementer", model: "claude-opus-5-5", effort: "high" },
+  review: { specialist: "reviewer", model: "claude-sonnet-5-5", effort: "high" },
+  write: { specialist: "pr-writer", model: "claude-haiku-5-5", effort: "low" },
 };
 
-const FIXTURES: Record<SpecialistName, Json> = {
-  planner: { summary: "Plan the stub change.", steps: ["edit the stub"] },
-  implementer: { summary: "Apply the stub change.", files: ["src/stub.ts"] },
-  reviewer: { summary: "Stub review found nothing.", notes: [] },
-  "pr-writer": { summary: "pass", title: "Fix the stub", body: "Stub draft." },
-};
-
-/** One handler per model step. Each one validates its input, asks the model, and validates the reply. */
-export function createStepHandlers(model: ModelClient): Record<ModelStepId, StepHandler> {
-  return {
-    plan: handler(STEPS.plan, model),
-    implement: handler(STEPS.implement, model),
-    review: handler(STEPS.review, model),
-    write: handler(STEPS.write, model),
+/** One handler per model step. Each returns the usage of the calls it made. */
+export function createStepHandlers(session: ModelSession, workspace: Workspace): Record<ModelStepId, StepHandler> {
+  const { client, meter } = session;
+  const route = (step: ModelStepId, context: StepContext) => ({
+    specialist: DEFAULTS[step].specialist,
+    model: pricedModel(context.step.model ?? DEFAULTS[step].model),
+    effort: context.step.effort ?? DEFAULTS[step].effort,
+    issue: context.issue,
+  });
+  const metered = (step: StepHandler): StepHandler => {
+    return async (context) => {
+      const before = meter.usage.length;
+      try {
+        const result = await step(context);
+        return { ...result, usage: meter.usage.slice(before) };
+      } catch (error) {
+        const usage = meter.usage.slice(before);
+        throw usage.length > 0 ? new StepError(error, usage) : error;
+      }
+    };
   };
-}
 
-export class ReplayModelClient implements ModelClient {
-  constructor(private readonly overrides: Partial<Record<SpecialistName, string>> = {}) {}
-
-  async complete(request: { readonly specialist: SpecialistName; readonly prompt: string }): Promise<string> {
-    return this.overrides[request.specialist] ?? JSON.stringify(FIXTURES[request.specialist]);
-  }
+  return {
+    plan: metered(async (context) => {
+      const input = withFeedback("Plan the change.", context.feedback);
+      const output = await structured(client, { ...route("plan", context), system: PLANNER_SYSTEM, input, schema: plannerOutput });
+      return { outcome: "done", output };
+    }),
+    implement: metered(async (context) => {
+      const plan = plannerOutput.parse(context.outputs.plan);
+      const input = withFeedback(`Plan: ${plan.summary}\n${bullets(plan.steps)}`, context.feedback);
+      const summary = await runImplementer(client, { ...route("implement", context), input, workspace });
+      const files = (await workspace.diff()).files.map((file) => file.path);
+      return { outcome: "done", output: { summary, files } };
+    }),
+    review: metered(async (context) => {
+      const plan = plannerOutput.parse(context.outputs.plan);
+      const { checks } = verifyOutput.parse(context.outputs.verify);
+      const { patch } = await workspace.diff();
+      const input = [
+        `Plan: ${plan.summary}\n${bullets(plan.steps)}`,
+        `Diff:\n${patch.length > 0 ? patch : "(empty)"}`,
+        `Checks:\n${checks.map((check) => `${check.name} exited ${check.exitCode}: ${check.command}\n${check.logTail}`).join("\n")}`,
+      ].join("\n\n");
+      const output = await structured(client, { ...route("review", context), system: REVIEWER_SYSTEM, input, schema: reviewerOutput });
+      // Like verify, the last allowed pass finishes, so the gate reports the verdict instead of the run failing.
+      if (output.verdict === "approve" || context.loop >= (context.step.loop?.max ?? 0)) {
+        return { outcome: "done", output };
+      }
+      return { outcome: "loop", output, feedback: `Review notes:\n${bullets(output.notes)}` };
+    }),
+    write: metered(async (context) => {
+      const { files } = implementerOutput.parse(context.outputs.implement);
+      const input = [
+        `Plan: ${summaryOf(context.outputs.plan)}`,
+        `Change: ${summaryOf(context.outputs.implement)}`,
+        `Files: ${files.join(", ")}`,
+        `Review: ${summaryOf(context.outputs.review)}`,
+      ].join("\n");
+      const output = await structured(client, { ...route("write", context), system: PR_WRITER_SYSTEM, input, schema: prWriterOutput });
+      return { outcome: "done", output };
+    }),
+  };
 }
 
 /** The `summary` field every step output carries, or "" when it is missing. */
@@ -88,33 +118,10 @@ export function summaryOf(output: Json | undefined): string {
   return typeof output.summary === "string" ? output.summary : "";
 }
 
-function handler(spec: StepSpec, model: ModelClient): StepHandler {
-  return async (context) => {
-    const input = parse(spec.specialist, "input", spec.input, spec.read(context));
-    const text = await model.complete({
-      specialist: spec.specialist,
-      prompt: JSON.stringify({ input, feedback: context.feedback }),
-    });
-    const output = parse(spec.specialist, "output", spec.output, readJson(spec.specialist, text));
-    return { outcome: "done", output };
-  };
+function bullets(items: readonly string[]): string {
+  return items.map((item) => `- ${item}`).join("\n");
 }
 
-function parse<T>(specialist: SpecialistName, phase: "input" | "output", schema: z.ZodType<T>, value: unknown): T {
-  const parsed = schema.safeParse(value);
-  if (parsed.success) {
-    return parsed.data;
-  }
-  const issue = parsed.error.issues[0];
-  throw new SpecialistSchemaError(specialist, phase, issue?.path.join(".") || "(root)", issue?.message ?? "invalid");
-}
-
-function readJson(specialist: SpecialistName, text: string): unknown {
-  const trimmed = text.trim();
-  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(trimmed);
-  try {
-    return JSON.parse(fenced?.[1] ?? trimmed) as unknown;
-  } catch {
-    throw new Error(`${specialist} model text is not JSON`);
-  }
+function withFeedback(input: string, feedback: string | null): string {
+  return feedback ? `${input}\n\nFeedback from the last attempt:\n${feedback}` : input;
 }

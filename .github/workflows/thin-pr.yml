@@ -44,7 +44,6 @@ jobs:
       - name: Run labeled issue
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          THIN_PR_MODEL: ${{ secrets.ANTHROPIC_API_KEY != '' && 'live' || 'replay' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           THIN_PR_TRACE_PATH: artifacts/trace.json
           # The runner has no git identity. These name the commit on thin-pr/<issue>.

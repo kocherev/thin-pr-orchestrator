@@ -48,10 +48,10 @@ baseline: 70.6%
   tests: fail. Checks did not pass and the review has no notes.
   review: fail. Review has no notes for failed checks.
 10-empty-plan fail
-  plan: fail. Plan has no steps.
-  files: fail. Implementer files do not match the recorded diff.
+  plan: fail. Plan does not match the planner contract.
+  files: fail. Implementer output does not match the contract.
   tests: fail. Checks did not pass and the review has no notes.
-  review: fail. Review has no notes for failed checks.
+  review: fail. Reviewer output does not match the contract.
 11-wide-touch fail
   plan: pass. Plan has 1 step.
   files: pass. Implementer files match the recorded diff (4 files).

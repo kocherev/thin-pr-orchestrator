@@ -6,6 +6,7 @@ import {
   openEventLog,
   replay,
   runWorkflow,
+  StepError,
   type StepContext,
   type StepHandler,
   type StepId,
@@ -195,6 +196,40 @@ describe("runWorkflow", () => {
     log.close();
 
     expect(seen).toEqual(["1 run started", "2 plan started", "handler", "3 plan finished", "4 run completed"]);
+  });
+});
+
+describe("failed attempts", () => {
+  it("keeps the usage of an attempt that failed after model calls", async () => {
+    const path = logPath();
+    const log = openEventLog(path);
+    let attempts = 0;
+    const state = await runWorkflow({
+      runId: "run-2",
+      issue: "Clamp decrement at zero.",
+      template,
+      log,
+      handlers: handlers({
+        implement: async () => {
+          attempts += 1;
+          if (attempts === 1) {
+            throw new StepError(new Error("implementer request was refused"), [usage(0.03)]);
+          }
+          return { outcome: "done", output: { summary: "edit" }, usage: [usage(0.02)] };
+        },
+      }),
+    });
+    const events = log.read("run-2");
+    log.close();
+
+    expect(state.status).toBe("completed");
+    expect(state.usage.map((item) => item.costUsd)).toEqual([0.01, 0.03, 0.02, 0.01, 0.01, 0.01]);
+    expect(events.find((event) => event.kind === "failed")).toMatchObject({
+      step: "implement",
+      error: "implementer request was refused",
+      usage: [usage(0.03)],
+    });
+    expect(replay(events)).toEqual(state);
   });
 });
 

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { ReplayModelClient, type ModelClient } from "@thin-pr/specialists";
+import { createAnthropicClient, scriptedUpstream, type ModelSession, type Script } from "@thin-pr/specialists";
 import { createScratchRepo } from "@thin-pr/workspace";
 import { runAction, type LabelRunResult } from "./run.js";
 import type { GitHubSurface } from "./surface.js";
@@ -23,16 +23,41 @@ afterEach(() => {
 const STUB = "export function stub(): number {\n  return 0;\n}\n";
 const PASSING_CHECKS = "checks:\n  typecheck: echo typecheck ok\n  test: echo test ok\n";
 
+const STUB_SCRIPT: Script = {
+  planner: [{ summary: "Plan the stub change.", steps: ["edit the stub"] }],
+  implementer: {
+    turns: [
+      [{ name: "read_file", input: { path: "src/stub.ts" } }],
+      [{ name: "replace", input: { path: "src/stub.ts", old_text: "return 0;", new_text: "return 1;" } }],
+    ],
+    summary: "Apply the stub change.",
+  },
+  reviewer: [{ summary: "Stub review found nothing.", verdict: "approve", notes: [] }],
+  "pr-writer": [{ summary: "pass", title: "Fix the stub", body: "Stub draft." }],
+};
+
 describe("issue label", () => {
   it("pushes the branch and opens a draft when every gate rule passes", async () => {
     const repo = scratch(PASSING_CHECKS);
     const memory = memoryGitHub();
-    const result = await run(repo, memory.github, { model: modelFromFixture("gate-pass.json") });
+    const result = await run(repo, memory.github, { model: cassette("gate-pass") });
 
     expect(result.status).toBe("opened");
     if (result.status !== "opened") {
       return;
     }
+    const modelSteps = result.record.steps.filter((step) => step.id !== "verify");
+    expect(modelSteps.every((step) => step.usage.length > 0 && step.usage.every((call) => call.costUsd > 0))).toBe(true);
+    expect(result.record.steps.find((step) => step.id === "implement")?.usage.map((call) => call.model)).toEqual([
+      "claude-opus-5-5",
+      "claude-opus-5-5",
+      "claude-opus-5-5",
+    ]);
+    expect(result.record.totals.costUsd).toBeCloseTo(
+      modelSteps.flatMap((step) => step.usage).reduce((sum, call) => sum + call.costUsd, 0),
+      12,
+    );
+    expect(result.record.totals.inputTokens).toBeGreaterThan(0);
     const head = git(repo.remote, "rev-parse", "thin-pr/7");
     expect(git(repo.remote, "log", "--format=%s", "thin-pr/7")).toBe("Apply thin-pr/#7\nBase");
     expect(git(repo.remote, "show", "thin-pr/7:src/stub.ts")).toContain("return 1;");
@@ -75,9 +100,17 @@ describe("issue label", () => {
   it("comments the run report and pushes nothing when a gate rule fails", async () => {
     const repo = scratch(PASSING_CHECKS);
     const memory = memoryGitHub();
-    const result = await run(repo, memory.github, { model: modelFromFixture("gate-fail.json") });
+    const result = await run(repo, memory.github, { model: cassette("gate-fail") });
 
     expect(result).toMatchObject({ status: "blocked", error: "gate failed: review" });
+    if (result.status !== "blocked") {
+      return;
+    }
+    expect(result.record.steps.filter((step) => step.id === "review").map((step) => step.outcome)).toEqual([
+      "looped",
+      "looped",
+      "finished",
+    ]);
     expect(git(repo.remote, "branch", "--list", "thin-pr/7")).toBe("");
     expect(memory.calls.some((call) => call.op === "openDraft" || call.op === "listPullsForHead")).toBe(false);
     const ruleChecks = memory.calls.filter((call) => call.op === "startCheck" && String(call.name).includes("/ gate /"));
@@ -85,13 +118,13 @@ describe("issue label", () => {
     const comment = memory.calls.find((call) => call.op === "comment");
     expect(comment).toMatchObject({ issue: 7, owner: "example", repo: "sample-repo" });
     expect(comment?.body).toContain("- Error: gate failed: review");
-    expect(comment?.body).toContain("- gate/review: failure. FAIL: Reviewer left 1 note.");
+    expect(comment?.body).toContain("- gate/review: failure. FAIL: Reviewer requested changes (1 note).");
   });
 
   it("loops verify back to implement on a failing test, then blocks on the tests rule", async () => {
     const repo = scratch("checks:\n  typecheck: 'true'\n  test: echo '1 failed'; exit 1\n");
     const memory = memoryGitHub();
-    const result = await run(repo, memory.github, { model: modelFromFixture("gate-pass.json") });
+    const result = await run(repo, memory.github, { model: scripted(STUB_SCRIPT) });
 
     expect(result).toMatchObject({ status: "blocked", error: "gate failed: tests" });
     if (result.status !== "blocked") {
@@ -114,22 +147,29 @@ describe("issue label", () => {
     );
   });
 
-  it("installs once before verify and fails the run when the install fails", async () => {
+  it("runs install before the first step and fails the run with its log tail when the install fails", async () => {
     const repo = scratch(`install: echo 'lockfile is out of date'; exit 3\n${PASSING_CHECKS}`);
     const memory = memoryGitHub();
-    const result = await run(repo, memory.github, { model: modelFromFixture("gate-pass.json") });
+    const result = await run(repo, memory.github, { model: cassette("gate-pass") });
 
     expect(result).toMatchObject({
       status: "failed",
-      error: "verify failed after 1 attempt: install failed (exit 3): echo 'lockfile is out of date'; exit 3\nlockfile is out of date\n",
+      error: "install failed (exit 3): echo 'lockfile is out of date'; exit 3\nlockfile is out of date\n",
     });
+    if (result.status !== "failed") {
+      return;
+    }
+    expect(result.record.steps).toEqual([]);
+    expect(memory.calls.find((call) => call.op === "comment")?.body).toContain("lockfile is out of date");
     expect(git(repo.remote, "branch", "--list", "thin-pr/7")).toBe("");
   });
 
   it("blocks a run whose implementer changed nothing", async () => {
     const repo = scratch(PASSING_CHECKS);
     const memory = memoryGitHub();
-    const result = await run(repo, memory.github, { model: new ReplayModelClient() });
+    const result = await run(repo, memory.github, {
+      model: scripted({ ...STUB_SCRIPT, implementer: { turns: [], summary: "Nothing to change." } }),
+    });
 
     expect(result).toMatchObject({ status: "blocked", error: "gate failed: diff" });
     expect(memory.calls.find((call) => call.op === "comment")?.body).toContain("FAIL: Diff is empty.");
@@ -139,7 +179,7 @@ describe("issue label", () => {
     const repo = scratch(PASSING_CHECKS);
     const memory = memoryGitHub();
     const result = await run(repo, memory.github, {
-      model: new ReplayModelClient({ planner: JSON.stringify({ summary: 1, steps: ["edit the stub"] }) }),
+      model: scripted({ ...STUB_SCRIPT, planner: [{ summary: 1, steps: ["edit the stub"] }] }),
     });
 
     expect(result).toMatchObject({
@@ -159,16 +199,78 @@ describe("issue label", () => {
     expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
   });
 
-  it("resets the branch from the fresh base and updates the open draft when the label is added again", async () => {
+  it("fails the step with the refusal category when the model declines", async () => {
+    const repo = scratch(PASSING_CHECKS);
+    const memory = memoryGitHub();
+    const refusing: typeof fetch = async () =>
+      Response.json({
+        id: "msg_1",
+        type: "message",
+        role: "assistant",
+        model: "claude-sonnet-5-5",
+        content: [],
+        stop_reason: "refusal",
+        stop_sequence: null,
+        stop_details: { type: "refusal", category: "cyber", explanation: null },
+        usage: { input_tokens: 300, output_tokens: 0 },
+      });
+    const model = createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: refusing }, {});
+    const result = await run(repo, memory.github, { model });
+
+    expect(result).toMatchObject({
+      status: "failed",
+      error: "plan failed after 2 attempts: planner request was refused by claude-sonnet-5-5 (category: cyber)",
+    });
+    expect(memory.calls.find((call) => call.op === "comment")?.body).toContain("(category: cyber)");
+    if (result.status !== "failed") {
+      return;
+    }
+    // Both refused attempts were billed for their input, so the run totals count them.
+    expect(result.record.steps.map((step) => [step.id, step.outcome, step.usage.length])).toEqual([
+      ["plan", "failed", 1],
+      ["plan", "failed", 1],
+    ]);
+    expect(result.record.totals.inputTokens).toBe(600);
+    expect(result.record.totals.costUsd).toBeCloseTo((600 * 2) / 1_000_000, 12);
+  });
+
+  it("sends review notes back to implement once, then opens the draft when the reviewer approves", async () => {
+    const repo = scratch(PASSING_CHECKS);
+    const memory = memoryGitHub();
+    const changes = { summary: "The stub needs a comment.", verdict: "changes_requested", notes: ["Say why stub returns 1."] };
+    const result = await run(repo, memory.github, {
+      model: scripted({ ...STUB_SCRIPT, reviewer: [changes, ...STUB_SCRIPT.reviewer] }),
+    });
+
+    expect(result.status).toBe("opened");
+    if (result.status !== "opened") {
+      return;
+    }
+    expect(result.record.steps.map((step) => `${step.id} ${step.loop} ${step.outcome}`)).toEqual([
+      "plan 0 finished",
+      "implement 0 finished",
+      "verify 0 finished",
+      "review 0 looped",
+      "implement 1 finished",
+      "verify 1 finished",
+      "review 1 finished",
+      "write 0 finished",
+    ]);
+    expect(result.record.steps[3]?.summary).toBe("Review notes:\n- Say why stub returns 1.");
+    expect(result.record.gate.find((rule) => rule.rule === "review")?.reason).toBe("Reviewer approved.");
+  });
+
+  // Two full runs, a clone and three pushes take a few seconds on a busy machine.
+  it("resets the branch from the fresh base and updates the open draft when the label is added again", { timeout: 20_000 }, async () => {
     const repo = scratch(PASSING_CHECKS);
     const first = memoryGitHub();
-    expect((await run(repo, first.github, { model: modelFromFixture("gate-pass.json") })).status).toBe("opened");
+    expect((await run(repo, first.github, { model: cassette("gate-pass") })).status).toBe("opened");
     const firstHead = git(repo.remote, "rev-parse", "thin-pr/7");
 
     // The default branch moves on. The next run starts from a fresh clone, as actions/checkout gives it.
     const clone = cloneAndCommit(repo.remote, "README.md", "# Sample\n");
     const second = memoryGitHub({ openPull: { number: 11, url: "https://github.com/example/sample-repo/pull/11" } });
-    const result = await run(clone, second.github, { model: modelFromFixture("gate-pass.json") });
+    const result = await run(clone, second.github, { model: cassette("gate-pass") });
 
     expect(result.status).toBe("opened");
     expect(git(repo.remote, "rev-parse", "thin-pr/7^")).toBe(clone.baseSha);
@@ -179,11 +281,30 @@ describe("issue label", () => {
     expect(second.calls.at(-1)?.body).toContain("## Run report");
   });
 
+  it("comments the setup error when the model cannot start", async () => {
+    const repo = scratch(PASSING_CHECKS);
+    const memory = memoryGitHub();
+    const result = await runAction({
+      payload: readFixture(),
+      templates: join(root, "templates"),
+      checkout: repo.dir,
+      baseSha: repo.baseSha,
+      runId: "run-7",
+      logPath: join(mkdtempSync(join(tmpdir(), "thin-pr-label-")), "events.sqlite"),
+      github: memory.github,
+      model: () => createAnthropicClient({ mode: "live" }, {}),
+    });
+
+    expect(result).toMatchObject({ status: "failed", error: "ANTHROPIC_API_KEY is missing" });
+    expect(memory.calls.find((call) => call.op === "comment")?.body).toContain("- Error: ANTHROPIC_API_KEY is missing");
+    expect(memory.calls.some((call) => call.op === "startCheck")).toBe(false);
+  });
+
   it("ignores a label other than thin-pr", async () => {
     const repo = scratch(PASSING_CHECKS);
     const memory = memoryGitHub();
     const payload = { ...readFixture(), label: { name: "bug" } };
-    const result = await run(repo, memory.github, { payload });
+    const result = await run(repo, memory.github, { model: scripted(STUB_SCRIPT), payload });
 
     expect(result).toEqual({ status: "ignored" });
     expect(memory.calls).toEqual([]);
@@ -200,8 +321,8 @@ describe("issue label", () => {
     expect(readFileSync(fileURLToPath(new URL("./action.ts", import.meta.url)), "utf8")).toContain("pushToken: token");
     expect(workflow).toContain("GIT_AUTHOR_NAME: thin-pr[bot]");
     expect(workflow).toContain("GIT_COMMITTER_EMAIL: thin-pr@example.invalid");
-    expect(workflow).toContain("THIN_PR_MODEL:");
-    expect(workflow).toContain("|| 'replay'");
+    expect(workflow).toContain("ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}");
+    expect(workflow).not.toContain("THIN_PR_MODEL");
     expect(workflow).toContain("contents: write");
     expect(workflow).toContain("checks: write");
     expect(workflow).toContain("issues: write");
@@ -238,14 +359,12 @@ function readFixture(): Record<string, unknown> {
   return JSON.parse(readFileSync(join(root, "fixtures", "sample-issue-labeled.json"), "utf8")) as Record<string, unknown>;
 }
 
-function modelFromFixture(name: string): ModelClient {
-  const fixture = JSON.parse(readFileSync(join(root, "fixtures", name), "utf8")) as Record<string, unknown>;
-  return new ReplayModelClient({
-    planner: JSON.stringify(fixture.plan),
-    implementer: JSON.stringify(fixture.implement),
-    reviewer: JSON.stringify(fixture.review),
-    "pr-writer": JSON.stringify(fixture.pullRequest),
-  });
+function cassette(name: string): ModelSession {
+  return createAnthropicClient({ mode: "replay", cassettePath: join(root, "fixtures", `${name}.jsonl`) }, {});
+}
+
+function scripted(script: Script): ModelSession {
+  return createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: scriptedUpstream(script) }, {});
 }
 
 type Checkout = { readonly dir: string; readonly baseSha: string };
@@ -278,7 +397,7 @@ function cloneAndCommit(remote: string, path: string, content: string): Checkout
 async function run(
   checkout: Checkout,
   github: GitHubSurface,
-  options: { readonly model?: ModelClient; readonly payload?: unknown },
+  options: { readonly model: ModelSession; readonly payload?: unknown },
 ): Promise<LabelRunResult> {
   const directory = mkdtempSync(join(tmpdir(), "thin-pr-label-"));
   cleanups.push(() => rmSync(directory, { recursive: true, force: true }));
@@ -290,7 +409,7 @@ async function run(
     runId: "run-7",
     logPath: join(directory, "events.sqlite"),
     github,
-    model: options.model,
+    model: () => options.model,
   });
 }
 

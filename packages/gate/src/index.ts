@@ -1,6 +1,5 @@
 import { plannerOutput, reviewerOutput, type CheckResult, type Diff } from "@thin-pr/specialists";
 import { classifyPath, type RepoConfig } from "@thin-pr/workspace";
-import { z } from "zod";
 import { scanAddedLines } from "./secrets.js";
 
 export const GATE_RULES = ["plan", "contracts", "diff", "budget", "paths", "secrets", "typecheck", "tests", "review"] as const;
@@ -134,25 +133,17 @@ function checkRule(rule: "typecheck" | "tests", { checks }: RunEvidence): GateRu
   return pass(rule, `${label} passed: ${check.command}`);
 }
 
-// shortcut: today's reviewer has no verdict, so empty notes count as approval; PR 4 adds the verdict field.
-const reviewVerdict = z.object({ verdict: z.enum(["approve", "changes_requested"]) });
-
 function reviewRule({ review }: RunEvidence): GateRuleResult {
   if (review === null || review === undefined) {
     return fail("review", "Review is missing.");
-  }
-  const verdict = reviewVerdict.safeParse(review);
-  if (verdict.success) {
-    return verdict.data.verdict === "approve"
-      ? pass("review", "Reviewer approved.")
-      : fail("review", "Reviewer requested changes.");
   }
   const parsed = reviewerOutput.safeParse(review);
   if (!parsed.success) {
     return fail("review", "Review output does not match its contract.");
   }
-  const notes = parsed.data.notes.length;
-  return notes === 0 ? pass("review", "Reviewer left no notes.") : fail("review", `Reviewer left ${countNoun(notes, "note")}.`);
+  return parsed.data.verdict === "approve"
+    ? pass("review", "Reviewer approved.")
+    : fail("review", `Reviewer requested changes (${countNoun(parsed.data.notes.length, "note")}).`);
 }
 
 function changedLines(diff: Diff): number {

@@ -26,7 +26,7 @@ describe("evaluate", () => {
       { rule: "secrets", verdict: "PASS", reason: "No added line looks like a secret." },
       { rule: "typecheck", verdict: "PASS", reason: "Typecheck passed: tsc --noEmit" },
       { rule: "tests", verdict: "PASS", reason: "Tests passed: vitest run" },
-      { rule: "review", verdict: "PASS", reason: "Reviewer left no notes." },
+      { rule: "review", verdict: "PASS", reason: "Reviewer approved." },
     ]);
     expect(evaluate(evidence({})).map((result) => result.rule)).toEqual([...GATE_RULES]);
     expect(decide(evidence({}))).toBe("pass");
@@ -102,15 +102,14 @@ describe("evaluate", () => {
     expect(reason({ checks: [] }, "tests")).toBe("FAIL: Tests did not run.");
   });
 
-  it("reads a reviewer verdict when present and treats notes as change requests otherwise", () => {
+  it("follows the reviewer verdict, not the number of notes", () => {
     expect(reason({ review: { summary: "Looks fine.", verdict: "approve", notes: ["Nit."] } }, "review")).toBe(
       "PASS: Reviewer approved.",
     );
-    expect(reason({ review: { summary: "No.", verdict: "changes_requested", notes: [] } }, "review")).toBe(
-      "FAIL: Reviewer requested changes.",
-    );
+    const changes = { summary: "Clamp the helper.", verdict: "changes_requested", notes: ["decrementBy goes below zero."] };
+    expect(reason({ review: changes }, "review")).toBe("FAIL: Reviewer requested changes (1 note).");
     expect(reason({ review: { summary: "Clamp the helper.", notes: ["decrementBy goes below zero."] } }, "review")).toBe(
-      "FAIL: Reviewer left 1 note.",
+      "FAIL: Review output does not match its contract.",
     );
     expect(reason({ review: undefined }, "review")).toBe("FAIL: Review is missing.");
     expect(reason({ review: { summary: "", notes: [] } }, "review")).toBe("FAIL: Review output does not match its contract.");
@@ -124,7 +123,7 @@ describe("evaluate", () => {
 function evidence(overrides: Partial<RunEvidence>): RunEvidence {
   return {
     plan: { summary: "Clamp decrement.", steps: ["Change decrement in src/counter.ts"] },
-    review: { summary: "The clamp matches the issue.", notes: [] },
+    review: { summary: "The clamp matches the issue.", verdict: "approve", notes: [] },
     contracts: ["plan", "implement", "verify", "review", "write"].map((step) => ({ step, valid: true })),
     diff: twoLines,
     checks: [check("typecheck", 0), check("test", 0)],
