@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import type { Diff, Workspace } from "@thin-pr/specialists";
+import type { CheckResult, Diff, Workspace } from "@thin-pr/specialists";
 import { runShell } from "./check.js";
 import type { RepoConfig } from "./config.js";
 import { fileTools } from "./tools.js";
@@ -11,12 +11,20 @@ const run = promisify(execFile);
 
 const DEFAULT_CHECK_TIMEOUT_MS = 5 * 60_000;
 
-/** A workspace over a local git checkout that can also commit and push what changed. */
+/** A command result without a check name. */
+export type InstallResult = Omit<CheckResult, "name">;
+
+/** A workspace over a local git checkout that can also install dependencies and commit and push what changed. */
 export type GitWorkspace = Workspace & {
   readonly dir: string;
   readonly baseSha: string;
-  /** Commits every change and force-pushes it to `branch` on `origin`, with a lease. Returns the new head. */
-  commitAndPush(input: { readonly branch: string; readonly message: string }): Promise<string>;
+  /** Runs `install` from `.thin-pr.yml` like a check. Returns null when the file sets no install command. */
+  install(): Promise<InstallResult | null>;
+  /**
+   * Commits every change and force-pushes it to `branch` on `origin`, with a lease. Returns the new head.
+   * A `token` reaches only the push, as an HTTPS header for github.com in git's environment config.
+   */
+  commitAndPush(input: { readonly branch: string; readonly message: string; readonly token?: string }): Promise<string>;
 };
 
 /**
@@ -74,6 +82,10 @@ export async function openWorkspace(input: {
       const command = config.checks[name];
       return { name, command, ...(await runShell(command, { cwd: dir, timeoutMs })) };
     },
+    async install() {
+      const command = config.install;
+      return command === undefined ? null : { command, ...(await runShell(command, { cwd: dir, timeoutMs })) };
+    },
     async diff(): Promise<Diff> {
       // Untracked files that are not ignored would be committed, so they count.
       await git(dir, ["add", "--intent-to-add", "--all"]);
@@ -83,23 +95,34 @@ export async function openWorkspace(input: {
       const patch = await git(dir, [...base, "--no-color", "--src-prefix=a/", "--dst-prefix=b/"]);
       return { files: counts, meaningful: visible.length > 0, patch };
     },
-    async commitAndPush({ branch, message }) {
+    async commitAndPush({ branch, message, token }) {
       await git(dir, ["add", "--all"]);
       await git(dir, ["commit", "--quiet", "--no-verify", "--message", message]);
       // The lease is the remote-tracking ref: the push fails if the branch moved after this checkout fetched it.
-      await git(dir, ["push", "--quiet", "--no-verify", "--force-with-lease", "origin", `HEAD:refs/heads/${branch}`]);
+      const push = ["push", "--quiet", "--no-verify", "--force-with-lease", "origin", `HEAD:refs/heads/${branch}`];
+      await git(dir, push, token === undefined ? {} : authHeader(token));
       return (await git(dir, ["rev-parse", "HEAD"])).trim();
     },
   };
 }
 
-async function git(dir: string, args: readonly string[]): Promise<string> {
+// Environment-only git config keeps the token out of argv and out of .git/config.
+function authHeader(token: string): NodeJS.ProcessEnv {
+  const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
+  return {
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${basic}`,
+  };
+}
+
+async function git(dir: string, args: readonly string[], env: NodeJS.ProcessEnv = {}): Promise<string> {
   try {
     const { stdout } = await run("git", args, {
       cwd: dir,
       encoding: "utf8",
       maxBuffer: 64 * 1024 * 1024,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...env },
     });
     return stdout;
   } catch (error) {

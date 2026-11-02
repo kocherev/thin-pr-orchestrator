@@ -53,6 +53,8 @@ export async function runAction(input: {
   readonly logPath: string;
   readonly github: GitHubSurface;
   readonly model?: ModelClient;
+  /** Reaches only the push. The Action passes GITHUB_TOKEN because its checkout keeps no credentials. */
+  readonly pushToken?: string;
 }): Promise<LabelRunResult> {
   const event = readLabelEvent(input.payload);
   const template = templateForLabel(input.templates, event.label);
@@ -64,7 +66,17 @@ export async function runAction(input: {
   const log = openEventLog(input.logPath);
   try {
     const handlers = createRunHandlers(input.model ?? new ReplayModelClient(), workspace);
-    return await runIssue({ event, template, config, workspace, handlers, github: input.github, log, runId: input.runId });
+    return await runIssue({
+      event,
+      template,
+      config,
+      workspace,
+      handlers,
+      github: input.github,
+      log,
+      runId: input.runId,
+      pushToken: input.pushToken,
+    });
   } finally {
     log.close();
   }
@@ -84,6 +96,7 @@ export async function runIssue(deps: {
   readonly github: GitHubSurface;
   readonly log: EventLog;
   readonly runId: string;
+  readonly pushToken?: string;
 }): Promise<LabelRunResult> {
   const { event, workspace, github } = deps;
   const target = { owner: event.owner, repo: event.repo };
@@ -136,7 +149,8 @@ export async function runIssue(deps: {
       return await stop("blocked", `gate failed: ${failed.join(", ")}`);
     }
 
-    const head = await workspace.commitAndPush({ branch, message: `Apply thin-pr/#${event.issue.number}` });
+    const message = `Apply thin-pr/#${event.issue.number}`;
+    const head = await workspace.commitAndPush({ branch, message, token: deps.pushToken });
     await checkRuns.postRules(gate, head);
     const pullRequest = await publishDraft(github, event, branch, state.outputs, formatRunReport(record("opened"), branch, null));
     return { status: "opened", record: record("opened", pullRequest) };

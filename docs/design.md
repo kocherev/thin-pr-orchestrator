@@ -30,7 +30,7 @@ A table in `packages/specialists/src/specialists.ts` maps the steps `plan`, `imp
 
 A run edits one git checkout through the `Workspace` interface in `packages/specialists/src/workspace.ts`. `packages/workspace` implements it over a local checkout whose HEAD is the base commit. `createFile` refuses a path outside the `.thin-pr.yml` allow list or inside the deny list. `replace` needs the old text to match exactly once. Until the implementer edits through tools, `packages/github/src/steps.ts` writes each file the implementer returns as a new file or a full replace.
 
-`verify` takes no model. It runs `typecheck` and then `test` from `.thin-pr.yml`, each through `/bin/sh` in its own process group with a timeout. The environment drops every variable whose name contains `TOKEN`, `KEY`, `SECRET`, or `PASSWORD`, and every `GITHUB_` and `ANTHROPIC_` variable. A failed check loops back to implement with the command and the last 4 KB of its output. `context.loop` counts the passes over verify, and verify stops asking for a loop once it reaches the template's `loop.max`. That last pass finishes with the failed check, so the gate names it instead of core failing the run at the cap.
+`verify` takes no model. On its first pass it runs `install` from `.thin-pr.yml` when the file sets one, and a failed install fails the step. Then it runs `typecheck` and `test`, each through `/bin/sh` in its own process group with a timeout. The environment drops every variable whose name contains `TOKEN`, `KEY`, `SECRET`, or `PASSWORD`, and every `GITHUB_` and `ANTHROPIC_` variable. A failed check loops back to implement with the command and the last 4 KB of its output. `context.loop` counts the passes over verify, and verify stops asking for a loop once it reaches the template's `loop.max`. That last pass finishes with the failed check, so the gate names it instead of core failing the run at the cap.
 
 ## Gate rules
 
@@ -52,7 +52,7 @@ A run edits one git checkout through the `Workspace` interface in `packages/spec
 
 The gate is not a step. The orchestrator evaluates it after `write` finishes. Each rule posts a check named `thin-pr / gate / <rule>`. The title is the verdict. The summary is the verdict, a colon, and the reason. If any rule fails, the run is blocked. The orchestrator comments `## Run report` on the issue with the error `gate failed:` and the failed rule names, and pushes nothing.
 
-If every rule passes, the orchestrator commits the checkout and runs `git push --force-with-lease` to `thin-pr/<issue>`. The lease is the remote-tracking ref from the checkout, so a branch that moved after the fetch is not overwritten. Then it opens a draft, or updates the body of the open pull request for that branch. The title is the pr-writer `title`, or `thin-pr #<issue number>` when that field is absent. The body is assembled in `formatDraftBody`: `## Plan`, `## Checks`, then `## Run report`. The pr-writer `body` field is not that text.
+If every rule passes, the orchestrator commits the checkout and runs `git push --force-with-lease` to `thin-pr/<issue>`. The workflow checks out with `persist-credentials: false`, so the checks never see a stored token. The push alone gets `GITHUB_TOKEN` through `GIT_CONFIG_COUNT` and an `http.https://github.com/.extraheader` entry in its environment. The lease is the remote-tracking ref from the checkout, so a branch that moved after the fetch is not overwritten. Then it opens a draft, or updates the body of the open pull request for that branch. The title is the pr-writer `title`, or `thin-pr #<issue number>` when that field is absent. The body is assembled in `formatDraftBody`: `## Plan`, `## Checks`, then `## Run report`. The pr-writer `body` field is not that text.
 
 ## Replay evals
 
@@ -72,7 +72,6 @@ The judge scores a finished replay. `decide()` still chooses the draft. `pnpm ev
 
 - CI and `pnpm eval` do not call a live model. The live client runs only when `THIN_PR_MODEL=live` and `ANTHROPIC_API_KEY` is set, and it stays in `packages/specialists`.
 - The Action pushes `thin-pr/<issue>` only after the gate passes. `pnpm eval` pushes to a scratch bare repo, never to GitHub.
-- A check can read the push credentials that `actions/checkout` stores in `.git/config`. The scrubbed environment does not cover them.
 - The Action does not merge the pull request, request reviewers, or close the issue.
 - There is no chat UI, no second orchestrator, and no general agent loop.
 - `packages/core` does not grow a model SDK import or a GitHub client import. `.agents/skills/core-boundary` is the list.

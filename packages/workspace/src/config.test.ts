@@ -16,7 +16,6 @@ describe("loadRepoConfig", () => {
   it("uses the defaults when .thin-pr.yml is missing", () => {
     expect(loadRepoConfig(repo())).toEqual({
       checks: { typecheck: "pnpm exec tsc --noEmit", test: "pnpm exec vitest run" },
-      install: "pnpm install --frozen-lockfile",
       budget: { max_files: 2, max_lines: 16 },
       paths: {
         allow: ["src/**", "test/**", "examples/**", "README.md", "docs/**"],
@@ -26,7 +25,8 @@ describe("loadRepoConfig", () => {
   });
 
   it("keeps the defaults a file does not override", () => {
-    const config = loadRepoConfig(repo("checks:\n  test: vitest run\nbudget:\n  max_lines: 40\n"));
+    const config = loadRepoConfig(repo("install: pnpm install --frozen-lockfile\nchecks:\n  test: vitest run\nbudget:\n  max_lines: 40\n"));
+    expect(config.install).toBe("pnpm install --frozen-lockfile");
     expect(config.checks).toEqual({ typecheck: "pnpm exec tsc --noEmit", test: "vitest run" });
     expect(config.budget).toEqual({ max_files: 2, max_lines: 40 });
     expect(config.paths.deny).toContain(".github/**");

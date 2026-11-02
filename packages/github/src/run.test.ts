@@ -114,6 +114,18 @@ describe("issue label", () => {
     );
   });
 
+  it("installs once before verify and fails the run when the install fails", async () => {
+    const repo = scratch(`install: echo 'lockfile is out of date'; exit 3\n${PASSING_CHECKS}`);
+    const memory = memoryGitHub();
+    const result = await run(repo, memory.github, { model: modelFromFixture("gate-pass.json") });
+
+    expect(result).toMatchObject({
+      status: "failed",
+      error: "verify failed after 1 attempt: install failed (exit 3): echo 'lockfile is out of date'; exit 3\nlockfile is out of date\n",
+    });
+    expect(git(repo.remote, "branch", "--list", "thin-pr/7")).toBe("");
+  });
+
   it("blocks a run whose implementer changed nothing", async () => {
     const repo = scratch(PASSING_CHECKS);
     const memory = memoryGitHub();
@@ -184,6 +196,8 @@ describe("issue label", () => {
     expect(workflow).toContain("packages/github/src/action.ts");
     expect(workflow).toContain("actions/checkout@v7");
     expect(workflow).toContain("fetch-depth: 0");
+    expect(workflow).toContain("persist-credentials: false");
+    expect(readFileSync(fileURLToPath(new URL("./action.ts", import.meta.url)), "utf8")).toContain("pushToken: token");
     expect(workflow).toContain("GIT_AUTHOR_NAME: thin-pr[bot]");
     expect(workflow).toContain("GIT_COMMITTER_EMAIL: thin-pr@example.invalid");
     expect(workflow).toContain("THIN_PR_MODEL:");

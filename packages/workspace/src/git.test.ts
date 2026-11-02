@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -143,6 +143,32 @@ describe("GitWorkspace", () => {
     // The first checkout still believes the branch is at its own commit, so its lease is stale.
     await first.replace("src/reset.ts", "0", "1");
     await expect(first.commitAndPush({ branch: "thin-pr/7", message: "Apply thin-pr/#7" })).rejects.toThrow("stale info");
+  });
+
+  it("runs the install command like a check and skips it when none is set", async () => {
+    const repo = scratch();
+    const config = { ...loadRepoConfig(repo.dir), install: "echo installed; exit 4" };
+    const workspace = await openWorkspace({ dir: repo.dir, baseSha: repo.baseSha, config });
+
+    expect(await workspace.install()).toMatchObject({ command: "echo installed; exit 4", exitCode: 4, logTail: "installed\n" });
+    expect(await (await open()).install()).toBeNull();
+  });
+
+  it("keeps the push token out of .git/config and away from checks", async () => {
+    const token = randomUUID();
+    process.env.GITHUB_TOKEN = token;
+    cleanups.push(() => delete process.env.GITHUB_TOKEN);
+    const probe = "env | grep -c GITHUB_TOKEN; grep -c -i extraheader .git/config";
+    const workspace = await open({ typecheck: probe, test: "true" });
+
+    await workspace.createFile("src/reset.ts", "export const reset = 0;\n");
+    const head = await workspace.commitAndPush({ branch: "thin-pr/7", message: "Apply thin-pr/#7", token });
+
+    expect(gitIn(workspace.dir, "ls-remote", "origin", "thin-pr/7")).toContain(head);
+    const config = readFileSync(join(workspace.dir, ".git", "config"), "utf8");
+    expect(config).not.toContain(token);
+    expect(config).not.toContain(Buffer.from(`x-access-token:${token}`).toString("base64"));
+    expect((await workspace.runCheck("typecheck")).logTail).toBe("0\n0\n");
   });
 
   it("refuses a checkout whose HEAD is not the base", async () => {

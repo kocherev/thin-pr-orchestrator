@@ -14,7 +14,8 @@ const repoConfigSchema = z
       .object({ typecheck: command.default("pnpm exec tsc --noEmit"), test: command.default("pnpm exec vitest run") })
       .strict()
       .prefault({}),
-    install: command.default("pnpm install --frozen-lockfile"),
+    // Optional: a checkout that already has its dependencies needs no install.
+    install: command.optional(),
     budget: z.object({ max_files: limit.default(2), max_lines: limit.default(16) }).strict().prefault({}),
     paths: z
       .object({

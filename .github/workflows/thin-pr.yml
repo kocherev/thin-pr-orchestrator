@@ -22,10 +22,12 @@ jobs:
       pull-requests: write
     steps:
       # Full history and every branch, so a second label can force-push thin-pr/<issue> with a lease.
+      # No stored credentials: the checks run repo code, and only the push gets the token.
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
