@@ -29,7 +29,7 @@ You do not need `.env` for lint, typecheck, test, or eval. Copy `.env.example` t
 
 ## Commands
 
-Run these from the repo root, in this order, after `pnpm install`. Each one exits 0 when it passes. Read the output. A command you did not run is not a pass.
+Run these from the repo root, in this order, after `pnpm install`. Each one exits 0 when it passes. Read the output. A command you did not run is not a pass. `pnpm verify` runs all six in this order and stops at the first failure.
 
 ### pnpm lint
 
