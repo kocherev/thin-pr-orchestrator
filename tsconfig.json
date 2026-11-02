@@ -6,6 +6,7 @@
     { "path": "packages/workspace" },
     { "path": "packages/gate" },
     { "path": "packages/github" },
+    { "path": "packages/mcp" },
     { "path": "scripts" }
   ]
 }

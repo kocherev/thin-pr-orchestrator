@@ -48,7 +48,13 @@ export default tseslint.config(
     },
   },
   {
-    files: ["packages/specialists/**/*.ts", "packages/gate/**/*.ts", "packages/workspace/**/*.ts", "scripts/**/*.ts"],
+    files: [
+      "packages/specialists/**/*.ts",
+      "packages/gate/**/*.ts",
+      "packages/workspace/**/*.ts",
+      "packages/mcp/**/*.ts",
+      "scripts/**/*.ts",
+    ],
     rules: {
       "no-restricted-imports": [
         "error",
