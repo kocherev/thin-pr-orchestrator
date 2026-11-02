@@ -66,14 +66,14 @@ describe("issue label", () => {
     expect(result.checks.map((check) => [check.step, check.conclusion])).toEqual([
       ["plan", "success"],
       ["implement", "success"],
-      ["test", "success"],
+      ["verify", "success"],
       ["review", "success"],
+      ["write", "success"],
       ["gate/plan", "success"],
       ["gate/tests", "success"],
       ["gate/contracts", "success"],
       ["gate/diff", "success"],
       ["gate/budget", "success"],
-      ["gate", "success"],
     ]);
     expect(memory.calls.map((call) => call.op)).toEqual([
       "branchSha",
@@ -88,7 +88,6 @@ describe("issue label", () => {
       "startCheck",
       "finishCheck",
       "startCheck",
-      "startCheck",
       "finishCheck",
       "startCheck",
       "finishCheck",
@@ -98,6 +97,7 @@ describe("issue label", () => {
       "finishCheck",
       "startCheck",
       "finishCheck",
+      "startCheck",
       "finishCheck",
       "openDraft",
     ]);
@@ -118,9 +118,9 @@ describe("issue label", () => {
     expect(memory.calls.filter((call) => call.op === "startCheck").map((call) => call.name)).toEqual([
       "thin-pr / plan",
       "thin-pr / implement",
-      "thin-pr / test",
+      "thin-pr / verify",
       "thin-pr / review",
-      "thin-pr / gate",
+      "thin-pr / write",
       "thin-pr / gate / plan",
       "thin-pr / gate / tests",
       "thin-pr / gate / contracts",
@@ -177,14 +177,14 @@ describe("issue label", () => {
     expect(result.report.steps.map((step) => [step.step, step.conclusion])).toEqual([
       ["plan", "success"],
       ["implement", "success"],
-      ["test", "success"],
+      ["verify", "success"],
       ["review", "success"],
+      ["write", "success"],
       ["gate/plan", "success"],
       ["gate/tests", "failure"],
       ["gate/contracts", "success"],
       ["gate/diff", "failure"],
       ["gate/budget", "success"],
-      ["gate", "failure"],
     ]);
     expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
     const failedRule = memory.calls.find((call) => call.summary === "FAIL: Tests did not pass.");
@@ -262,31 +262,28 @@ describe("issue label", () => {
 
   it("comments the run report when a step fails", async () => {
     const memory = memoryGitHub();
-    const result = await runSample(memory.github, readFixture(), { gates: { decide: () => "fail" } });
+    const result = await runSample(memory.github, readFixture(), {
+      model: new ReplayModelClient({ planner: JSON.stringify({ summary: 1, steps: ["edit the stub"] }) }),
+    });
 
     expect(result.status).toBe("failed");
     if (result.status !== "failed") {
       return;
     }
     expect(result.branch).toBe("thin-pr/7");
-    expect(result.report.error).toContain("gate decide returned fail");
-    expect(result.report.steps.map((step) => [step.step, step.conclusion])).toEqual([
-      ["plan", "success"],
-      ["implement", "success"],
-      ["test", "success"],
-      ["review", "success"],
-      ["gate", "failure"],
-    ]);
+    expect(result.report.error).toBe(
+      "plan failed after 2 attempts: planner output invalid at summary: Invalid input: expected string, received number",
+    );
+    expect(result.report.steps.map((step) => [step.step, step.conclusion])).toEqual([["plan", "failure"]]);
     const comment = memory.calls.find((call) => call.op === "comment");
     expect(comment).toMatchObject({ issue: 7, owner: "example", repo: "sample-repo" });
     expect(comment?.body).toContain("## Run report");
     expect(comment?.body).toContain("Run: run-7");
     expect(comment?.body).toContain("Template: small-feature");
     expect(comment?.body).toContain("Branch: thin-pr/7");
-    expect(comment?.body).toContain("gate decide returned fail");
-    expect(comment?.body).toContain("- gate: failure.");
-    const gateFinish = memory.calls.find((call) => call.op === "finishCheck" && call.conclusion === "failure");
-    expect(gateFinish?.summary).toContain("gate decide returned fail");
+    expect(comment?.body).toContain("- plan: failure. plan failed after 2 attempts");
+    const planFinish = memory.calls.find((call) => call.op === "finishCheck" && call.conclusion === "failure");
+    expect(planFinish?.summary).toContain("planner output invalid at summary");
     expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
   });
 
@@ -391,7 +388,6 @@ async function runSample(
   github: GitHubSurface,
   payload: Payload,
   options?: {
-    readonly gates?: { decide: () => "fail" };
     readonly model?: ModelClient;
     readonly changes?: readonly FileChange[];
   },
@@ -404,7 +400,6 @@ async function runSample(
     runId: "run-7",
     logPath: join(directory, "events.sqlite"),
     github,
-    gates: options?.gates,
     model: options?.model,
     changes: options?.changes,
   });

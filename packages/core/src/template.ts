@@ -1,88 +1,50 @@
-import { readFileSync } from "node:fs";
-import { basename } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { isNode, LineCounter, parseDocument, type Document } from "yaml";
 import { z } from "zod";
-import type { WorkflowTemplate } from "./types.js";
+import { STEP_IDS } from "./types.js";
 
-const retries = z.number().int().nonnegative();
-const gate = z.string().min(1).optional();
+const stepId = z.enum(STEP_IDS);
 
-const planStep = z
+const stepSchema = z
   .object({
-    id: z.literal("plan"),
-    specialist: z.literal("planner"),
-    retries,
-    inputs: z.tuple([z.literal("issue"), z.literal("templateId")]),
-    outputs: z.tuple([z.literal("summary"), z.literal("steps")]),
-    gate,
+    id: stepId,
+    model: z.string().min(1).optional(),
+    effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
+    retries: z.number().int().nonnegative(),
+    loop: z.object({ back_to: stepId, max: z.number().int().positive() }).strict().optional(),
   })
   .strict();
 
-const implementStep = z
-  .object({
-    id: z.literal("implement"),
-    specialist: z.literal("implementer"),
-    retries,
-    inputs: z.tuple([z.literal("issue"), z.literal("planSummary")]),
-    outputs: z.tuple([z.literal("summary"), z.literal("files")]),
-    gate,
-  })
-  .strict();
-
-const testStep = z
-  .object({
-    id: z.literal("test"),
-    specialist: z.literal("tester"),
-    retries,
-    inputs: z.tuple([z.literal("issue"), z.literal("changeSummary")]),
-    outputs: z.tuple([z.literal("summary"), z.literal("passed")]),
-    gate,
-  })
-  .strict();
-
-const reviewStep = z
-  .object({
-    id: z.literal("review"),
-    specialist: z.literal("reviewer"),
-    retries,
-    inputs: z.tuple([z.literal("issue"), z.literal("testSummary")]),
-    outputs: z.tuple([z.literal("summary"), z.literal("notes")]),
-    gate,
-  })
-  .strict();
-
-const gateStep = z
-  .object({
-    id: z.literal("gate"),
-    specialist: z.literal("pr-writer"),
-    retries,
-    inputs: z.tuple([z.literal("issue"), z.literal("reviewSummary")]),
-    outputs: z.tuple([z.literal("summary"), z.literal("title"), z.literal("body")]),
-    gate,
-  })
-  .strict();
-
-const workflowSchema = z
+const templateSchema = z
   .object({
     id: z.string().min(1),
-    steps: z
-      .array(z.discriminatedUnion("id", [planStep, implementStep, testStep, reviewStep, gateStep]))
-      .min(1),
+    label: z.string().min(1),
+    steps: z.array(stepSchema).min(1),
   })
   .strict()
   .superRefine((template, ctx) => {
-    const seen = new Set<string>();
+    const seen: string[] = [];
     template.steps.forEach((step, index) => {
-      if (seen.has(step.id)) {
+      if (seen.includes(step.id)) {
+        ctx.addIssue({ code: "custom", message: `duplicate step: ${step.id}`, path: ["steps", index, "id"] });
+      }
+      if (step.id === "verify" && (step.model || step.effort)) {
+        ctx.addIssue({ code: "custom", message: "verify runs checks and takes no model", path: ["steps", index] });
+      }
+      if (step.loop && !seen.includes(step.loop.back_to)) {
         ctx.addIssue({
           code: "custom",
-          message: `duplicate template step: ${step.id}`,
-          path: ["steps", index, "id"],
+          message: `loop must go back to an earlier step, not ${step.loop.back_to}`,
+          path: ["steps", index, "loop", "back_to"],
         });
       }
-      seen.add(step.id);
+      seen.push(step.id);
     });
   });
+
+export type TemplateStep = z.infer<typeof stepSchema>;
+export type Template = z.infer<typeof templateSchema>;
 
 export class TemplateError extends Error {
   readonly file: string;
@@ -98,15 +60,20 @@ export class TemplateError extends Error {
   }
 }
 
-export function parseTemplate(value: unknown): WorkflowTemplate {
-  const parsed = workflowSchema.safeParse(value);
-  if (!parsed.success) {
-    throw new Error(`template invalid at ${issueText(parsed.error.issues[0])}`);
+/** Loads every `*.yaml` template in `directory` and returns the one whose `label` matches. */
+export function templateForLabel(directory: string, label: string): Template | null {
+  const templates = readdirSync(directory)
+    .filter((name) => name.endsWith(".yaml"))
+    .sort()
+    .map((name) => loadTemplate(join(directory, name)));
+  const matches = templates.filter((template) => template.label === label);
+  if (matches.length > 1) {
+    throw new Error(`label ${label} names more than one template: ${matches.map((template) => template.id).join(", ")}`);
   }
-  return parsed.data;
+  return matches[0] ?? null;
 }
 
-export function loadTemplate(file: string): WorkflowTemplate {
+function loadTemplate(file: string): Template {
   const source = readFileSync(file, "utf8");
   const lineCounter = new LineCounter();
   const doc = parseDocument(source, { lineCounter });
@@ -116,7 +83,7 @@ export function loadTemplate(file: string): WorkflowTemplate {
     throw new TemplateError(basename(file), start?.line ?? 1, start?.col ?? 1, failure.message);
   }
 
-  const parsed = workflowSchema.safeParse(doc.toJS());
+  const parsed = templateSchema.safeParse(doc.toJS());
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     const pos = locate(doc, lineCounter, issue?.path ?? []);

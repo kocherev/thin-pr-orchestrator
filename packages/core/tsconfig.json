@@ -5,6 +5,7 @@
     "outDir": "dist",
     "rootDir": "src"
   },
-  "include": ["src"],
-  "references": [{ "path": "../gate" }, { "path": "../specialists" }]
+  "include": [
+    "src"
+  ]
 }

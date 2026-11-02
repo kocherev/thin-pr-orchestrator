@@ -10,9 +10,5 @@
     "@opentelemetry/api": "1.10.0",
     "yaml": "^2.9.1",
     "zod": "^4.6.7"
-  },
-  "devDependencies": {
-    "@thin-pr/gate": "workspace:*",
-    "@thin-pr/specialists": "workspace:*"
   }
 }

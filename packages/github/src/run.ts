@@ -1,34 +1,37 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  isStepName,
-  loadTemplate,
   openEventLog,
   runWorkflow,
+  templateForLabel,
   type EventLog,
-  type GateHook,
-  type SpecialistMap,
-  type WorkflowTemplate,
+  type Json,
+  type RunEvent,
+  type StepHandler,
+  type StepId,
+  type Template,
 } from "@thin-pr/core";
 import {
   decide,
   evaluate,
   measureDiff,
   parseBudget,
+  type BudgetLimits,
   type FileChange,
   type GateRuleResult,
-  type RunnerEvidence,
 } from "@thin-pr/gate";
 import {
-  createRunCapture,
-  createStubSpecialists,
-  type CapturedRun,
+  createStepHandlers,
+  ReplayModelClient,
+  implementerOutput,
+  plannerOutput,
+  prWriterOutput,
+  summaryOf,
+  verifyOutput,
   type ModelClient,
 } from "@thin-pr/specialists";
-import { confirmSources } from "./runner.js";
+import { withSourceCheck } from "./runner.js";
 import type { GitHubSurface } from "./surface.js";
-
-export const TRIGGER_LABEL = "thin-pr" as const;
 
 export type StepReport = {
   readonly step: string;
@@ -73,12 +76,10 @@ export type LabelRunResult =
 
 export type LabelRunDeps = {
   readonly github: GitHubSurface;
-  readonly template: WorkflowTemplate;
-  readonly specialists: SpecialistMap;
-  readonly gates?: Readonly<Record<string, GateHook>>;
-  readonly capture?: CapturedRun;
+  readonly template: Template;
+  readonly handlers: Readonly<Record<StepId, StepHandler>>;
   readonly changes?: readonly FileChange[];
-  readonly budget: RunnerEvidence["budget"];
+  readonly budget: BudgetLimits;
   readonly log: EventLog;
   readonly runId: string;
 };
@@ -136,21 +137,28 @@ export function readLabelEvent(payload: unknown): LabelEvent {
 }
 
 export async function runOnLabel(event: LabelEvent, deps: LabelRunDeps): Promise<LabelRunResult> {
-  if (event.action !== "labeled" || event.label !== TRIGGER_LABEL) {
-    return { status: "ignored" };
-  }
-
   const steps: StepReport[] = [];
-  let current: { readonly step: string; readonly id: number } | null = null;
+  let open: { readonly step: string; readonly id: number } | null = null;
   let branch = "not created";
   let headSha: string | null = null;
-  const capture = deps.capture ?? createRunCapture();
-  let evidence: RunnerEvidence = {
-    diff: { files: 0, lines: 0, meaningful: false },
-    testsPassed: false,
-    budget: deps.budget,
-  };
   let sha = "";
+  let changes: readonly FileChange[] = [];
+  let failure = "run failed";
+
+  const startCheck = async (step: string): Promise<void> => {
+    if (!open) {
+      open = { step, id: await deps.github.startCheck({ owner: event.owner, repo: event.repo, name: checkName(step), sha }) };
+    }
+  };
+  const finishCheck = async (conclusion: "success" | "failure", summary: string): Promise<void> => {
+    const current: { readonly step: string; readonly id: number } | null = open;
+    if (!current) {
+      return;
+    }
+    open = null;
+    await deps.github.finishCheck({ owner: event.owner, repo: event.repo, checkRunId: current.id, conclusion, summary });
+    steps.push({ step: current.step, conclusion, summary });
+  };
 
   try {
     const baseSha = await deps.github.branchSha(event.owner, event.repo, event.defaultBranch);
@@ -159,93 +167,75 @@ export async function runOnLabel(event: LabelEvent, deps: LabelRunDeps): Promise
     headSha = baseSha;
     sha = baseSha;
 
-    await runWorkflow({
+    const state = await runWorkflow({
       runId: deps.runId,
       issue: event.issueText,
       template: deps.template,
-      specialists: deps.specialists,
-      gates: deps.gates ?? { decide: () => applyRules(deps, event, sha, capture, steps, evidence) },
+      handlers: { ...deps.handlers, verify: withSourceCheck(deps.handlers.verify, () => changes) },
       log: deps.log,
-      async onTransition(transition) {
-        if (transition.output?.step === "implement") {
-          const applied = await applyImplementDiff(deps, event, baseSha, branch, capture);
-          evidence = applied.evidence;
-          if (applied.sha) {
-            sha = applied.sha;
-            headSha = applied.sha;
+      async onEvent(runEvent: RunEvent) {
+        if (runEvent.step === "implement" && runEvent.kind === "finished") {
+          changes = await collectChanges(deps, event, baseSha, runEvent.output);
+          const committed = await commitChanges(deps, event, baseSha, branch, changes);
+          if (committed) {
+            sha = committed;
+            headSha = committed;
           }
         }
-        if (transition.output === null) {
-          if (!isStepName(transition.to)) {
-            return;
+        if (runEvent.step === null) {
+          if (runEvent.kind === "failed") {
+            failure = runEvent.error ?? failure;
+            await finishCheck("failure", failure);
           }
-          if (current) {
-            throw new Error(`check ${current.step} is still open`);
-          }
-          const id = await deps.github.startCheck({
-            owner: event.owner,
-            repo: event.repo,
-            name: checkName(transition.to),
-            sha,
-          });
-          current = { step: transition.to, id };
           return;
         }
-        if (!current || current.step !== transition.output.step) {
-          throw new Error(`no open check for ${transition.output.step}`);
+        if (runEvent.kind === "started") {
+          await startCheck(runEvent.step);
+        } else if (runEvent.kind === "finished") {
+          await finishCheck("success", summaryOf(runEvent.output));
+        } else if (runEvent.kind === "looped") {
+          await finishCheck("failure", runEvent.feedback ?? "");
         }
-        const open: { readonly step: string; readonly id: number } = current;
-        await deps.github.finishCheck({
-          owner: event.owner,
-          repo: event.repo,
-          checkRunId: open.id,
-          conclusion: "success",
-          summary: transition.output.summary,
-        });
-        current = null;
-        steps.push({
-          step: open.step,
-          conclusion: "success",
-          summary: transition.output.summary,
-        });
       },
     });
+    if (state.status !== "completed") {
+      throw new Error(failure);
+    }
+
+    const evidence = { outputs: state.outputs, diff: measureDiff(changes), budget: deps.budget };
+    for (const result of evaluate(evidence)) {
+      await postRule(deps, event, sha, result, steps);
+    }
+    if (decide(evidence) === "fail") {
+      throw new Error("gate decide returned fail");
+    }
 
     const pullRequest = await deps.github.openDraft({
       owner: event.owner,
       repo: event.repo,
-      title: capture.pullRequest?.title ?? `thin-pr #${event.issueNumber}`,
+      title: prWriterOutput.safeParse(state.outputs.write).data?.title ?? `thin-pr #${event.issueNumber}`,
       head: branch,
       base: event.defaultBranch,
-      body: formatDraftBody(capture, formatRunReport({
-        runId: deps.runId,
-        templateId: deps.template.id,
-        issueNumber: event.issueNumber,
-        branch,
-        error: "",
-        steps,
-      })),
+      body: formatDraftBody(
+        state.outputs,
+        formatRunReport({
+          runId: deps.runId,
+          templateId: deps.template.id,
+          issueNumber: event.issueNumber,
+          branch,
+          error: "",
+          steps,
+        }),
+      ),
       draft: true,
     });
-    return { status: "completed", branch, headSha, checks: [...steps], pullRequest };
+    return { status: "completed", branch, headSha: sha, checks: [...steps], pullRequest };
   } catch (error) {
-    const message = errorText(error);
-    if (current) {
-      const open: { readonly step: string; readonly id: number } = current;
-      let summary = message;
-      try {
-        await deps.github.finishCheck({
-          owner: event.owner,
-          repo: event.repo,
-          checkRunId: open.id,
-          conclusion: "failure",
-          summary: message,
-        });
-      } catch (checkError) {
-        summary = `${message}; check update failed: ${errorText(checkError)}`;
-      }
-      steps.push({ step: open.step, conclusion: "failure", summary });
-      current = null;
+    let message = errorText(error);
+    try {
+      await finishCheck("failure", message);
+    } catch (checkError) {
+      message = `${message}; check update failed: ${errorText(checkError)}`;
     }
 
     const report: RunReport = {
@@ -272,20 +262,20 @@ export async function runAction(input: {
   readonly runId: string;
   readonly logPath: string;
   readonly github: GitHubSurface;
-  readonly gates?: Readonly<Record<string, GateHook>>;
   readonly model?: ModelClient;
   readonly changes?: readonly FileChange[];
 }): Promise<LabelRunResult> {
   const event = readLabelEvent(input.payload);
+  const template = templateForLabel(join(input.workspace, "templates"), event.label);
+  if (event.action !== "labeled" || !template) {
+    return { status: "ignored" };
+  }
   const log = openEventLog(input.logPath);
-  const capture = createRunCapture();
   try {
     return await runOnLabel(event, {
       github: input.github,
-      template: loadTemplate(join(input.workspace, "templates", "small-feature.yaml")),
-      specialists: createStubSpecialists(input.model, capture),
-      gates: input.gates,
-      capture,
+      template,
+      handlers: createStepHandlers(input.model ?? new ReplayModelClient()),
       changes: input.changes,
       budget: parseBudget(JSON.parse(readFileSync(join(input.workspace, "evals", "budget.json"), "utf8"))),
       log,
@@ -296,51 +286,16 @@ export async function runAction(input: {
   }
 }
 
-async function applyImplementDiff(
-  deps: LabelRunDeps,
-  event: LabelEvent,
-  baseSha: string,
-  branch: string,
-  capture: CapturedRun,
-): Promise<{ readonly evidence: RunnerEvidence; readonly sha: string | null }> {
-  const changes = await collectChanges(deps, event, baseSha, capture);
-  const diff = measureDiff(changes);
-  const testsPassed =
-    diff.meaningful &&
-    confirmSources(
-      changes
-        .filter((change) => change.before !== change.after)
-        .map((change) => ({ path: change.path, source: change.after })),
-    );
-  const evidence: RunnerEvidence = { diff, testsPassed, budget: deps.budget };
-  const withinBudget = diff.files <= deps.budget.maxFiles && diff.lines <= deps.budget.maxLines;
-  if (!diff.meaningful || !withinBudget) {
-    return { evidence, sha: null };
-  }
-  const files = changes
-    .filter((change) => change.before !== change.after)
-    .map((change) => ({ path: change.path, content: change.after }));
-  const sha = await deps.github.commitFiles({
-    owner: event.owner,
-    repo: event.repo,
-    branch,
-    parentSha: baseSha,
-    message: `Apply thin-pr/#${event.issueNumber}`,
-    files,
-  });
-  return { evidence, sha };
-}
-
 async function collectChanges(
   deps: LabelRunDeps,
   event: LabelEvent,
   baseSha: string,
-  capture: CapturedRun,
+  output: Json | null,
 ): Promise<readonly FileChange[]> {
   if (deps.changes) {
     return deps.changes;
   }
-  const edits = capture.implement?.edits ?? [];
+  const edits = implementerOutput.safeParse(output).data?.edits ?? [];
   const changes: FileChange[] = [];
   for (const edit of edits) {
     if (!safeRelative(edit.path)) {
@@ -357,23 +312,32 @@ async function collectChanges(
   return changes;
 }
 
-function safeRelative(path: string): boolean {
-  return path.length > 0 && !path.startsWith("/") && !path.split(/[\\/]/).includes("..");
-}
-
-async function applyRules(
+async function commitChanges(
   deps: LabelRunDeps,
   event: LabelEvent,
-  sha: string,
-  capture: CapturedRun,
-  steps: StepReport[],
-  evidence: RunnerEvidence,
-): Promise<"pass" | "fail"> {
-  const results = evaluate(capture, evidence);
-  for (const result of results) {
-    await postRule(deps, event, sha, result, steps);
+  baseSha: string,
+  branch: string,
+  changes: readonly FileChange[],
+): Promise<string | null> {
+  const diff = measureDiff(changes);
+  const withinBudget = diff.files <= deps.budget.maxFiles && diff.lines <= deps.budget.maxLines;
+  if (!diff.meaningful || !withinBudget) {
+    return null;
   }
-  return decide(capture, evidence);
+  return deps.github.commitFiles({
+    owner: event.owner,
+    repo: event.repo,
+    branch,
+    parentSha: baseSha,
+    message: `Apply thin-pr/#${event.issueNumber}`,
+    files: changes
+      .filter((change) => change.before !== change.after)
+      .map((change) => ({ path: change.path, content: change.after })),
+  });
+}
+
+function safeRelative(path: string): boolean {
+  return path.length > 0 && !path.startsWith("/") && !path.split(/[\\/]/).includes("..");
 }
 
 async function postRule(
@@ -384,6 +348,7 @@ async function postRule(
   steps: StepReport[],
 ): Promise<void> {
   const summary = `${result.verdict}: ${result.reason}`;
+  const conclusion = result.verdict === "PASS" ? "success" : "failure";
   const id = await deps.github.startCheck({
     owner: event.owner,
     repo: event.repo,
@@ -394,37 +359,35 @@ async function postRule(
     owner: event.owner,
     repo: event.repo,
     checkRunId: id,
-    conclusion: result.verdict === "PASS" ? "success" : "failure",
+    conclusion,
     summary,
     title: result.verdict,
   });
-  steps.push({
-    step: `gate/${result.rule}`,
-    conclusion: result.verdict === "PASS" ? "success" : "failure",
-    summary,
-  });
+  steps.push({ step: `gate/${result.rule}`, conclusion, summary });
 }
 
-function formatDraftBody(capture: CapturedRun, report: string): string {
-  return ["## Plan", "", formatPlan(capture.plan), "", "## Test results", "", formatTests(capture.test), "", report].join(
+function formatDraftBody(outputs: Readonly<Partial<Record<StepId, Json>>>, report: string): string {
+  return ["## Plan", "", formatPlan(outputs.plan), "", "## Test results", "", formatTests(outputs.verify), "", report].join(
     "\n",
   );
 }
 
-function formatPlan(plan: CapturedRun["plan"]): string {
-  if (!plan) {
+function formatPlan(output: Json | undefined): string {
+  const plan = plannerOutput.safeParse(output);
+  if (!plan.success) {
     return "Plan is missing.";
   }
-  const steps = plan.steps.map((step) => `- ${step}`).join("\n");
-  return steps.length === 0 ? plan.summary : `${plan.summary}\n\n${steps}`;
+  const steps = plan.data.steps.map((step) => `- ${step}`).join("\n");
+  return `${plan.data.summary}\n\n${steps}`;
 }
 
-function formatTests(test: CapturedRun["test"]): string {
-  if (!test) {
+function formatTests(output: Json | undefined): string {
+  const test = verifyOutput.safeParse(output);
+  if (!test.success) {
     return "Test result is missing.";
   }
-  const result = test.passed ? "Tests passed." : "Tests did not pass.";
-  return `${test.summary}\n\n${result}`;
+  const result = test.data.passed ? "Tests passed." : "Tests did not pass.";
+  return `${test.data.summary}\n\n${result}`;
 }
 
 function errorText(error: unknown): string {

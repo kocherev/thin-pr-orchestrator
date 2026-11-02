@@ -1,9 +1,10 @@
+import type { StepId } from "@thin-pr/core";
 import {
   implementerOutput,
   plannerOutput,
   prWriterOutput,
   reviewerOutput,
-  testerOutput,
+  verifyOutput,
 } from "@thin-pr/specialists";
 
 export type GateVerdict = "PASS" | "FAIL";
@@ -12,14 +13,6 @@ export type GateRuleResult = {
   readonly rule: string;
   readonly verdict: GateVerdict;
   readonly reason: string;
-};
-
-export type GateSubject = {
-  readonly plan: unknown;
-  readonly implement: unknown;
-  readonly test: unknown;
-  readonly review: unknown;
-  readonly pullRequest: unknown;
 };
 
 export type FileChange = {
@@ -39,30 +32,28 @@ export type BudgetLimits = {
   readonly maxLines: number;
 };
 
-export type RunnerEvidence = {
-  readonly diff: DiffMeasurement;
-  readonly testsPassed: boolean;
+export type RunEvidence = {
+  /** Step outputs as the run log stores them. */
+  readonly outputs: Readonly<Partial<Record<StepId, unknown>>>;
+  /** The runner's measurement of the file bytes it would commit, or null when nothing was measured. */
+  readonly diff: DiffMeasurement | null;
   readonly budget: BudgetLimits;
 };
 
 const CONTRACTS = [
-  ["plan", "plan", plannerOutput],
-  ["implement", "implement", implementerOutput],
-  ["test", "test", testerOutput],
-  ["review", "review", reviewerOutput],
-  ["pr-writer", "pullRequest", prWriterOutput],
+  ["plan", plannerOutput],
+  ["implement", implementerOutput],
+  ["verify", verifyOutput],
+  ["review", reviewerOutput],
+  ["write", prWriterOutput],
 ] as const;
 
-export function evaluate(subject: GateSubject, runner?: RunnerEvidence): readonly GateRuleResult[] {
-  return [planRule(subject), testsRule(subject, runner), contractsRule(subject), diffRule(runner), budgetRule(runner)];
+export function evaluate(evidence: RunEvidence): readonly GateRuleResult[] {
+  return [planRule(evidence), testsRule(evidence), contractsRule(evidence), diffRule(evidence), budgetRule(evidence)];
 }
 
-export function decide(subject?: GateSubject, runner?: RunnerEvidence): "pass" | "fail" {
-  // The template hook is called with no run, so there is nothing to reject.
-  if (!subject) {
-    return "pass";
-  }
-  return evaluate(subject, runner).every((result) => result.verdict === "PASS") ? "pass" : "fail";
+export function decide(evidence: RunEvidence): "pass" | "fail" {
+  return evaluate(evidence).every((result) => result.verdict === "PASS") ? "pass" : "fail";
 }
 
 export function measureDiff(changes: readonly FileChange[]): DiffMeasurement {
@@ -97,68 +88,66 @@ export function parseBudget(value: unknown): BudgetLimits {
   };
 }
 
-function planRule(subject: GateSubject): GateRuleResult {
-  if (subject.plan === null || subject.plan === undefined) {
+function planRule({ outputs }: RunEvidence): GateRuleResult {
+  if (outputs.plan === null || outputs.plan === undefined) {
     return rule("plan", "FAIL", "Plan is missing.");
   }
-  const parsed = plannerOutput.safeParse(subject.plan);
+  const parsed = plannerOutput.safeParse(outputs.plan);
   if (!parsed.success) {
     return rule("plan", "FAIL", "Plan output does not match its contract.");
   }
-  const count = parsed.data.steps.length;
-  const noun = count === 1 ? "step" : "steps";
-  return rule("plan", "PASS", `Plan is present (${count} ${noun}).`);
+  return rule("plan", "PASS", `Plan is present (${countNoun(parsed.data.steps.length, "step")}).`);
 }
 
-function testsRule(subject: GateSubject, runner?: RunnerEvidence): GateRuleResult {
-  if (subject.test === null || subject.test === undefined) {
+function testsRule({ outputs, diff }: RunEvidence): GateRuleResult {
+  if (outputs.verify === null || outputs.verify === undefined) {
     return rule("tests", "FAIL", "Test result is missing.");
   }
-  const parsed = testerOutput.safeParse(subject.test);
+  const parsed = verifyOutput.safeParse(outputs.verify);
   if (!parsed.success) {
     return rule("tests", "FAIL", "Test output does not match its contract.");
   }
   if (!parsed.data.passed) {
     return rule("tests", "FAIL", "Tests did not pass.");
   }
-  if (!runner?.testsPassed) {
+  if (!diff?.meaningful || !parsed.data.sourcesParse) {
     return rule("tests", "FAIL", "Runner did not confirm the tests.");
   }
   return rule("tests", "PASS", "Tests passed.");
 }
 
-function contractsRule(subject: GateSubject): GateRuleResult {
-  for (const [label, key, schema] of CONTRACTS) {
-    const value = subject[key];
+function contractsRule({ outputs }: RunEvidence): GateRuleResult {
+  for (const [step, schema] of CONTRACTS) {
+    const value = outputs[step];
     if (value === null || value === undefined) {
-      return rule("contracts", "FAIL", `Missing ${label} output.`);
+      return rule("contracts", "FAIL", `Missing ${step} output.`);
     }
     if (!schema.safeParse(value).success) {
-      return rule("contracts", "FAIL", `${label} output does not match its contract.`);
+      return rule("contracts", "FAIL", `${step} output does not match its contract.`);
     }
   }
   return rule("contracts", "PASS", "Specialist outputs match their contracts.");
 }
 
-function diffRule(runner?: RunnerEvidence): GateRuleResult {
-  if (!runner) {
+function diffRule({ diff }: RunEvidence): GateRuleResult {
+  if (!diff) {
     return rule("diff", "FAIL", "Diff was not measured.");
   }
-  if (runner.diff.files === 0 || runner.diff.lines === 0) {
+  if (diff.files === 0 || diff.lines === 0) {
     return rule("diff", "FAIL", "Diff is empty.");
   }
-  if (!runner.diff.meaningful) {
+  if (!diff.meaningful) {
     return rule("diff", "FAIL", "Diff has no meaningful change.");
   }
-  return rule("diff", "PASS", `Diff is present (${countNoun(runner.diff.files, "file")}, ${countNoun(runner.diff.lines, "line")}).`);
+  return rule("diff", "PASS", `Diff is present (${countNoun(diff.files, "file")}, ${countNoun(diff.lines, "line")}).`);
 }
 
-function budgetRule(runner?: RunnerEvidence): GateRuleResult {
-  if (!runner) {
+function budgetRule({ diff, budget }: RunEvidence): GateRuleResult {
+  if (!diff) {
     return rule("budget", "FAIL", "Budget was not measured.");
   }
-  const { files, lines } = runner.diff;
-  const { maxFiles, maxLines } = runner.budget;
+  const { files, lines } = diff;
+  const { maxFiles, maxLines } = budget;
   const detail = `${countNoun(files, "file")}, ${countNoun(lines, "line")}; limit ${countNoun(maxFiles, "file")}, ${countNoun(maxLines, "line")}`;
   if (files > maxFiles || lines > maxLines) {
     return rule("budget", "FAIL", `Diff exceeds the budget (${detail}).`);

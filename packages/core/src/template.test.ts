@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadTemplate, TemplateError } from "./index.js";
+import { templateForLabel, TemplateError } from "./index.js";
 
 const templates = fileURLToPath(new URL("../../../templates/", import.meta.url));
 const directories: string[] = [];
@@ -14,81 +14,77 @@ afterEach(() => {
   }
 });
 
-describe("template load", () => {
-  it("loads the yaml workflows", () => {
-    const bugfix = loadTemplate(join(templates, "bugfix.yaml"));
-    const feature = loadTemplate(join(templates, "small-feature.yaml"));
-    const docs = loadTemplate(join(templates, "docs-update.yaml"));
+describe("templateForLabel", () => {
+  it("picks the template whose label matches", () => {
+    expect(templateForLabel(templates, "thin-pr")?.id).toBe("small-feature");
+    expect(templateForLabel(templates, "thin-pr:bugfix")?.id).toBe("bugfix");
+    expect(templateForLabel(templates, "thin-pr:docs")?.id).toBe("docs-update");
+    expect(templateForLabel(templates, "bug")).toBeNull();
+  });
 
-    expect(bugfix.id).toBe("bugfix");
-    expect(feature.id).toBe("small-feature");
-    expect(docs.id).toBe("docs-update");
-    expect(bugfix.steps.map((step) => [step.id, step.specialist])).toEqual([
-      ["plan", "planner"],
-      ["implement", "implementer"],
-      ["test", "tester"],
-      ["review", "reviewer"],
-      ["gate", "pr-writer"],
-    ]);
-    expect(bugfix.steps.find((step) => step.id === "plan")).toMatchObject({
-      inputs: ["issue", "templateId"],
-      outputs: ["summary", "steps"],
+  it("reads steps with optional model, effort and loop", () => {
+    const feature = templateForLabel(templates, "thin-pr");
+    expect(feature?.steps.map((step) => step.id)).toEqual(["plan", "implement", "verify", "review", "write"]);
+    expect(feature?.steps[1]).toEqual({ id: "implement", model: "claude-opus-5-5", effort: "high", retries: 1 });
+    expect(feature?.steps[2]).toEqual({ id: "verify", retries: 0, loop: { back_to: "implement", max: 2 } });
+    expect(templateForLabel(templates, "thin-pr:docs")?.steps[2]).toEqual({ id: "verify", retries: 0 });
+  });
+
+  it("rejects two templates with the same label", () => {
+    const directory = templateDirectory({
+      "a.yaml": "id: a\nlabel: thin-pr\nsteps:\n  - { id: plan, retries: 0 }\n",
+      "b.yaml": "id: b\nlabel: thin-pr\nsteps:\n  - { id: plan, retries: 0 }\n",
     });
-    expect(bugfix.steps.find((step) => step.id === "implement")?.retries).toBe(2);
-    expect(feature.steps.find((step) => step.id === "implement")?.retries).toBe(1);
-    expect(docs.steps.every((step) => step.retries === 0)).toBe(true);
-    expect(bugfix.steps.find((step) => step.id === "gate")?.gate).toBe("decide");
-    expect(feature.steps.find((step) => step.id === "gate")?.gate).toBe("decide");
-    expect(docs.steps.find((step) => step.id === "gate")?.gate).toBe("decide");
+    expect(() => templateForLabel(directory, "thin-pr")).toThrow("label thin-pr names more than one template: a, b");
   });
 
   it("fails a schema error with the source line", () => {
-    const path = writeTemplate(
-      "broken.yaml",
-      [
+    const directory = templateDirectory({
+      "broken.yaml": [
         "id: broken",
+        "label: thin-pr",
         "steps:",
         "  - id: plan",
-        "    specialist: no-such",
         "    retries: 0",
-        "    inputs:",
-        "      - issue",
-        "      - templateId",
-        "    outputs:",
-        "      - summary",
-        "      - steps",
+        "  - id: verify",
+        "    retries: 0",
+        "    loop: { back_to: review, max: 1 }",
         "",
       ].join("\n"),
-    );
-
-    const error = loadError(path);
-    expect(error).toBeInstanceOf(TemplateError);
+    });
+    const error = loadError(directory);
     expect(error.file).toBe("broken.yaml");
-    expect(error.line).toBe(4);
-    expect(error.message).toContain("broken.yaml:4:");
-    expect(error.message).toContain("specialist");
+    expect(error.line).toBe(8);
+    expect(error.message).toContain("broken.yaml:8:");
+    expect(error.message).toContain("loop must go back to an earlier step, not review");
+  });
+
+  it("rejects a model on the verify step", () => {
+    const directory = templateDirectory({
+      "broken.yaml": "id: broken\nlabel: thin-pr\nsteps:\n  - { id: verify, model: claude-opus-5-5, retries: 0 }\n",
+    });
+    expect(loadError(directory).message).toContain("verify runs checks and takes no model");
   });
 
   it("fails a yaml syntax error with the source line", () => {
-    const path = writeTemplate("broken.yaml", "id: [\n");
-    const error = loadError(path);
-    expect(error).toBeInstanceOf(TemplateError);
+    const error = loadError(templateDirectory({ "broken.yaml": "id: [\n" }));
     expect(error.line).toBe(2);
     expect(error.message).toContain("broken.yaml:2:");
   });
 });
 
-function writeTemplate(name: string, source: string): string {
+function templateDirectory(files: Record<string, string>): string {
   const directory = mkdtempSync(join(tmpdir(), "thin-pr-"));
   directories.push(directory);
-  const path = join(directory, name);
-  writeFileSync(path, source);
-  return path;
+  for (const [name, source] of Object.entries(files)) {
+    writeFileSync(join(directory, name), source);
+  }
+  return directory;
 }
 
-function loadError(path: string): TemplateError {
+function loadError(directory: string): TemplateError {
   try {
-    loadTemplate(path);
+    templateForLabel(directory, "thin-pr");
   } catch (error) {
     if (error instanceof TemplateError) {
       return error;
