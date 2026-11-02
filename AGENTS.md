@@ -54,7 +54,7 @@ pnpm exec vitest run packages/specialists/src/schema.test.ts
 pnpm exec vitest run scripts/eval.test.ts
 ```
 
-`packages/core/src/run.test.ts` writes a SQLite log, reopens it, and expects `replay` to match `runWorkflow`. `packages/github/src/run.test.ts` runs `fixtures/sample-issue-labeled.json` through an in-memory GitHub client. `scripts/eval.test.ts` runs the eval and expects the committed 8/12 report. `scripts/judge.test.ts` expects the judge report at 9/12. `scripts/trace.test.ts` expects six span names in the OTLP file.
+`packages/core/src/run.test.ts` writes a SQLite log for a run that loops once, reopens it, and expects `replay` to rebuild the same outputs, loops, and usage. `packages/github/src/run.test.ts` runs `fixtures/sample-issue-labeled.json` through an in-memory GitHub client. `scripts/eval.test.ts` runs the eval and expects the committed 8/12 report. `scripts/judge.test.ts` expects the judge report at 9/12. `scripts/trace.test.ts` expects six span names in the OTLP file.
 
 ### pnpm eval
 
@@ -102,11 +102,11 @@ The command replays run `run-7` and exports OTLP JSON. Set `THIN_PR_TRACE_PATH` 
 
 ## Layout
 
-`packages/core` is the control plane. It runs the template, appends each transition to SQLite, and does not call a model. `packages/specialists` holds planner, implementer, tester, reviewer, and pr-writer. The default model client is `ReplayModelClient`. `THIN_PR_MODEL=live` selects the live client in `packages/specialists/src/live.ts`. `packages/gate` evaluates plan, tests, contracts, the measured diff, and the diff budget. Each rule returns `PASS` or `FAIL` and a reason. The tests rule still reads the tester contract, and it also requires the runner's own file check. `packages/github` is the only package that calls GitHub. It creates the branch, the checks, and a draft pull request when every gate rule passes. A failure comments the run report and does not open a pull request. Specialists do not import it.
+`packages/core` is the control plane. It runs the template, appends each step event to SQLite, and does not call a model. `packages/specialists` holds planner, implementer, tester, reviewer, and pr-writer as step handlers. The default model client is `ReplayModelClient`. `THIN_PR_MODEL=live` selects the live client in `packages/specialists/src/live.ts`. `packages/gate` evaluates plan, tests, contracts, the measured diff, and the diff budget. Each rule returns `PASS` or `FAIL` and a reason. The tests rule reads the verify output: the tester verdict and the runner's own file check. `packages/github` is the only package that calls GitHub. It creates the branch, the checks, and a draft pull request when every gate rule passes. A failure comments the run report and does not open a pull request. Specialists do not import it.
 
-`templates/stub-run.json` and the YAML workflows under `templates/` are loaded by the machine. A step names its specialist, fields, retry limit, and optional gate hook. The labeled-issue entry loads `templates/small-feature.yaml` only.
+The YAML templates under `templates/` are data. A step names its id, optional model and effort, retry limit, and optional loop. The labeled-issue entry loads the template whose `label` matches the issue label.
 
-`evals/` holds the sample repo, labeled issues, recorded responses, and recorded diffs. `pnpm eval` replays them. `fixtures/gate-pass.json` and `fixtures/gate-fail.json` are the specialist outputs for the draft path and the failed-rule path.
+`evals/` holds the sample repo, labeled issues, recorded responses, and recorded diffs. `pnpm eval` replays them. `fixtures/gate-pass.json` and `fixtures/gate-fail.json` are the recorded specialist replies for the draft path and the failed-rule path.
 
 ## Skills
 
