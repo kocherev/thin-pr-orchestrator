@@ -80,6 +80,18 @@ describe("eval:record", () => {
     expect(replayed?.record.totals.costUsd).toBeCloseTo(result.spentUsd, 10);
   });
 
+  it("records nightly with a spend cap, read-only, and never on pull requests", () => {
+    const workflow = readFileSync(join(root, ".github/workflows/nightly-eval.yml"), "utf8");
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("schedule:");
+    expect(workflow).not.toMatch(/pull_request|push:/);
+    expect(workflow).toContain("contents: read");
+    expect(workflow).not.toMatch(/: write|git push/);
+    expect(workflow).toContain('THIN_PR_SPEND_LIMIT_USD: "15"');
+    expect(workflow).toContain("run: pnpm eval:record --all");
+    expect(workflow).toContain("run: pnpm eval:judge -- --record");
+  });
+
   it("stops at the spend limit and keeps the old cassette", { timeout: 120_000 }, async () => {
     const workspace = copyWorkspace();
     const cassette = join(workspace, "evals", "cases", CASE, "cassette.jsonl");
