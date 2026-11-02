@@ -1,5 +1,6 @@
 import { Container, ContainerProxy, getContainer } from "@cloudflare/containers";
 import { z } from "zod";
+import { actionWorkflowEnabled } from "./action-workflow.js";
 import { readDelivery, type Job } from "./event.js";
 import { createInstallationToken } from "./installation-token.js";
 import { verifySignature } from "./signature.js";
@@ -83,13 +84,17 @@ export default {
   },
 } satisfies ExportedHandler<Env, Job>;
 
-async function dispatch(job: Job, env: Env): Promise<"started"> {
+async function dispatch(job: Job, env: Env): Promise<"started" | "left to the Action"> {
+  const fetcher = fetch.bind(globalThis);
   const installation = await createInstallationToken({
     app: { clientId: env.GITHUB_APP_CLIENT_ID, privateKeyPem: env.GITHUB_APP_PRIVATE_KEY },
     installationId: job.installationId,
     repository: job.repo,
-    fetch: fetch.bind(globalThis),
+    fetch: fetcher,
   });
+  if (await actionWorkflowEnabled({ owner: job.owner, repo: job.repo, token: installation.token, fetch: fetcher })) {
+    return "left to the Action";
+  }
   const runner = getContainer(env.RUNNER, job.deliveryId);
   await runner.start({
     envVars: {

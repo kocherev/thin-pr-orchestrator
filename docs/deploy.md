@@ -6,7 +6,7 @@ You need a Cloudflare account with Workers Paid (Containers require it), Docker 
 
 ## 1. Create the GitHub App
 
-The manifest is `packages/app/github-app-manifest.json`. It asks for checks, contents, issues, and pull requests with write access, metadata with read access, and the `issues` event. The webhook starts inactive because the Worker URL does not exist yet.
+The manifest is `packages/app/github-app-manifest.json`. It asks for checks, contents, issues, and pull requests with write access, actions and metadata with read access, and the `issues` event. Actions read lets the Worker see whether the thin-pr workflow is enabled. The webhook starts inactive because the Worker URL does not exist yet.
 
 Write a form that posts the manifest to GitHub, then open it:
 
@@ -72,7 +72,14 @@ Open the app settings. Set Webhook URL to the Worker URL. Check Active. Save.
 
 GitHub sends a `ping`. Recent Deliveries shows `204` for it. Label an issue `thin-pr`. That delivery shows `202`. `pnpm exec wrangler tail` shows the queue consumer's line for the delivery. The container's logs in the Cloudflare dashboard end with the run record.
 
-The `thin-pr` workflow in `.github/workflows/thin-pr.yml` reacts to the same label. Disable it in the repository settings when the app is installed, or both will run.
+## Action or App
+
+The Action and the App answer the same `thin-pr` label. One rule decides which one runs: the App defers to an enabled thin-pr workflow.
+
+- The workflow `.github/workflows/thin-pr.yml` is enabled: the Action runs. The App acks the job and does nothing.
+- The workflow is disabled or absent: the App runs.
+
+To hand a repository to the App, run `gh workflow disable thin-pr.yml`. Run `gh workflow enable thin-pr.yml` to go back to the Action.
 
 ## Container lifetime
 

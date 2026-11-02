@@ -18,6 +18,15 @@ const tokenResponseSchema = z.object({
 const PKCS8_HEADER = "-----BEGIN PRIVATE KEY-----";
 const PKCS8_FOOTER = "-----END PRIVATE KEY-----";
 
+export function githubHeaders(authorization: string): Record<string, string> {
+  return {
+    accept: "application/vnd.github+json",
+    authorization,
+    "user-agent": "thin-pr-orchestrator",
+    "x-github-api-version": "2022-11-28",
+  };
+}
+
 export async function createAppJwt(app: AppCredentials, nowMs: number = Date.now()): Promise<string> {
   const now = Math.floor(nowMs / 1000);
   const header = encodeJson({ alg: "RS256", typ: "JWT" });
@@ -47,12 +56,7 @@ export async function createInstallationToken(input: {
     `https://api.github.com/app/installations/${input.installationId}/access_tokens`,
     {
       method: "POST",
-      headers: {
-        accept: "application/vnd.github+json",
-        authorization: `Bearer ${jwt}`,
-        "user-agent": "thin-pr-orchestrator",
-        "x-github-api-version": "2022-11-28",
-      },
+      headers: githubHeaders(`Bearer ${jwt}`),
       body: input.repository === undefined ? null : JSON.stringify({ repositories: [input.repository] }),
     },
   );

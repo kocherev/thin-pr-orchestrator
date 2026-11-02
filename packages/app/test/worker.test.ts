@@ -65,18 +65,25 @@ async function consume(job: Job): Promise<{ readonly acked: boolean; readonly re
   };
 }
 
+const WORKFLOW_URL = "https://api.github.com/repos/example/sample-repo/actions/workflows/thin-pr.yml";
+
 const githubRequests: { readonly url: string; readonly body: string }[] = [];
+let workflow: Response | null = null;
 
 beforeEach(() => {
   runner.status = 202;
   runner.starts.length = 0;
   runner.runs.length = 0;
   githubRequests.length = 0;
+  workflow = null;
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const request = new Request(input, init);
     githubRequests.push({ url: request.url, body: await request.text() });
     if (request.url === "https://api.github.com/app/installations/42/access_tokens") {
       return Response.json({ token: "ghs_test", expires_at: "2026-11-02T13:00:00Z" }, { status: 201 });
+    }
+    if (request.url === WORKFLOW_URL) {
+      return workflow ?? Response.json({ message: "Not Found" }, { status: 404 });
     }
     return new Response("unexpected request", { status: 500 });
   });
@@ -109,6 +116,7 @@ describe("webhook intake", () => {
         url: "https://api.github.com/app/installations/42/access_tokens",
         body: JSON.stringify({ repositories: ["sample-repo"] }),
       },
+      { url: WORKFLOW_URL, body: "" },
     ]);
   });
 
@@ -141,6 +149,18 @@ describe("job consumer", () => {
   it("retries the message when GitHub refuses the installation token", async () => {
     expect(await consume({ ...JOB, installationId: 7 })).toEqual({ acked: false, retried: true });
     expect(runner.starts).toHaveLength(0);
+  });
+
+  it("leaves the label to the Action while the thin-pr workflow is enabled", async () => {
+    workflow = Response.json({ state: "active" });
+    expect(await consume(JOB)).toEqual({ acked: true, retried: false });
+    expect(runner.starts).toHaveLength(0);
+  });
+
+  it("runs when the thin-pr workflow is disabled", async () => {
+    workflow = Response.json({ state: "disabled_manually" });
+    expect(await consume(JOB)).toEqual({ acked: true, retried: false });
+    expect(runner.runs).toHaveLength(1);
   });
 });
 
