@@ -1,5 +1,6 @@
+import type { Span } from "@opentelemetry/api";
 import type { EventLog, NewRunEvent } from "./log.js";
-import { withSpan } from "./span.js";
+import { usageAttributes, withSpan } from "./span.js";
 import type { Template, TemplateStep } from "./template.js";
 import type { RunEvent, RunState, StepHandler, StepId, StepResult, Usage } from "./types.js";
 
@@ -54,9 +55,10 @@ export async function runWorkflow(input: RunInput): Promise<RunState> {
   };
 
   // Runs one pass over a step with its retries. Returns the loop target and its feedback, or null to move on.
-  const runPass = async (step: TemplateStep, loop: number, feedback: string | null) => {
+  const runPass = async (step: TemplateStep, loop: number, feedback: string | null, span: Span) => {
     let lastError: string | null = null;
     for (let attempt = 1; attempt <= step.retries + 1; attempt += 1) {
+      span.setAttribute("thin_pr.attempts", attempt);
       const attemptFeedback = lastError ?? feedback;
       const current = await emit({ step: step.id, kind: "started", attempt, feedback: attemptFeedback });
       let result: StepResult;
@@ -96,24 +98,31 @@ export async function runWorkflow(input: RunInput): Promise<RunState> {
 
   await emit({ kind: "started", output: { issue } });
   try {
-    await withSpan("thin-pr.run", { "thin_pr.run_id": runId, "thin_pr.template_id": template.id }, async () => {
+    await withSpan("thin-pr.run", { "thin_pr.run_id": runId, "thin_pr.template_id": template.id }, async (runSpan) => {
       const passes: Partial<Record<StepId, number>> = {};
       let feedback: string | null = null;
       let index = 0;
-      while (index < template.steps.length) {
-        const step = template.steps[index];
-        if (!step) {
-          throw new Error(`template step ${index} is missing`);
+      try {
+        while (index < template.steps.length) {
+          const step = template.steps[index];
+          if (!step) {
+            throw new Error(`template step ${index} is missing`);
+          }
+          const loop = passes[step.id] ?? 0;
+          passes[step.id] = loop + 1;
+          const next = await withSpan(`thin-pr.${step.id}`, { "thin_pr.step": step.id, "thin_pr.loop": loop }, async (span) => {
+            const before = state?.usage.length ?? 0;
+            try {
+              return await runPass(step, loop, feedback, span);
+            } finally {
+              span.setAttributes(usageAttributes(state?.usage.slice(before) ?? []));
+            }
+          });
+          feedback = next?.feedback ?? null;
+          index = next ? template.steps.findIndex((candidate) => candidate.id === next.backTo) : index + 1;
         }
-        const loop = passes[step.id] ?? 0;
-        passes[step.id] = loop + 1;
-        const next = await withSpan(
-          `thin-pr.${step.id}`,
-          { "thin_pr.step": step.id, "thin_pr.loop": String(loop) },
-          () => runPass(step, loop, feedback),
-        );
-        feedback = next?.feedback ?? null;
-        index = next ? template.steps.findIndex((candidate) => candidate.id === next.backTo) : index + 1;
+      } finally {
+        runSpan.setAttributes(usageAttributes(state?.usage ?? []));
       }
     });
   } catch (error) {

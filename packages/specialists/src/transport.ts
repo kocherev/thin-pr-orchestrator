@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { Middleware, MiddlewareContext } from "@anthropic-ai/sdk";
+import { trace } from "@opentelemetry/api";
 import type { Usage } from "@thin-pr/core";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -8,6 +9,9 @@ import { costOf, pricedModel, type BilledUsage, type PricedModel } from "./prici
 
 /** Names the specialist behind a request. The transport reads it and strips it before anything is sent. */
 export const SPECIALIST_HEADER = "x-thin-pr-specialist";
+
+const ATTR_SPECIALIST = "thin_pr.specialist";
+const ATTR_COST_USD = "thin_pr.cost_usd";
 
 export type TransportOptions =
   | { readonly mode: "live"; readonly spendLimitUsd: number }
@@ -78,10 +82,10 @@ export class SpendMeter {
     }
   }
 
-  record(model: PricedModel, usage: BilledUsage, durationMs: number): void {
+  record(model: PricedModel, usage: BilledUsage, durationMs: number): Usage {
     const costUsd = costOf(model, usage);
     this.spent += costUsd;
-    this.calls.push({
+    const call = {
       model,
       // Usage has no cache-write field, so written tokens count as input.
       inputTokens: usage.input_tokens + (usage.cache_creation_input_tokens ?? 0),
@@ -89,7 +93,9 @@ export class SpendMeter {
       cacheReadTokens: usage.cache_read_input_tokens ?? 0,
       costUsd,
       durationMs,
-    });
+    };
+    this.calls.push(call);
+    return call;
   }
 }
 
@@ -114,13 +120,21 @@ export function createTransport(options: TransportOptions): { middleware: Middle
     }
     const sent = messageRequest.parse(JSON.parse(request.body));
     const model = pricedModel(sent.model);
+    // The SDK runs middleware inside its `anthropic.messages.create` span, which has the GenAI attributes.
+    // This adds what only the transport knows.
+    const span = trace.getActiveSpan();
+    span?.setAttribute(ATTR_SPECIALIST, specialist);
+    const price = async (response: Response, durationMs: number) => {
+      const call = meter.record(model, await billedUsage(response, ctx), durationMs);
+      span?.setAttribute(ATTR_COST_USD, call.costUsd);
+    };
 
     if (play) {
       const entry = play(specialist, model);
       const { contentType, body: recorded } = entry.response;
       const text = typeof recorded === "string" ? recorded : JSON.stringify(recorded);
       const response = new Response(text, { status: 200, headers: { "content-type": contentType } });
-      meter.record(model, await billedUsage(response, ctx), entry.durationMs);
+      await price(response, entry.durationMs);
       return response;
     }
 
@@ -134,7 +148,7 @@ export function createTransport(options: TransportOptions): { middleware: Middle
     const text = await upstream.text();
     const durationMs = Date.now() - started;
     const response = new Response(text, upstream);
-    meter.record(model, await billedUsage(response, ctx), durationMs);
+    await price(response, durationMs);
     if (write) {
       const contentType = upstream.headers.get("content-type") ?? "application/json";
       const stored = contentType.includes("json") ? z.json().parse(JSON.parse(text)) : text;

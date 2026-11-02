@@ -15,17 +15,1057 @@
       "scopeSpans": [
         {
           "scope": {
+            "name": "com.anthropic.sdk.typescript",
+            "version": "0.135.0"
+          },
+          "spans": [
+            {
+              "traceId": "905218daacc2bb1498613b4993f50f4e",
+              "spanId": "0acf4b2980e979d5",
+              "parentSpanId": "fe9079ea60f4181b",
+              "name": "anthropic.messages.create",
+              "kind": 3,
+              "startTimeUnixNano": "1793639936408000000",
+              "endTimeUnixNano": "1793639936530917833",
+              "attributes": [
+                {
+                  "key": "gen_ai.provider.name",
+                  "value": {
+                    "stringValue": "anthropic"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "api.anthropic.com"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": 443
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/v1/messages"
+                  }
+                },
+                {
+                  "key": "gen_ai.operation.name",
+                  "value": {
+                    "stringValue": "chat"
+                  }
+                },
+                {
+                  "key": "gen_ai.request.model",
+                  "value": {
+                    "stringValue": "claude-sonnet-5-5"
+                  }
+                },
+                {
+                  "key": "anthropic.beta",
+                  "value": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "server-side-fallback-2026-07-01"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "key": "gen_ai.request.max_tokens",
+                  "value": {
+                    "intValue": 16000
+                  }
+                },
+                {
+                  "key": "gen_ai.output.type",
+                  "value": {
+                    "stringValue": "json"
+                  }
+                },
+                {
+                  "key": "gen_ai.request.reasoning.level",
+                  "value": {
+                    "stringValue": "medium"
+                  }
+                },
+                {
+                  "key": "anthropic.thinking.type",
+                  "value": {
+                    "stringValue": "adaptive"
+                  }
+                },
+                {
+                  "key": "thin_pr.specialist",
+                  "value": {
+                    "stringValue": "planner"
+                  }
+                },
+                {
+                  "key": "thin_pr.cost_usd",
+                  "value": {
+                    "doubleValue": 0.002076
+                  }
+                },
+                {
+                  "key": "gen_ai.response.id",
+                  "value": {
+                    "stringValue": "msg_182"
+                  }
+                },
+                {
+                  "key": "gen_ai.response.model",
+                  "value": {
+                    "stringValue": "claude-sonnet-5-5"
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.input_tokens",
+                  "value": {
+                    "intValue": 318
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.cache_write.input_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.cache_read.input_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.output_tokens",
+                  "value": {
+                    "intValue": 144
+                  }
+                },
+                {
+                  "key": "anthropic.message.stop_reason",
+                  "value": {
+                    "stringValue": "end_turn"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": 200
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "events": [],
+              "droppedEventsCount": 0,
+              "status": {
+                "code": 1
+              },
+              "links": [],
+              "droppedLinksCount": 0,
+              "flags": 257
+            },
+            {
+              "traceId": "905218daacc2bb1498613b4993f50f4e",
+              "spanId": "2e293d9a2a1ea6d9",
+              "parentSpanId": "8b945bcb68bf71bd",
+              "name": "anthropic.messages.create",
+              "kind": 3,
+              "startTimeUnixNano": "1793639936571000000",
+              "endTimeUnixNano": "1793639936574309250",
+              "attributes": [
+                {
+                  "key": "gen_ai.provider.name",
+                  "value": {
+                    "stringValue": "anthropic"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "api.anthropic.com"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": 443
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/v1/messages"
+                  }
+                },
+                {
+                  "key": "gen_ai.operation.name",
+                  "value": {
+                    "stringValue": "chat"
+                  }
+                },
+                {
+                  "key": "gen_ai.request.model",
+                  "value": {
+                    "stringValue": "claude-opus-5-5"
+                  }
+                },
+                {
+                  "key": "anthropic.beta",
+                  "value": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "server-side-fallback-2026-07-01"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "key": "gen_ai.request.max_tokens",
+                  "value": {
+                    "intValue": 32000
+                  }
+                },
+                {
+                  "key": "gen_ai.request.reasoning.level",
+                  "value": {
+                    "stringValue": "high"
+                  }
+                },
+                {
+                  "key": "anthropic.thinking.type",
+                  "value": {
+                    "stringValue": "adaptive"
+                  }
+                },
+                {
+                  "key": "thin_pr.specialist",
+                  "value": {
+                    "stringValue": "implementer"
+                  }
+                },
+                {
+                  "key": "thin_pr.cost_usd",
+                  "value": {
+                    "doubleValue": 0.006
+                  }
+                },
+                {
+                  "key": "gen_ai.response.id",
+                  "value": {
+                    "stringValue": "msg_449"
+                  }
+                },
+                {
+                  "key": "gen_ai.response.model",
+                  "value": {
+                    "stringValue": "claude-opus-5-5"
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.input_tokens",
+                  "value": {
+                    "intValue": 785
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.cache_write.input_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.cache_read.input_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.output_tokens",
+                  "value": {
+                    "intValue": 143
+                  }
+                },
+                {
+                  "key": "anthropic.message.stop_reason",
+                  "value": {
+                    "stringValue": "tool_use"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": 200
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "events": [],
+              "droppedEventsCount": 0,
+              "status": {
+                "code": 1
+              },
+              "links": [],
+              "droppedLinksCount": 0,
+              "flags": 257
+            },
+            {
+              "traceId": "905218daacc2bb1498613b4993f50f4e",
+              "spanId": "7124fa7df558c9c3",
+              "parentSpanId": "8b945bcb68bf71bd",
+              "name": "anthropic.custom_tool_use read_file",
+              "kind": 1,
+              "startTimeUnixNano": "1793639936576000000",
+              "endTimeUnixNano": "1793639936576993292",
+              "attributes": [
+                {
+                  "key": "gen_ai.operation.name",
+                  "value": {
+                    "stringValue": "execute_tool"
+                  }
+                },
+                {
+                  "key": "gen_ai.provider.name",
+                  "value": {
+                    "stringValue": "anthropic"
+                  }
+                },
+                {
+                  "key": "gen_ai.tool.name",
+                  "value": {
+                    "stringValue": "read_file"
+                  }
+                },
+                {
+                  "key": "gen_ai.tool.description",
+                  "value": {
+                    "stringValue": "Read one file. The path is relative to the repository root."
+                  }
+                },
+                {
+                  "key": "gen_ai.tool.call.id",
+                  "value": {
+                    "stringValue": "toolu_1_0_0"
+                  }
+                },
+                {
+                  "key": "gen_ai.tool.type",
+                  "value": {
+                    "stringValue": "function"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "events": [],
+              "droppedEventsCount": 0,
+              "status": {
+                "code": 1
+              },
+              "links": [],
+              "droppedLinksCount": 0,
+              "flags": 257
+            },
+            {
+              "traceId": "905218daacc2bb1498613b4993f50f4e",
+              "spanId": "3bf1457f4fcfc102",
+              "parentSpanId": "8b945bcb68bf71bd",
+              "name": "anthropic.messages.create",
+              "kind": 3,
+              "startTimeUnixNano": "1793639936577000000",
+              "endTimeUnixNano": "1793639936579007875",
+              "attributes": [
+                {
+                  "key": "gen_ai.provider.name",
+                  "value": {
+                    "stringValue": "anthropic"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "api.anthropic.com"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": 443
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/v1/messages"
+                  }
+                },
+                {
+                  "key": "gen_ai.operation.name",
+                  "value": {
+                    "stringValue": "chat"
+                  }
+                },
+                {
+                  "key": "gen_ai.request.model",
+                  "value": {
+                    "stringValue": "claude-opus-5-5"
+                  }
+                },
+                {
+                  "key": "anthropic.beta",
+                  "value": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "server-side-fallback-2026-07-01"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "key": "gen_ai.request.max_tokens",
+                  "value": {
+                    "intValue": 32000
+                  }
+                },
+                {
+                  "key": "gen_ai.request.reasoning.level",
+                  "value": {
+                    "stringValue": "high"
+                  }
+                },
+                {
+                  "key": "anthropic.thinking.type",
+                  "value": {
+                    "stringValue": "adaptive"
+                  }
+                },
+                {
+                  "key": "thin_pr.specialist",
+                  "value": {
+                    "stringValue": "implementer"
+                  }
+                },
+                {
+                  "key": "thin_pr.cost_usd",
+                  "value": {
+                    "doubleValue": 0.006504
+                  }
+                },
+                {
+                  "key": "gen_ai.response.id",
+                  "value": {
+                    "stringValue": "msg_486"
+                  }
+                },
+                {
+                  "key": "gen_ai.response.model",
+                  "value": {
+                    "stringValue": "claude-opus-5-5"
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.input_tokens",
+                  "value": {
+                    "intValue": 851
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.cache_write.input_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.cache_read.input_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.output_tokens",
+                  "value": {
+                    "intValue": 155
+                  }
+                },
+                {
+                  "key": "anthropic.message.stop_reason",
+                  "value": {
+                    "stringValue": "tool_use"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": 200
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "events": [],
+              "droppedEventsCount": 0,
+              "status": {
+                "code": 1
+              },
+              "links": [],
+              "droppedLinksCount": 0,
+              "flags": 257
+            },
+            {
+              "traceId": "905218daacc2bb1498613b4993f50f4e",
+              "spanId": "3982722df782a15d",
+              "parentSpanId": "8b945bcb68bf71bd",
+              "name": "anthropic.custom_tool_use replace",
+              "kind": 1,
+              "startTimeUnixNano": "1793639936580000000",
+              "endTimeUnixNano": "1793639936581603458",
+              "attributes": [
+                {
+                  "key": "gen_ai.operation.name",
+                  "value": {
+                    "stringValue": "execute_tool"
+                  }
+                },
+                {
+                  "key": "gen_ai.provider.name",
+                  "value": {
+                    "stringValue": "anthropic"
+                  }
+                },
+                {
+                  "key": "gen_ai.tool.name",
+                  "value": {
+                    "stringValue": "replace"
+                  }
+                },
+                {
+                  "key": "gen_ai.tool.description",
+                  "value": {
+                    "stringValue": "Replace old_text with new_text in one existing file. old_text must match exactly once."
+                  }
+                },
+                {
+                  "key": "gen_ai.tool.call.id",
+                  "value": {
+                    "stringValue": "toolu_1_1_0"
+                  }
+                },
+                {
+                  "key": "gen_ai.tool.type",
+                  "value": {
+                    "stringValue": "function"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "events": [],
+              "droppedEventsCount": 0,
+              "status": {
+                "code": 1
+              },
+              "links": [],
+              "droppedLinksCount": 0,
+              "flags": 257
+            },
+            {
+              "traceId": "905218daacc2bb1498613b4993f50f4e",
+              "spanId": "ee8fe84183157734",
+              "parentSpanId": "8b945bcb68bf71bd",
+              "name": "anthropic.messages.create",
+              "kind": 3,
+              "startTimeUnixNano": "1793639936582000000",
+              "endTimeUnixNano": "1793639936583869667",
+              "attributes": [
+                {
+                  "key": "gen_ai.provider.name",
+                  "value": {
+                    "stringValue": "anthropic"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "api.anthropic.com"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": 443
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/v1/messages"
+                  }
+                },
+                {
+                  "key": "gen_ai.operation.name",
+                  "value": {
+                    "stringValue": "chat"
+                  }
+                },
+                {
+                  "key": "gen_ai.request.model",
+                  "value": {
+                    "stringValue": "claude-opus-5-5"
+                  }
+                },
+                {
+                  "key": "anthropic.beta",
+                  "value": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "server-side-fallback-2026-07-01"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "key": "gen_ai.request.max_tokens",
+                  "value": {
+                    "intValue": 32000
+                  }
+                },
+                {
+                  "key": "gen_ai.request.reasoning.level",
+                  "value": {
+                    "stringValue": "high"
+                  }
+                },
+                {
+                  "key": "anthropic.thinking.type",
+                  "value": {
+                    "stringValue": "adaptive"
+                  }
+                },
+                {
+                  "key": "thin_pr.specialist",
+                  "value": {
+                    "stringValue": "implementer"
+                  }
+                },
+                {
+                  "key": "thin_pr.cost_usd",
+                  "value": {
+                    "doubleValue": 0.006356
+                  }
+                },
+                {
+                  "key": "gen_ai.response.id",
+                  "value": {
+                    "stringValue": "msg_528"
+                  }
+                },
+                {
+                  "key": "gen_ai.response.model",
+                  "value": {
+                    "stringValue": "claude-opus-5-5"
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.input_tokens",
+                  "value": {
+                    "intValue": 924
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.cache_write.input_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.cache_read.input_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.output_tokens",
+                  "value": {
+                    "intValue": 133
+                  }
+                },
+                {
+                  "key": "anthropic.message.stop_reason",
+                  "value": {
+                    "stringValue": "end_turn"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": 200
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "events": [],
+              "droppedEventsCount": 0,
+              "status": {
+                "code": 1
+              },
+              "links": [],
+              "droppedLinksCount": 0,
+              "flags": 257
+            },
+            {
+              "traceId": "905218daacc2bb1498613b4993f50f4e",
+              "spanId": "8b945bcb68bf71bd",
+              "parentSpanId": "53bbebb13d8860cb",
+              "name": "anthropic.messages.tool_runner",
+              "kind": 1,
+              "startTimeUnixNano": "1793639936570000000",
+              "endTimeUnixNano": "1793639936583826458",
+              "attributes": [
+                {
+                  "key": "gen_ai.operation.name",
+                  "value": {
+                    "stringValue": "invoke_agent"
+                  }
+                },
+                {
+                  "key": "gen_ai.provider.name",
+                  "value": {
+                    "stringValue": "anthropic"
+                  }
+                },
+                {
+                  "key": "gen_ai.request.model",
+                  "value": {
+                    "stringValue": "claude-opus-5-5"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "events": [],
+              "droppedEventsCount": 0,
+              "status": {
+                "code": 1
+              },
+              "links": [],
+              "droppedLinksCount": 0,
+              "flags": 257
+            },
+            {
+              "traceId": "905218daacc2bb1498613b4993f50f4e",
+              "spanId": "067405ee5a63a18b",
+              "parentSpanId": "68b27ab6999ffd6e",
+              "name": "anthropic.messages.create",
+              "kind": 3,
+              "startTimeUnixNano": "1793639937895000000",
+              "endTimeUnixNano": "1793639937897177917",
+              "attributes": [
+                {
+                  "key": "gen_ai.provider.name",
+                  "value": {
+                    "stringValue": "anthropic"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "api.anthropic.com"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": 443
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/v1/messages"
+                  }
+                },
+                {
+                  "key": "gen_ai.operation.name",
+                  "value": {
+                    "stringValue": "chat"
+                  }
+                },
+                {
+                  "key": "gen_ai.request.model",
+                  "value": {
+                    "stringValue": "claude-sonnet-5-5"
+                  }
+                },
+                {
+                  "key": "anthropic.beta",
+                  "value": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "server-side-fallback-2026-07-01"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "key": "gen_ai.request.max_tokens",
+                  "value": {
+                    "intValue": 16000
+                  }
+                },
+                {
+                  "key": "gen_ai.output.type",
+                  "value": {
+                    "stringValue": "json"
+                  }
+                },
+                {
+                  "key": "gen_ai.request.reasoning.level",
+                  "value": {
+                    "stringValue": "high"
+                  }
+                },
+                {
+                  "key": "anthropic.thinking.type",
+                  "value": {
+                    "stringValue": "adaptive"
+                  }
+                },
+                {
+                  "key": "thin_pr.specialist",
+                  "value": {
+                    "stringValue": "reviewer"
+                  }
+                },
+                {
+                  "key": "thin_pr.cost_usd",
+                  "value": {
+                    "doubleValue": 0.002314
+                  }
+                },
+                {
+                  "key": "gen_ai.response.id",
+                  "value": {
+                    "stringValue": "msg_241"
+                  }
+                },
+                {
+                  "key": "gen_ai.response.model",
+                  "value": {
+                    "stringValue": "claude-sonnet-5-5"
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.input_tokens",
+                  "value": {
+                    "intValue": 422
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.cache_write.input_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.cache_read.input_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.output_tokens",
+                  "value": {
+                    "intValue": 147
+                  }
+                },
+                {
+                  "key": "anthropic.message.stop_reason",
+                  "value": {
+                    "stringValue": "end_turn"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": 200
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "events": [],
+              "droppedEventsCount": 0,
+              "status": {
+                "code": 1
+              },
+              "links": [],
+              "droppedLinksCount": 0,
+              "flags": 257
+            },
+            {
+              "traceId": "905218daacc2bb1498613b4993f50f4e",
+              "spanId": "f680775c3d41dd31",
+              "parentSpanId": "0b9b14145304a006",
+              "name": "anthropic.messages.create",
+              "kind": 3,
+              "startTimeUnixNano": "1793639937902000000",
+              "endTimeUnixNano": "1793639937903570667",
+              "attributes": [
+                {
+                  "key": "gen_ai.provider.name",
+                  "value": {
+                    "stringValue": "anthropic"
+                  }
+                },
+                {
+                  "key": "server.address",
+                  "value": {
+                    "stringValue": "api.anthropic.com"
+                  }
+                },
+                {
+                  "key": "server.port",
+                  "value": {
+                    "intValue": 443
+                  }
+                },
+                {
+                  "key": "http.route",
+                  "value": {
+                    "stringValue": "/v1/messages"
+                  }
+                },
+                {
+                  "key": "gen_ai.operation.name",
+                  "value": {
+                    "stringValue": "chat"
+                  }
+                },
+                {
+                  "key": "gen_ai.request.model",
+                  "value": {
+                    "stringValue": "claude-haiku-5-5"
+                  }
+                },
+                {
+                  "key": "gen_ai.request.max_tokens",
+                  "value": {
+                    "intValue": 16000
+                  }
+                },
+                {
+                  "key": "gen_ai.output.type",
+                  "value": {
+                    "stringValue": "json"
+                  }
+                },
+                {
+                  "key": "gen_ai.request.reasoning.level",
+                  "value": {
+                    "stringValue": "low"
+                  }
+                },
+                {
+                  "key": "anthropic.thinking.type",
+                  "value": {
+                    "stringValue": "adaptive"
+                  }
+                },
+                {
+                  "key": "thin_pr.specialist",
+                  "value": {
+                    "stringValue": "pr-writer"
+                  }
+                },
+                {
+                  "key": "thin_pr.cost_usd",
+                  "value": {
+                    "doubleValue": 0.00010630000000000001
+                  }
+                },
+                {
+                  "key": "gen_ai.response.id",
+                  "value": {
+                    "stringValue": "msg_190"
+                  }
+                },
+                {
+                  "key": "gen_ai.response.model",
+                  "value": {
+                    "stringValue": "claude-haiku-5-5"
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.input_tokens",
+                  "value": {
+                    "intValue": 333
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.cache_write.input_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.cache_read.input_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.output_tokens",
+                  "value": {
+                    "intValue": 146
+                  }
+                },
+                {
+                  "key": "anthropic.message.stop_reason",
+                  "value": {
+                    "stringValue": "end_turn"
+                  }
+                },
+                {
+                  "key": "http.response.status_code",
+                  "value": {
+                    "intValue": 200
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "events": [],
+              "droppedEventsCount": 0,
+              "status": {
+                "code": 1
+              },
+              "links": [],
+              "droppedLinksCount": 0,
+              "flags": 257
+            }
+          ]
+        },
+        {
+          "scope": {
             "name": "@thin-pr/core"
           },
           "spans": [
             {
-              "traceId": "60828dfabb4e32ea2f6e6be97dc4cbd3",
-              "spanId": "bde5adde63d18347",
-              "parentSpanId": "335a927dae8ef28d",
+              "traceId": "905218daacc2bb1498613b4993f50f4e",
+              "spanId": "fe9079ea60f4181b",
+              "parentSpanId": "4bcbac08b6db8eef",
               "name": "thin-pr.plan",
               "kind": 1,
-              "startTimeUnixNano": "1793619903867000000",
-              "endTimeUnixNano": "1793619903868602583",
+              "startTimeUnixNano": "1793639936399000000",
+              "endTimeUnixNano": "1793639936563677208",
               "attributes": [
                 {
                   "key": "thin_pr.step",
@@ -36,7 +1076,43 @@
                 {
                   "key": "thin_pr.loop",
                   "value": {
-                    "stringValue": "0"
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "thin_pr.attempts",
+                  "value": {
+                    "intValue": 1
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.requests",
+                  "value": {
+                    "intValue": 1
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.input_tokens",
+                  "value": {
+                    "intValue": 318
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.output_tokens",
+                  "value": {
+                    "intValue": 144
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.cache_read_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.cost_usd",
+                  "value": {
+                    "doubleValue": 0.002076
                   }
                 }
               ],
@@ -51,13 +1127,13 @@
               "flags": 257
             },
             {
-              "traceId": "60828dfabb4e32ea2f6e6be97dc4cbd3",
-              "spanId": "bf57b6c2698aa56a",
-              "parentSpanId": "335a927dae8ef28d",
+              "traceId": "905218daacc2bb1498613b4993f50f4e",
+              "spanId": "53bbebb13d8860cb",
+              "parentSpanId": "4bcbac08b6db8eef",
               "name": "thin-pr.implement",
               "kind": 1,
-              "startTimeUnixNano": "1793619903869000000",
-              "endTimeUnixNano": "1793619903870407292",
+              "startTimeUnixNano": "1793639936564000000",
+              "endTimeUnixNano": "1793639937327268834",
               "attributes": [
                 {
                   "key": "thin_pr.step",
@@ -68,7 +1144,43 @@
                 {
                   "key": "thin_pr.loop",
                   "value": {
-                    "stringValue": "0"
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "thin_pr.attempts",
+                  "value": {
+                    "intValue": 1
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.requests",
+                  "value": {
+                    "intValue": 3
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.input_tokens",
+                  "value": {
+                    "intValue": 2560
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.output_tokens",
+                  "value": {
+                    "intValue": 431
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.cache_read_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.cost_usd",
+                  "value": {
+                    "doubleValue": 0.018860000000000002
                   }
                 }
               ],
@@ -83,13 +1195,13 @@
               "flags": 257
             },
             {
-              "traceId": "60828dfabb4e32ea2f6e6be97dc4cbd3",
-              "spanId": "833392ab51ef0b76",
-              "parentSpanId": "335a927dae8ef28d",
+              "traceId": "905218daacc2bb1498613b4993f50f4e",
+              "spanId": "75ea6cfe4662a174",
+              "parentSpanId": "4bcbac08b6db8eef",
               "name": "thin-pr.verify",
               "kind": 1,
-              "startTimeUnixNano": "1793619903870000000",
-              "endTimeUnixNano": "1793619903890886167",
+              "startTimeUnixNano": "1793639937327000000",
+              "endTimeUnixNano": "1793639937410047291",
               "attributes": [
                 {
                   "key": "thin_pr.step",
@@ -100,7 +1212,43 @@
                 {
                   "key": "thin_pr.loop",
                   "value": {
-                    "stringValue": "0"
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "thin_pr.attempts",
+                  "value": {
+                    "intValue": 1
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.requests",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.input_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.output_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.cache_read_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.cost_usd",
+                  "value": {
+                    "intValue": 0
                   }
                 }
               ],
@@ -115,13 +1263,13 @@
               "flags": 257
             },
             {
-              "traceId": "60828dfabb4e32ea2f6e6be97dc4cbd3",
-              "spanId": "06399ba9a3f967e8",
-              "parentSpanId": "335a927dae8ef28d",
+              "traceId": "905218daacc2bb1498613b4993f50f4e",
+              "spanId": "68b27ab6999ffd6e",
+              "parentSpanId": "4bcbac08b6db8eef",
               "name": "thin-pr.review",
               "kind": 1,
-              "startTimeUnixNano": "1793619903891000000",
-              "endTimeUnixNano": "1793619903892400625",
+              "startTimeUnixNano": "1793639937411000000",
+              "endTimeUnixNano": "1793639937899192875",
               "attributes": [
                 {
                   "key": "thin_pr.step",
@@ -132,7 +1280,43 @@
                 {
                   "key": "thin_pr.loop",
                   "value": {
-                    "stringValue": "0"
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "thin_pr.attempts",
+                  "value": {
+                    "intValue": 1
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.requests",
+                  "value": {
+                    "intValue": 1
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.input_tokens",
+                  "value": {
+                    "intValue": 422
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.output_tokens",
+                  "value": {
+                    "intValue": 147
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.cache_read_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.cost_usd",
+                  "value": {
+                    "doubleValue": 0.002314
                   }
                 }
               ],
@@ -147,13 +1331,13 @@
               "flags": 257
             },
             {
-              "traceId": "60828dfabb4e32ea2f6e6be97dc4cbd3",
-              "spanId": "51fc17e802132be0",
-              "parentSpanId": "335a927dae8ef28d",
+              "traceId": "905218daacc2bb1498613b4993f50f4e",
+              "spanId": "0b9b14145304a006",
+              "parentSpanId": "4bcbac08b6db8eef",
               "name": "thin-pr.write",
               "kind": 1,
-              "startTimeUnixNano": "1793619903893000000",
-              "endTimeUnixNano": "1793619903895749375",
+              "startTimeUnixNano": "1793639937899000000",
+              "endTimeUnixNano": "1793639937905147958",
               "attributes": [
                 {
                   "key": "thin_pr.step",
@@ -164,7 +1348,43 @@
                 {
                   "key": "thin_pr.loop",
                   "value": {
-                    "stringValue": "0"
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "thin_pr.attempts",
+                  "value": {
+                    "intValue": 1
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.requests",
+                  "value": {
+                    "intValue": 1
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.input_tokens",
+                  "value": {
+                    "intValue": 333
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.output_tokens",
+                  "value": {
+                    "intValue": 146
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.cache_read_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.cost_usd",
+                  "value": {
+                    "doubleValue": 0.00010630000000000001
                   }
                 }
               ],
@@ -179,12 +1399,12 @@
               "flags": 257
             },
             {
-              "traceId": "60828dfabb4e32ea2f6e6be97dc4cbd3",
-              "spanId": "335a927dae8ef28d",
+              "traceId": "905218daacc2bb1498613b4993f50f4e",
+              "spanId": "4bcbac08b6db8eef",
               "name": "thin-pr.run",
               "kind": 1,
-              "startTimeUnixNano": "1793619903865000000",
-              "endTimeUnixNano": "1793619903895455750",
+              "startTimeUnixNano": "1793639936397000000",
+              "endTimeUnixNano": "1793639937905156167",
               "attributes": [
                 {
                   "key": "thin_pr.run_id",
@@ -196,6 +1416,36 @@
                   "key": "thin_pr.template_id",
                   "value": {
                     "stringValue": "small-feature"
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.requests",
+                  "value": {
+                    "intValue": 6
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.input_tokens",
+                  "value": {
+                    "intValue": 3633
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.output_tokens",
+                  "value": {
+                    "intValue": 868
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.cache_read_tokens",
+                  "value": {
+                    "intValue": 0
+                  }
+                },
+                {
+                  "key": "thin_pr.usage.cost_usd",
+                  "value": {
+                    "doubleValue": 0.0233563
                   }
                 }
               ],
