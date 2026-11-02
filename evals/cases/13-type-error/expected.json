@@ -1,0 +1,6 @@
+{
+  "verdict": "blocked",
+  "failedRules": [
+    "typecheck"
+  ]
+}

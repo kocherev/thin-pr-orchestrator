@@ -17,7 +17,8 @@ afterEach(() => {
 });
 
 describe("run trace", () => {
-  it("writes an OTLP JSON trace for the gate-pass replay", () => {
+  // A child process keeps the OpenTelemetry SDK global out of this worker. Spawning pnpm and a git repo takes seconds.
+  it("writes an OTLP JSON trace for the gate-pass replay", { timeout: 60_000 }, () => {
     const directory = mkdtempSync(join(tmpdir(), "thin-pr-trace-"));
     directories.push(directory);
     const path = join(directory, "trace.json");

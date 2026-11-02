@@ -23,9 +23,12 @@ async function main(): Promise<void> {
   try {
     const model = createModelClient();
     const runId = process.env.GITHUB_RUN_ID ? `gha-${process.env.GITHUB_RUN_ID}` : `local-${Date.now()}`;
+    // actions/checkout leaves the default branch at the event's commit, with credentials that can push.
     const result = await runAction({
       payload: github.context.payload,
-      workspace: process.cwd(),
+      templates: fileURLToPath(new URL("../../../templates", import.meta.url)),
+      checkout: process.cwd(),
+      baseSha: github.context.sha,
       runId,
       logPath: join(tmpdir(), `thin-pr-${runId}.sqlite`),
       github: createGitHubSurface(new Octokit({ auth: token })),

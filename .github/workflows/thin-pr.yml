@@ -21,8 +21,11 @@ jobs:
       issues: write
       pull-requests: write
     steps:
+      # Full history and every branch, so a second label can force-push thin-pr/<issue> with a lease.
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
@@ -42,6 +45,11 @@ jobs:
           THIN_PR_MODEL: ${{ secrets.ANTHROPIC_API_KEY != '' && 'live' || 'replay' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           THIN_PR_TRACE_PATH: artifacts/trace.json
+          # The runner has no git identity. These name the commit on thin-pr/<issue>.
+          GIT_AUTHOR_NAME: thin-pr[bot]
+          GIT_AUTHOR_EMAIL: thin-pr@example.invalid
+          GIT_COMMITTER_NAME: thin-pr[bot]
+          GIT_COMMITTER_EMAIL: thin-pr@example.invalid
         run: node --experimental-sqlite --disable-warning=ExperimentalWarning --import tsx packages/github/src/action.ts
 
       - name: Upload trace

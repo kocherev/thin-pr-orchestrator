@@ -45,7 +45,8 @@ describe("toRunRecord", () => {
       status: "blocked",
       timeline,
       gate: [{ rule: "tests", verdict: "FAIL", reason: "Tests did not pass." }],
-      diff: { files: 1, lines: 2, meaningful: true },
+      diff: { files: [{ path: "src/counter.ts", added: 1, removed: 1 }], meaningful: true, patch: "" },
+      checks: [{ name: "test", command: "vitest run", exitCode: 1, durationMs: 800, logTail: "1 failed" }],
       pullRequest: null,
     });
 
@@ -56,6 +57,8 @@ describe("toRunRecord", () => {
       issue: { number: 7, title: "Clamp decrement at zero", url: "https://github.com/example/sample-repo/issues/7" },
       template: "small-feature",
       status: "blocked",
+      diff: { files: [{ path: "src/counter.ts", added: 1, removed: 1 }], meaningful: true },
+      checks: [{ name: "test", exitCode: 1, logTail: "1 failed" }],
       pullRequest: null,
       totals: { costUsd: 0.06, durationMs: 9000, inputTokens: 2000, outputTokens: 400 },
     });
@@ -79,6 +82,7 @@ describe("toRunRecord", () => {
       timeline: [],
       gate: [],
       diff: null,
+      checks: [],
       pullRequest: null,
     });
 

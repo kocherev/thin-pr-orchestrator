@@ -1,195 +1,172 @@
-import type { StepId } from "@thin-pr/core";
-import {
-  implementerOutput,
-  plannerOutput,
-  prWriterOutput,
-  reviewerOutput,
-  verifyOutput,
-} from "@thin-pr/specialists";
+import { plannerOutput, reviewerOutput, type CheckResult, type Diff } from "@thin-pr/specialists";
+import { classifyPath, type RepoConfig } from "@thin-pr/workspace";
 import { z } from "zod";
+import { scanAddedLines } from "./secrets.js";
 
-type GateVerdict = "PASS" | "FAIL";
+export const GATE_RULES = ["plan", "contracts", "diff", "budget", "paths", "secrets", "typecheck", "tests", "review"] as const;
+
+type GateRule = (typeof GATE_RULES)[number];
 
 export type GateRuleResult = {
-  readonly rule: string;
-  readonly verdict: GateVerdict;
+  readonly rule: GateRule;
+  readonly verdict: "PASS" | "FAIL";
   readonly reason: string;
 };
 
-export type FileChange = {
-  readonly path: string;
-  readonly before: string;
-  readonly after: string;
-};
-
-export type DiffMeasurement = {
-  readonly files: number;
-  readonly lines: number;
-  readonly meaningful: boolean;
-};
-
-const budgetSchema = z.object({ maxFiles: z.number().int().positive(), maxLines: z.number().int().positive() }).strict();
-
-export type BudgetLimits = z.infer<typeof budgetSchema>;
-
+/** What the gate reads after a run. Step outputs stay `unknown` until a rule parses them. */
 export type RunEvidence = {
-  /** Step outputs as the run log stores them. */
-  readonly outputs: Readonly<Partial<Record<StepId, unknown>>>;
-  /** The runner's measurement of the file bytes it would commit, or null when nothing was measured. */
-  readonly diff: DiffMeasurement | null;
-  readonly budget: BudgetLimits;
+  readonly plan: unknown;
+  readonly review: unknown;
+  /** Whether each step output matched its schema, as the orchestrator checked it. */
+  readonly contracts: readonly { readonly step: string; readonly valid: boolean }[];
+  /** The workspace diff against the base, or null when it was not measured. */
+  readonly diff: Diff | null;
+  readonly checks: readonly CheckResult[];
+  readonly config: RepoConfig;
 };
 
-const CONTRACTS = [
-  ["plan", plannerOutput],
-  ["implement", implementerOutput],
-  ["verify", verifyOutput],
-  ["review", reviewerOutput],
-  ["write", prWriterOutput],
-] as const;
+const RULES: Record<GateRule, (evidence: RunEvidence) => GateRuleResult> = {
+  plan: planRule,
+  contracts: contractsRule,
+  diff: diffRule,
+  budget: budgetRule,
+  paths: pathsRule,
+  secrets: secretsRule,
+  typecheck: (evidence) => checkRule("typecheck", evidence),
+  tests: (evidence) => checkRule("tests", evidence),
+  review: reviewRule,
+};
 
+/** One result per rule, in `GATE_RULES` order. */
 export function evaluate(evidence: RunEvidence): readonly GateRuleResult[] {
-  return [planRule(evidence), testsRule(evidence), contractsRule(evidence), diffRule(evidence), budgetRule(evidence)];
+  return GATE_RULES.map((rule) => RULES[rule](evidence));
 }
 
 export function decide(evidence: RunEvidence): "pass" | "fail" {
   return evaluate(evidence).every((result) => result.verdict === "PASS") ? "pass" : "fail";
 }
 
-export function measureDiff(changes: readonly FileChange[]): DiffMeasurement {
-  let files = 0;
-  let lines = 0;
-  let meaningful = false;
-  for (const change of changes) {
-    if (change.before === change.after) {
-      continue;
-    }
-    files += 1;
-    lines += lineChangeCount(change.before, change.after);
-    if (normalize(change.before) !== normalize(change.after)) {
-      meaningful = true;
-    }
+function planRule({ plan }: RunEvidence): GateRuleResult {
+  if (plan === null || plan === undefined) {
+    return fail("plan", "Plan is missing.");
   }
-  return { files, lines, meaningful };
-}
-
-function lineChangeCount(before: string, after: string): number {
-  const removed = sourceLines(before);
-  const added = sourceLines(after);
-  const shared = longestCommonSubsequence(removed, added);
-  return removed.length - shared + (added.length - shared);
-}
-
-export function parseBudget(value: unknown): BudgetLimits {
-  return budgetSchema.parse(value);
-}
-
-function planRule({ outputs }: RunEvidence): GateRuleResult {
-  if (outputs.plan === null || outputs.plan === undefined) {
-    return rule("plan", "FAIL", "Plan is missing.");
-  }
-  const parsed = plannerOutput.safeParse(outputs.plan);
+  const parsed = plannerOutput.safeParse(plan);
   if (!parsed.success) {
-    return rule("plan", "FAIL", "Plan output does not match its contract.");
+    return fail("plan", "Plan output does not match its contract.");
   }
-  return rule("plan", "PASS", `Plan is present (${countNoun(parsed.data.steps.length, "step")}).`);
+  return pass("plan", `Plan is present (${countNoun(parsed.data.steps.length, "step")}).`);
 }
 
-function testsRule({ outputs, diff }: RunEvidence): GateRuleResult {
-  if (outputs.verify === null || outputs.verify === undefined) {
-    return rule("tests", "FAIL", "Test result is missing.");
+function contractsRule({ contracts }: RunEvidence): GateRuleResult {
+  if (contracts.length === 0) {
+    return fail("contracts", "No step output was checked.");
   }
-  const parsed = verifyOutput.safeParse(outputs.verify);
-  if (!parsed.success) {
-    return rule("tests", "FAIL", "Test output does not match its contract.");
+  const invalid = contracts.find((contract) => !contract.valid);
+  if (invalid) {
+    return fail("contracts", `${invalid.step} output does not match its contract.`);
   }
-  if (!parsed.data.passed) {
-    return rule("tests", "FAIL", "Tests did not pass.");
-  }
-  if (!diff?.meaningful || !parsed.data.sourcesParse) {
-    return rule("tests", "FAIL", "Runner did not confirm the tests.");
-  }
-  return rule("tests", "PASS", "Tests passed.");
-}
-
-function contractsRule({ outputs }: RunEvidence): GateRuleResult {
-  for (const [step, schema] of CONTRACTS) {
-    const value = outputs[step];
-    if (value === null || value === undefined) {
-      return rule("contracts", "FAIL", `Missing ${step} output.`);
-    }
-    if (!schema.safeParse(value).success) {
-      return rule("contracts", "FAIL", `${step} output does not match its contract.`);
-    }
-  }
-  return rule("contracts", "PASS", "Specialist outputs match their contracts.");
+  return pass("contracts", "Step outputs match their contracts.");
 }
 
 function diffRule({ diff }: RunEvidence): GateRuleResult {
   if (!diff) {
-    return rule("diff", "FAIL", "Diff was not measured.");
+    return fail("diff", "Diff was not measured.");
   }
-  if (diff.files === 0 || diff.lines === 0) {
-    return rule("diff", "FAIL", "Diff is empty.");
+  if (diff.files.length === 0) {
+    return fail("diff", "Diff is empty.");
   }
   if (!diff.meaningful) {
-    return rule("diff", "FAIL", "Diff has no meaningful change.");
+    return fail("diff", "Diff only changes whitespace.");
   }
-  return rule("diff", "PASS", `Diff is present (${countNoun(diff.files, "file")}, ${countNoun(diff.lines, "line")}).`);
+  return pass("diff", `Diff is present (${countNoun(diff.files.length, "file")}, ${countNoun(changedLines(diff), "line")}).`);
 }
 
-function budgetRule({ diff, budget }: RunEvidence): GateRuleResult {
+function budgetRule({ diff, config }: RunEvidence): GateRuleResult {
   if (!diff) {
-    return rule("budget", "FAIL", "Budget was not measured.");
+    return fail("budget", "Budget was not measured.");
   }
-  const { files, lines } = diff;
-  const { maxFiles, maxLines } = budget;
+  const files = diff.files.length;
+  const lines = changedLines(diff);
+  const { max_files: maxFiles, max_lines: maxLines } = config.budget;
   const detail = `${countNoun(files, "file")}, ${countNoun(lines, "line")}; limit ${countNoun(maxFiles, "file")}, ${countNoun(maxLines, "line")}`;
   if (files > maxFiles || lines > maxLines) {
-    return rule("budget", "FAIL", `Diff exceeds the budget (${detail}).`);
+    return fail("budget", `Diff exceeds the budget (${detail}).`);
   }
-  return rule("budget", "PASS", `Diff is within the budget (${detail}).`);
+  return pass("budget", `Diff is within the budget (${detail}).`);
 }
 
-function rule(name: string, verdict: GateVerdict, reason: string): GateRuleResult {
-  return { rule: name, verdict, reason };
+function pathsRule({ diff, config }: RunEvidence): GateRuleResult {
+  if (!diff) {
+    return fail("paths", "Paths were not measured.");
+  }
+  const blocked = diff.files.flatMap(({ path }) => {
+    const verdict = classifyPath(config.paths, path);
+    return verdict === "allowed" ? [] : [`${path} (${verdict === "denied" ? "denied" : "not in allow"})`];
+  });
+  if (blocked.length > 0) {
+    return fail("paths", `Changed paths are not allowed: ${blocked.join(", ")}.`);
+  }
+  return pass("paths", "Every changed path is allowed.");
+}
+
+function secretsRule({ diff }: RunEvidence): GateRuleResult {
+  if (!diff) {
+    return fail("secrets", "Diff was not scanned.");
+  }
+  const findings = scanAddedLines(diff.patch);
+  if (findings.length > 0) {
+    const where = findings.map((finding) => `${finding.path}:${finding.line} (${finding.kind})`);
+    return fail("secrets", `Added lines look like secrets: ${where.join(", ")}.`);
+  }
+  return pass("secrets", "No added line looks like a secret.");
+}
+
+function checkRule(rule: "typecheck" | "tests", { checks }: RunEvidence): GateRuleResult {
+  const name = rule === "tests" ? "test" : "typecheck";
+  const label = rule === "tests" ? "Tests" : "Typecheck";
+  const check = checks.find((result) => result.name === name);
+  if (!check) {
+    return fail(rule, `${label} did not run.`);
+  }
+  if (check.exitCode !== 0) {
+    return fail(rule, `${label} failed (exit ${check.exitCode}): ${check.command}`);
+  }
+  return pass(rule, `${label} passed: ${check.command}`);
+}
+
+// shortcut: today's reviewer has no verdict, so empty notes count as approval; PR 4 adds the verdict field.
+const reviewVerdict = z.object({ verdict: z.enum(["approve", "changes_requested"]) });
+
+function reviewRule({ review }: RunEvidence): GateRuleResult {
+  if (review === null || review === undefined) {
+    return fail("review", "Review is missing.");
+  }
+  const verdict = reviewVerdict.safeParse(review);
+  if (verdict.success) {
+    return verdict.data.verdict === "approve"
+      ? pass("review", "Reviewer approved.")
+      : fail("review", "Reviewer requested changes.");
+  }
+  const parsed = reviewerOutput.safeParse(review);
+  if (!parsed.success) {
+    return fail("review", "Review output does not match its contract.");
+  }
+  const notes = parsed.data.notes.length;
+  return notes === 0 ? pass("review", "Reviewer left no notes.") : fail("review", `Reviewer left ${countNoun(notes, "note")}.`);
+}
+
+function changedLines(diff: Diff): number {
+  return diff.files.reduce((sum, file) => sum + file.added + file.removed, 0);
+}
+
+function pass(rule: GateRule, reason: string): GateRuleResult {
+  return { rule, verdict: "PASS", reason };
+}
+
+function fail(rule: GateRule, reason: string): GateRuleResult {
+  return { rule, verdict: "FAIL", reason };
 }
 
 function countNoun(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
-
-function normalize(text: string): string {
-  return sourceLines(text)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .join("\n");
-}
-
-function sourceLines(text: string): string[] {
-  if (text.length === 0) {
-    return [];
-  }
-  const lines = text.split("\n");
-  if (lines[lines.length - 1] === "") {
-    lines.pop();
-  }
-  return lines;
-}
-
-function longestCommonSubsequence(left: readonly string[], right: readonly string[]): number {
-  const prev = new Array<number>(right.length + 1).fill(0);
-  const curr = new Array<number>(right.length + 1).fill(0);
-  for (let i = 1; i <= left.length; i += 1) {
-    for (let j = 1; j <= right.length; j += 1) {
-      const above = prev[j] ?? 0;
-      const leftOf = curr[j - 1] ?? 0;
-      const diagonal = prev[j - 1] ?? 0;
-      curr[j] = left[i - 1] === right[j - 1] ? diagonal + 1 : Math.max(above, leftOf);
-    }
-    for (let j = 0; j <= right.length; j += 1) {
-      prev[j] = curr[j] ?? 0;
-    }
-  }
-  return prev[right.length] ?? 0;
 }

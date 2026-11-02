@@ -63,12 +63,12 @@ importers:
 
   packages/gate:
     dependencies:
-      '@thin-pr/core':
-        specifier: workspace:*
-        version: link:../core
       '@thin-pr/specialists':
         specifier: workspace:*
         version: link:../specialists
+      '@thin-pr/workspace':
+        specifier: workspace:*
+        version: link:../workspace
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -105,9 +105,9 @@ importers:
       '@thin-pr/specialists':
         specifier: workspace:*
         version: link:../specialists
-      typescript:
-        specifier: 6.0.3
-        version: 6.0.3
+      '@thin-pr/workspace':
+        specifier: workspace:*
+        version: link:../workspace
       zod:
         specifier: ^4.6.7
         version: 4.6.7

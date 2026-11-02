@@ -1,339 +1,205 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import type { FileChange } from "@thin-pr/gate";
 import { ReplayModelClient, type ModelClient } from "@thin-pr/specialists";
+import { createScratchRepo } from "@thin-pr/workspace";
 import { runAction, type LabelRunResult } from "./run.js";
 import type { GitHubSurface } from "./surface.js";
 
 const root = fileURLToPath(new URL("../../..", import.meta.url));
-const fixturePath = fileURLToPath(new URL("../../../fixtures/sample-issue-labeled.json", import.meta.url));
-const directories: string[] = [];
+const cleanups: (() => void)[] = [];
 
-type Payload = {
-  action: string;
-  label: { name: string };
-  issue: { number: number; title: string; body: string | null };
-  repository: { name: string; default_branch: string; owner: { login: string } };
-};
-
-type Call = {
-  readonly op: "branchSha" | "createBranch" | "commitFiles" | "readText" | "startCheck" | "finishCheck" | "comment" | "openDraft";
-  readonly owner: string;
-  readonly repo: string;
-  readonly branch?: string;
-  readonly sha?: string;
-  readonly message?: string;
-  readonly name?: string;
-  readonly checkRunId?: number;
-  readonly conclusion?: "success" | "failure";
-  readonly summary?: string;
-  readonly title?: string;
-  readonly issue?: number;
-  readonly body?: string;
-    readonly head?: string;
-  readonly base?: string;
-  readonly draft?: true;
-  readonly files?: readonly { readonly path: string; readonly content: string }[];
-};
+type Call = { readonly op: string } & Readonly<Record<string, unknown>>;
 
 afterEach(() => {
-  for (const directory of directories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
+  for (const cleanup of cleanups.splice(0)) {
+    cleanup();
   }
 });
 
+const STUB = "export function stub(): number {\n  return 0;\n}\n";
+const PASSING_CHECKS = "checks:\n  typecheck: echo typecheck ok\n  test: echo test ok\n";
+
 describe("issue label", () => {
-  it("opens a draft pull request when every gate rule passes", async () => {
+  it("pushes the branch and opens a draft when every gate rule passes", async () => {
+    const repo = scratch(PASSING_CHECKS);
     const memory = memoryGitHub();
-    const result = await runSample(memory.github, readFixture(), {
-      model: modelFromFixture("gate-pass.json"),
-      changes: [stubChange()],
-    });
+    const result = await run(repo, memory.github, { model: modelFromFixture("gate-pass.json") });
 
     expect(result.status).toBe("opened");
     if (result.status !== "opened") {
       return;
     }
+    const head = git(repo.remote, "rev-parse", "thin-pr/7");
+    expect(git(repo.remote, "log", "--format=%s", "thin-pr/7")).toBe("Apply thin-pr/#7\nBase");
+    expect(git(repo.remote, "show", "thin-pr/7:src/stub.ts")).toContain("return 1;");
     expect(result.record).toMatchObject({
-      version: 1,
-      runId: "run-7",
-      repo: "example/sample-repo",
-      issue: { number: 7, title: "Sample thin pull request", url: "https://github.com/example/sample-repo/issues/7" },
-      template: "small-feature",
       status: "opened",
-      diff: { files: 1, lines: 2, meaningful: true },
+      diff: { files: [{ path: "src/stub.ts", added: 1, removed: 1 }], meaningful: true },
+      checks: [
+        { name: "typecheck", command: "echo typecheck ok", exitCode: 0, logTail: "typecheck ok\n" },
+        { name: "test", command: "echo test ok", exitCode: 0, logTail: "test ok\n" },
+      ],
       pullRequest: { number: 11, url: "https://github.com/example/sample-repo/pull/11" },
     });
-    expect(result.record.steps.map((step) => [step.id, step.attempt, step.loop, step.outcome])).toEqual([
-      ["plan", 1, 0, "finished"],
-      ["implement", 1, 0, "finished"],
-      ["verify", 1, 0, "finished"],
-      ["review", 1, 0, "finished"],
-      ["write", 1, 0, "finished"],
+    expect(result.record.gate.map((rule) => `${rule.rule} ${rule.verdict}`)).toEqual([
+      "plan PASS",
+      "contracts PASS",
+      "diff PASS",
+      "budget PASS",
+      "paths PASS",
+      "secrets PASS",
+      "typecheck PASS",
+      "tests PASS",
+      "review PASS",
     ]);
-    expect(result.record.gate.map((rule) => rule.verdict)).toEqual(["PASS", "PASS", "PASS", "PASS", "PASS"]);
-    expect(memory.calls.map((call) => call.op)).toEqual([
-      "branchSha",
-      "createBranch",
-      "startCheck",
-      "finishCheck",
-      "startCheck",
-      "commitFiles",
-      "finishCheck",
-      "startCheck",
-      "finishCheck",
-      "startCheck",
-      "finishCheck",
-      "startCheck",
-      "finishCheck",
-      "startCheck",
-      "finishCheck",
-      "startCheck",
-      "finishCheck",
-      "startCheck",
-      "finishCheck",
-      "startCheck",
-      "finishCheck",
-      "startCheck",
-      "finishCheck",
-      "openDraft",
-    ]);
-    expect(memory.calls[0]).toMatchObject({ op: "branchSha", owner: "example", repo: "sample-repo", branch: "main" });
-    expect(memory.calls[1]).toMatchObject({
-      op: "createBranch",
-      owner: "example",
-      repo: "sample-repo",
-      branch: "thin-pr/7",
-      sha: "abc123",
-    });
-    expect(memory.calls.find((call) => call.op === "commitFiles")).toMatchObject({
-      branch: "thin-pr/7",
-      sha: "abc123",
-      message: "Apply thin-pr/#7",
-      files: [{ path: "src/stub.ts", content: stubChange().after }],
-    });
-    expect(memory.calls.filter((call) => call.op === "startCheck").map((call) => call.name)).toEqual([
-      "thin-pr / plan",
-      "thin-pr / implement",
-      "thin-pr / verify",
-      "thin-pr / review",
-      "thin-pr / write",
-      "thin-pr / gate / plan",
-      "thin-pr / gate / tests",
-      "thin-pr / gate / contracts",
-      "thin-pr / gate / diff",
-      "thin-pr / gate / budget",
-    ]);
+
     const checkShas = memory.calls.filter((call) => call.op === "startCheck").map((call) => [call.name, call.sha]);
-    expect(checkShas.slice(0, 2)).toEqual([
-      ["thin-pr / plan", "abc123"],
-      ["thin-pr / implement", "abc123"],
-    ]);
-    expect(checkShas.slice(2).every((entry) => entry[1] === "def456")).toBe(true);
-    const ruleChecks = memory.calls.filter((call) => call.op === "finishCheck" && call.title === "PASS");
-    expect(ruleChecks.map((call) => call.summary)).toEqual([
-      "PASS: Plan is present (1 step).",
-      "PASS: Tests passed.",
-      "PASS: Specialist outputs match their contracts.",
-      "PASS: Diff is present (1 file, 2 lines).",
-      "PASS: Diff is within the budget (1 file, 2 lines; limit 2 files, 16 lines).",
-    ]);
+    expect(checkShas.slice(0, 5)).toEqual(
+      ["plan", "implement", "verify", "review", "write"].map((step) => [`thin-pr / ${step}`, repo.baseSha]),
+    );
+    expect(checkShas.slice(5).every(([, sha]) => sha === head)).toBe(true);
+    expect(memory.calls.at(-2)).toMatchObject({ op: "listPullsForHead", branch: "thin-pr/7" });
+    const draft = memory.calls.at(-1);
+    expect(draft).toMatchObject({ op: "openDraft", title: "Fix the stub", head: "thin-pr/7", base: "main", draft: true });
+    expect(draft?.body).toContain("## Plan\n\nPlan the stub change.\n\n- edit the stub");
+    expect(draft?.body).toContain("## Checks\n\n- typecheck: exit 0 in ");
+    expect(draft?.body).toContain("- verify: success. typecheck passed; test passed.");
+    expect(draft?.body).toContain("- gate/secrets: success. PASS: No added line looks like a secret.");
     expect(memory.calls.some((call) => call.op === "comment")).toBe(false);
-    const draft = memory.calls.find((call) => call.op === "openDraft");
-    expect(draft).toMatchObject({
-      owner: "example",
-      repo: "sample-repo",
-      title: "Fix the stub",
-      head: "thin-pr/7",
-      base: "main",
-      draft: true,
-    });
-    expect(draft?.body).toContain("## Plan");
-    expect(draft?.body).toContain("Plan the stub change.");
-    expect(draft?.body).toContain("- edit the stub");
-    expect(draft?.body).toContain("## Test results");
-    expect(draft?.body).toContain("Stub checks passed.");
-    expect(draft?.body).toContain("Tests passed.");
-    expect(draft?.body).toContain("## Run report");
-    expect(draft?.body).toContain("Run: run-7");
-    expect(draft?.body).toContain("Branch: thin-pr/7");
-    expect(draft?.body).toContain("PASS: Plan is present (1 step).");
-    expect(draft?.body).not.toContain("- Error:");
   });
 
-  it("does not open a pull request when a gate rule fails", async () => {
+  it("comments the run report and pushes nothing when a gate rule fails", async () => {
+    const repo = scratch(PASSING_CHECKS);
     const memory = memoryGitHub();
-    const result = await runSample(memory.github, readFixture(), { model: modelFromFixture("gate-fail.json") });
+    const result = await run(repo, memory.github, { model: modelFromFixture("gate-fail.json") });
 
-    expect(result.status).toBe("blocked");
+    expect(result).toMatchObject({ status: "blocked", error: "gate failed: review" });
+    expect(git(repo.remote, "branch", "--list", "thin-pr/7")).toBe("");
+    expect(memory.calls.some((call) => call.op === "openDraft" || call.op === "listPullsForHead")).toBe(false);
+    const ruleChecks = memory.calls.filter((call) => call.op === "startCheck" && String(call.name).includes("/ gate /"));
+    expect(ruleChecks.every((call) => call.sha === repo.baseSha)).toBe(true);
+    const comment = memory.calls.find((call) => call.op === "comment");
+    expect(comment).toMatchObject({ issue: 7, owner: "example", repo: "sample-repo" });
+    expect(comment?.body).toContain("- Error: gate failed: review");
+    expect(comment?.body).toContain("- gate/review: failure. FAIL: Reviewer left 1 note.");
+  });
+
+  it("loops verify back to implement on a failing test, then blocks on the tests rule", async () => {
+    const repo = scratch("checks:\n  typecheck: 'true'\n  test: echo '1 failed'; exit 1\n");
+    const memory = memoryGitHub();
+    const result = await run(repo, memory.github, { model: modelFromFixture("gate-pass.json") });
+
+    expect(result).toMatchObject({ status: "blocked", error: "gate failed: tests" });
     if (result.status !== "blocked") {
       return;
     }
-    expect(result.error).toBe("gate failed: tests, diff");
-    expect(result.record.status).toBe("blocked");
-    expect(result.record.gate.map((rule) => [rule.rule, rule.verdict])).toEqual([
-      ["plan", "PASS"],
-      ["tests", "FAIL"],
-      ["contracts", "PASS"],
-      ["diff", "FAIL"],
-      ["budget", "PASS"],
+    expect(result.record.steps.map((step) => `${step.id} ${step.loop} ${step.outcome}`)).toEqual([
+      "plan 0 finished",
+      "implement 0 finished",
+      "verify 0 looped",
+      "implement 1 finished",
+      "verify 1 looped",
+      "implement 2 finished",
+      "verify 2 finished",
+      "review 0 finished",
+      "write 0 finished",
     ]);
-    expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
-    const failedRule = memory.calls.find((call) => call.summary === "FAIL: Tests did not pass.");
-    expect(failedRule).toMatchObject({ op: "finishCheck", conclusion: "failure", title: "FAIL" });
-    const comment = memory.calls.find((call) => call.op === "comment");
-    expect(comment).toMatchObject({ issue: 7, owner: "example", repo: "sample-repo" });
-    expect(comment?.body).toContain("## Run report");
-    expect(comment?.body).toContain("- Error: gate failed: tests, diff");
-    expect(comment?.body).toContain("- Branch: thin-pr/7");
-    expect(comment?.body).toContain("PASS: Plan is present (1 step).");
-    expect(comment?.body).toContain("- gate/tests: failure. FAIL: Tests did not pass.");
-    expect(comment?.body).toContain("PASS: Specialist outputs match their contracts.");
+    expect(result.record.steps[2]?.summary).toBe("test failed (exit 1): echo '1 failed'; exit 1\n1 failed\n");
+    expect(result.record.gate.find((rule) => rule.rule === "tests")?.reason).toBe(
+      "Tests failed (exit 1): echo '1 failed'; exit 1",
+    );
   });
 
-  it("does not open a pull request when the model lists files and the diff is empty", async () => {
+  it("blocks a run whose implementer changed nothing", async () => {
+    const repo = scratch(PASSING_CHECKS);
     const memory = memoryGitHub();
-    const result = await runSample(memory.github, readFixture(), { model: modelFromFixture("gate-pass.json") });
+    const result = await run(repo, memory.github, { model: new ReplayModelClient() });
 
-    expect(result.status).toBe("blocked");
-    expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
-    expect(memory.calls.some((call) => call.op === "commitFiles")).toBe(false);
-    const comment = memory.calls.find((call) => call.op === "comment");
-    expect(comment?.body).toContain("FAIL: Diff is empty.");
-    expect(comment?.body).toContain("FAIL: Runner did not confirm the tests.");
-  });
-
-  it("does not open a pull request for a whitespace-only diff", async () => {
-    const memory = memoryGitHub();
-    const change = stubChange();
-    const result = await runSample(memory.github, readFixture(), {
-      model: modelFromFixture("gate-pass.json"),
-      changes: [{ ...change, after: change.before.replace("return 0;", "return 0;   ") }],
-    });
-
-    expect(result.status).toBe("blocked");
-    expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
-    expect(memory.calls.some((call) => call.op === "commitFiles")).toBe(false);
-    const comment = memory.calls.find((call) => call.op === "comment");
-    expect(comment?.body).toContain("FAIL: Diff has no meaningful change.");
-  });
-
-  it("does not open a pull request when the measured diff exceeds the budget", async () => {
-    const memory = memoryGitHub();
-    const before = "export const stub = 1;\n";
-    const after = `${before}${Array.from({ length: 20 }, (_, index) => `export const extra${index} = ${index};\n`).join("")}`;
-    const result = await runSample(memory.github, readFixture(), {
-      model: modelFromFixture("gate-pass.json"),
-      changes: [{ path: "src/stub.ts", before, after }],
-    });
-
-    expect(result.status).toBe("blocked");
-    expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
-    expect(memory.calls.some((call) => call.op === "commitFiles")).toBe(false);
-    const comment = memory.calls.find((call) => call.op === "comment");
-    expect(comment?.body).toContain("FAIL: Diff exceeds the budget");
-  });
-
-  it("does not trust a passing model flag when the runner cannot parse the file", async () => {
-    const memory = memoryGitHub();
-    const change = stubChange();
-    const result = await runSample(memory.github, readFixture(), {
-      model: modelFromFixture("gate-pass.json"),
-      changes: [{ ...change, after: "export function stub( {\n" }],
-    });
-
-    expect(result.status).toBe("blocked");
-    expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
-    const comment = memory.calls.find((call) => call.op === "comment");
-    expect(comment?.body).toContain("FAIL: Runner did not confirm the tests.");
-    expect(comment?.body).not.toContain("PASS: Tests passed.");
+    expect(result).toMatchObject({ status: "blocked", error: "gate failed: diff" });
+    expect(memory.calls.find((call) => call.op === "comment")?.body).toContain("FAIL: Diff is empty.");
   });
 
   it("comments the run report when a step fails", async () => {
+    const repo = scratch(PASSING_CHECKS);
     const memory = memoryGitHub();
-    const result = await runSample(memory.github, readFixture(), {
+    const result = await run(repo, memory.github, {
       model: new ReplayModelClient({ planner: JSON.stringify({ summary: 1, steps: ["edit the stub"] }) }),
     });
 
-    expect(result.status).toBe("failed");
+    expect(result).toMatchObject({
+      status: "failed",
+      error: "plan failed after 2 attempts: planner output invalid at summary: Invalid input: expected string, received number",
+    });
     if (result.status !== "failed") {
       return;
     }
-    expect(result.error).toBe(
-      "plan failed after 2 attempts: planner output invalid at summary: Invalid input: expected string, received number",
-    );
     expect(result.record.steps.map((step) => [step.id, step.attempt, step.outcome])).toEqual([
       ["plan", 1, "failed"],
       ["plan", 2, "failed"],
     ]);
     const comment = memory.calls.find((call) => call.op === "comment");
-    expect(comment).toMatchObject({ issue: 7, owner: "example", repo: "sample-repo" });
-    expect(comment?.body).toContain("## Run report");
-    expect(comment?.body).toContain("Run: run-7");
-    expect(comment?.body).toContain("Template: small-feature");
-    expect(comment?.body).toContain("Branch: thin-pr/7");
     expect(comment?.body).toContain("- Error: plan failed after 2 attempts");
     expect(comment?.body).toContain("- plan: failure. planner output invalid at summary");
-    const planFinish = memory.calls.find((call) => call.op === "finishCheck" && call.conclusion === "failure");
-    expect(planFinish?.summary).toContain("planner output invalid at summary");
     expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
   });
 
-  it("comments the run report when the branch cannot be created", async () => {
-    const memory = memoryGitHub({ failCreate: true });
-    const result = await runSample(memory.github, readFixture());
+  it("resets the branch from the fresh base and updates the open draft when the label is added again", async () => {
+    const repo = scratch(PASSING_CHECKS);
+    const first = memoryGitHub();
+    expect((await run(repo, first.github, { model: modelFromFixture("gate-pass.json") })).status).toBe("opened");
+    const firstHead = git(repo.remote, "rev-parse", "thin-pr/7");
 
-    expect(result.status).toBe("failed");
-    if (result.status !== "failed") {
-      return;
-    }
-    expect(result.record.steps).toEqual([]);
-    expect(result.error).toBe("branch already exists");
-    const comment = memory.calls.find((call) => call.op === "comment");
-    expect(comment?.body).toContain("## Run report");
-    expect(comment?.body).toContain("branch already exists");
-    expect(comment?.body).toContain("No step finished.");
-    expect(memory.calls.some((call) => call.op === "startCheck")).toBe(false);
-    expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
+    // The default branch moves on. The next run starts from a fresh clone, as actions/checkout gives it.
+    const clone = cloneAndCommit(repo.remote, "README.md", "# Sample\n");
+    const second = memoryGitHub({ openPull: { number: 11, url: "https://github.com/example/sample-repo/pull/11" } });
+    const result = await run(clone, second.github, { model: modelFromFixture("gate-pass.json") });
+
+    expect(result.status).toBe("opened");
+    expect(git(repo.remote, "rev-parse", "thin-pr/7^")).toBe(clone.baseSha);
+    expect(git(repo.remote, "rev-parse", "thin-pr/7")).not.toBe(firstHead);
+    expect(git(repo.remote, "rev-list", "--count", "main..thin-pr/7")).toBe("1");
+    expect(second.calls.some((call) => call.op === "openDraft")).toBe(false);
+    expect(second.calls.at(-1)).toMatchObject({ op: "updatePull", number: 11 });
+    expect(second.calls.at(-1)?.body).toContain("## Run report");
   });
 
   it("ignores a label other than thin-pr", async () => {
+    const repo = scratch(PASSING_CHECKS);
     const memory = memoryGitHub();
-    const payload = readFixture();
-    payload.label.name = "bug";
-    const result = await runSample(memory.github, payload);
+    const payload = { ...readFixture(), label: { name: "bug" } };
+    const result = await run(repo, memory.github, { payload });
 
     expect(result).toEqual({ status: "ignored" });
     expect(memory.calls).toEqual([]);
   });
 
-  it("points the workflow at the label and the action entry", () => {
+  it("points the workflow at the label, the full checkout and a neutral commit identity", () => {
     const workflow = readFileSync(join(root, ".github/workflows/thin-pr.yml"), "utf8");
     expect(workflow).toContain("types: [labeled]");
     expect(workflow).toContain("github.event.label.name == 'thin-pr'");
     expect(workflow).toContain("packages/github/src/action.ts");
     expect(workflow).toContain("actions/checkout@v7");
-    expect(workflow).toContain("actions/setup-node@v7");
-    expect(workflow).toContain("pnpm/action-setup@v6");
+    expect(workflow).toContain("fetch-depth: 0");
+    expect(workflow).toContain("GIT_AUTHOR_NAME: thin-pr[bot]");
+    expect(workflow).toContain("GIT_COMMITTER_EMAIL: thin-pr@example.invalid");
     expect(workflow).toContain("THIN_PR_MODEL:");
     expect(workflow).toContain("|| 'replay'");
+    expect(workflow).toContain("contents: write");
+    expect(workflow).toContain("checks: write");
+    expect(workflow).toContain("issues: write");
+    expect(workflow).toContain("pull-requests: write");
     const ci = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
     expect(ci).not.toContain("THIN_PR_MODEL");
     expect(ci).not.toContain("ANTHROPIC_API_KEY");
-    const action = readFileSync(fileURLToPath(new URL("./action.ts", import.meta.url)), "utf8");
-    expect(action).toContain("createModelClient");
-    expect(workflow).toContain("checks: write");
-    expect(workflow).toContain("issues: write");
-    expect(workflow).toContain("contents: write");
-    expect(workflow).toContain("pull-requests: write");
   });
 
   it("keeps GitHub clients inside packages/github", () => {
     const hits: string[] = [];
-    for (const name of ["core", "specialists", "gate"]) {
+    for (const name of ["core", "specialists", "gate", "workspace"]) {
       for (const file of typescriptFiles(join(root, "packages", name))) {
         for (const specifier of specifiers(readFileSync(file, "utf8"))) {
           if (isGitHubClient(specifier)) {
@@ -344,10 +210,6 @@ describe("issue label", () => {
     }
     expect(hits).toEqual([]);
 
-    const action = readFileSync(fileURLToPath(new URL("./action.ts", import.meta.url)), "utf8");
-    expect(action).toContain("@octokit/rest");
-    expect(action).toContain("@actions/core");
-    expect(action).toContain("@actions/github");
     for (const name of ["action.ts", "run.ts"]) {
       const source = readFileSync(fileURLToPath(new URL(`./${name}`, import.meta.url)), "utf8");
       expect(source).not.toContain("pulls");
@@ -358,162 +220,125 @@ describe("issue label", () => {
   });
 });
 
-function readFixture(): Payload {
-  return JSON.parse(readFileSync(fixturePath, "utf8")) as Payload;
+function readFixture(): Record<string, unknown> {
+  return JSON.parse(readFileSync(join(root, "fixtures", "sample-issue-labeled.json"), "utf8")) as Record<string, unknown>;
 }
 
 function modelFromFixture(name: string): ModelClient {
-  const fixture = JSON.parse(readFileSync(join(root, "fixtures", name), "utf8")) as {
-    plan: unknown;
-    implement: unknown;
-    test: unknown;
-    review: unknown;
-    pullRequest: unknown;
-  };
+  const fixture = JSON.parse(readFileSync(join(root, "fixtures", name), "utf8")) as Record<string, unknown>;
   return new ReplayModelClient({
     planner: JSON.stringify(fixture.plan),
     implementer: JSON.stringify(fixture.implement),
-    tester: JSON.stringify(fixture.test),
     reviewer: JSON.stringify(fixture.review),
     "pr-writer": JSON.stringify(fixture.pullRequest),
   });
 }
 
-async function runSample(
+type Checkout = { readonly dir: string; readonly baseSha: string };
+
+function scratch(config: string) {
+  const repo = createScratchRepo({ "src/stub.ts": STUB, ".thin-pr.yml": config });
+  cleanups.push(() => repo.remove());
+  return repo;
+}
+
+function cloneAndCommit(remote: string, path: string, content: string): Checkout {
+  const parent = mkdtempSync(join(tmpdir(), "thin-pr-clone-"));
+  cleanups.push(() => rmSync(parent, { recursive: true, force: true }));
+  const dir = join(parent, "checkout");
+  git(parent, "clone", "--quiet", remote, dir);
+  for (const [key, value] of [
+    ["user.name", "thin-pr"],
+    ["user.email", "thin-pr@localhost"],
+    ["commit.gpgsign", "false"],
+  ] as const) {
+    git(dir, "config", key, value);
+  }
+  writeFileSync(join(dir, path), content);
+  git(dir, "add", "--all");
+  git(dir, "commit", "--quiet", "--message", "Move main");
+  git(dir, "push", "--quiet", "origin", "main");
+  return { dir, baseSha: git(dir, "rev-parse", "HEAD") };
+}
+
+async function run(
+  checkout: Checkout,
   github: GitHubSurface,
-  payload: Payload,
-  options?: {
-    readonly model?: ModelClient;
-    readonly changes?: readonly FileChange[];
-  },
+  options: { readonly model?: ModelClient; readonly payload?: unknown },
 ): Promise<LabelRunResult> {
   const directory = mkdtempSync(join(tmpdir(), "thin-pr-label-"));
-  directories.push(directory);
+  cleanups.push(() => rmSync(directory, { recursive: true, force: true }));
   return runAction({
-    payload,
-    workspace: root,
+    payload: options.payload ?? readFixture(),
+    templates: join(root, "templates"),
+    checkout: checkout.dir,
+    baseSha: checkout.baseSha,
     runId: "run-7",
     logPath: join(directory, "events.sqlite"),
     github,
-    model: options?.model,
-    changes: options?.changes,
+    model: options.model,
   });
 }
 
-function stubChange(): FileChange {
-  return {
-    path: "src/stub.ts",
-    before: "export function stub(): number {\n  return 0;\n}\n",
-    after: "export function stub(): number {\n  return 1;\n}\n",
-  };
-}
-
-function memoryGitHub(options?: { readonly failCreate?: boolean }) {
+function memoryGitHub(options?: { readonly openPull?: { readonly number: number; readonly url: string } }) {
   const calls: Call[] = [];
   let nextId = 1;
   const github: GitHubSurface = {
-    async branchSha(owner, repo, branch) {
-      calls.push({ op: "branchSha", owner, repo, branch });
-      return "abc123";
-    },
-    async createBranch(owner, repo, branch, sha) {
-      calls.push({ op: "createBranch", owner, repo, branch, sha });
-      if (options?.failCreate) {
-        throw new Error("branch already exists");
-      }
-    },
     async startCheck(input) {
-      calls.push({ op: "startCheck", owner: input.owner, repo: input.repo, name: input.name, sha: input.sha });
-      const id = nextId;
+      calls.push({ op: "startCheck", ...input });
       nextId += 1;
-      return id;
+      return nextId - 1;
     },
     async finishCheck(input) {
-      calls.push({
-        op: "finishCheck",
-        owner: input.owner,
-        repo: input.repo,
-        checkRunId: input.checkRunId,
-        conclusion: input.conclusion,
-        summary: input.summary,
-        title: input.title,
-      });
+      calls.push({ op: "finishCheck", ...input });
     },
     async comment(input) {
-      calls.push({ op: "comment", owner: input.owner, repo: input.repo, issue: input.issue, body: input.body });
+      calls.push({ op: "comment", ...input });
     },
-    async readText() {
-      return null;
+    async listPullsForHead(input) {
+      calls.push({ op: "listPullsForHead", ...input });
+      return options?.openPull ? [options.openPull] : [];
     },
-    async commitFiles(input) {
-      calls.push({
-        op: "commitFiles",
-        owner: input.owner,
-        repo: input.repo,
-        branch: input.branch,
-        sha: input.parentSha,
-        message: input.message,
-        files: input.files,
-      });
-      return "def456";
+    async updatePull(input) {
+      calls.push({ op: "updatePull", ...input });
+      return { number: input.number, url: `https://github.com/${input.owner}/${input.repo}/pull/${input.number}` };
     },
     async openDraft(input) {
-      calls.push({
-        op: "openDraft",
-        owner: input.owner,
-        repo: input.repo,
-        title: input.title,
-        head: input.head,
-        base: input.base,
-        body: input.body,
-        draft: input.draft,
-      });
+      calls.push({ op: "openDraft", ...input });
       return { number: 11, url: `https://github.com/${input.owner}/${input.repo}/pull/11` };
     },
   };
   return { github, calls };
 }
 
+function git(cwd: string, ...args: string[]): string {
+  return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+}
+
 function specifiers(source: string): string[] {
-  const found: string[] = [];
   const patterns = [
     /\bfrom\s*["']([^"']+)["']/g,
     /\bimport\s*["']([^"']+)["']/g,
     /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g,
     /\brequire\s*\(\s*["']([^"']+)["']\s*\)/g,
   ];
-  for (const pattern of patterns) {
-    for (const match of source.matchAll(pattern)) {
-      const specifier = match[1];
-      if (specifier) {
-        found.push(specifier);
-      }
-    }
-  }
-  return found;
+  return patterns.flatMap((pattern) => [...source.matchAll(pattern)].flatMap((match) => (match[1] ? [match[1]] : [])));
 }
 
 function isGitHubClient(specifier: string): boolean {
-  const name = specifier.startsWith("@")
-    ? specifier.split("/").slice(0, 2).join("/")
-    : (specifier.split("/")[0] ?? specifier);
+  const name = specifier.startsWith("@") ? specifier.split("/").slice(0, 2).join("/") : (specifier.split("/")[0] ?? specifier);
   return name === "@thin-pr/github" || name.startsWith("@octokit/") || name.startsWith("@actions/");
 }
 
 function typescriptFiles(dir: string): string[] {
-  const files: string[] = [];
-  for (const entry of readdirSync(dir)) {
+  return readdirSync(dir).flatMap((entry) => {
     if (entry === "node_modules" || entry === "dist") {
-      continue;
+      return [];
     }
     const path = join(dir, entry);
     if (statSync(path).isDirectory()) {
-      files.push(...typescriptFiles(path));
-      continue;
+      return typescriptFiles(path);
     }
-    if (entry.endsWith(".ts")) {
-      files.push(path);
-    }
-  }
-  return files;
+    return entry.endsWith(".ts") ? [path] : [];
+  });
 }

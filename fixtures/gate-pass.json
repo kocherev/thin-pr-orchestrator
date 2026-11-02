@@ -5,11 +5,13 @@
   },
   "implement": {
     "summary": "Apply the stub change.",
-    "files": ["src/stub.ts"]
-  },
-  "test": {
-    "summary": "Stub checks passed.",
-    "passed": true
+    "files": ["src/stub.ts"],
+    "edits": [
+      {
+        "path": "src/stub.ts",
+        "content": "export function stub(): number {\n  return 1;\n}\n"
+      }
+    ]
   },
   "review": {
     "summary": "Stub review found nothing.",

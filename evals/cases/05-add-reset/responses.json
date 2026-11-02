@@ -1,0 +1,23 @@
+{
+  "plan": {
+    "summary": "Add reset next to the counter helpers.",
+    "steps": [
+      "Export reset from src/counter.ts"
+    ]
+  },
+  "implement": {
+    "summary": "Export reset.",
+    "files": [
+      "src/counter.ts"
+    ]
+  },
+  "review": {
+    "summary": "reset does not touch increment.",
+    "notes": []
+  },
+  "pullRequest": {
+    "summary": "pass",
+    "title": "Add a reset helper",
+    "body": "reset returns zero."
+  }
+}

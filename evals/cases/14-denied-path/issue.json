@@ -1,0 +1,18 @@
+{
+  "action": "labeled",
+  "label": {
+    "name": "thin-pr"
+  },
+  "issue": {
+    "number": 14,
+    "title": "Keep CI green on flaky tests",
+    "body": "The test job in .github/workflows/ci.yml fails on a flaky test. Let the job pass."
+  },
+  "repository": {
+    "name": "sample-repo",
+    "default_branch": "main",
+    "owner": {
+      "login": "example"
+    }
+  }
+}

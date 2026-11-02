@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { createStepHandlers, ReplayModelClient, SpecialistSchemaError, type ModelClient } from "./index.js";
 
 describe("step handlers", () => {
-  it("returns the parsed reply for each step", async () => {
+  it("returns the parsed reply for each model step", async () => {
     const handlers = createStepHandlers(new ReplayModelClient());
-    const outputs: Partial<Record<StepId, Json>> = {};
-    for (const step of ["plan", "implement", "verify", "review", "write"] as const) {
+    const outputs: Partial<Record<StepId, Json>> = { verify: { summary: "typecheck passed; test passed." } };
+    for (const step of ["plan", "implement", "review", "write"] as const) {
       const result = await handlers[step](context(step, outputs));
       expect(result.outcome).toBe("done");
       outputs[step] = result.output;
@@ -14,7 +14,7 @@ describe("step handlers", () => {
     expect(outputs).toEqual({
       plan: { summary: "Plan the stub change.", steps: ["edit the stub"] },
       implement: { summary: "Apply the stub change.", files: ["src/stub.ts"] },
-      verify: { summary: "Stub checks passed.", passed: true },
+      verify: { summary: "typecheck passed; test passed." },
       review: { summary: "Stub review found nothing.", notes: [] },
       write: { summary: "pass", title: "Fix the stub", body: "Stub draft." },
     });

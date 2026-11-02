@@ -1,0 +1,18 @@
+{
+  "action": "labeled",
+  "label": {
+    "name": "thin-pr"
+  },
+  "issue": {
+    "number": 13,
+    "title": "Add a percent formatter",
+    "body": "src/format.ts should export formatPercent, which renders 0.25 as 25%."
+  },
+  "repository": {
+    "name": "sample-repo",
+    "default_branch": "main",
+    "owner": {
+      "login": "example"
+    }
+  }
+}

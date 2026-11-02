@@ -1,8 +1,10 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createJudge, type JudgeSubject, type JudgeVerdict } from "@thin-pr/specialists";
-import { loadReplayCases, readMinPassRate } from "./eval.js";
+import { createJudge, type JudgeVerdict } from "@thin-pr/specialists";
+import { loadRepoConfig } from "@thin-pr/workspace";
+import { z } from "zod";
+import { loadCases, runEval } from "./eval.js";
 
 type JudgeCaseReport = JudgeVerdict & {
   readonly id: string;
@@ -25,12 +27,30 @@ export async function runJudge(
   env: Record<string, string | undefined> = process.env,
   fetchImpl: typeof fetch = globalThis.fetch,
 ): Promise<JudgeReport> {
-  const minPassRate = readMinPassRate(join(workspace, "evals", "judge-baseline.json"));
+  const baseline = JSON.parse(readFileSync(join(workspace, "evals", "judge-baseline.json"), "utf8")) as unknown;
+  const { minPassRate } = z.object({ minPassRate: z.number().gt(0).lte(1) }).parse(baseline);
   const session = createJudge(env, fetchImpl);
+  const { budget } = loadRepoConfig(join(workspace, "evals", "sample-repo"));
+  // The judge scores what each replayed run did: the recorded replies plus the measured diff and checks.
+  const runs = new Map((await runEval(workspace)).cases.map((run) => [run.id, run.record]));
   const cases: JudgeCaseReport[] = [];
-  for (const item of loadReplayCases(workspace)) {
-    const subject = subjectOf(item);
-    const verdict = await session.judge(subject);
+  for (const item of loadCases(workspace)) {
+    const record = runs.get(item.id);
+    const files = record?.diff?.files ?? [];
+    const verdict = await session.judge({
+      id: item.id,
+      issueTitle: item.issueTitle,
+      issueBody: item.issueBody,
+      plan: item.recording.plan,
+      implement: item.recording.implement,
+      checks: record?.checks ?? [],
+      review: item.recording.review,
+      changes: files.map((file) => file.path),
+      files: files.length,
+      lines: files.reduce((sum, file) => sum + file.added + file.removed, 0),
+      maxFiles: budget.max_files,
+      maxLines: budget.max_lines,
+    });
     cases.push({ id: item.id, ...verdict });
   }
   return summarize(cases, minPassRate, session.spentUsd());
@@ -57,36 +77,6 @@ export function formatJudgeReport(report: JudgeReport): string {
 
 export function exitCode(report: JudgeReport): 0 | 1 {
   return report.meetsBaseline ? 0 : 1;
-}
-
-function subjectOf(item: {
-  readonly id: string;
-  readonly issueTitle: string;
-  readonly issueBody: string;
-  readonly plan: unknown;
-  readonly implement: unknown;
-  readonly test: unknown;
-  readonly review: unknown;
-  readonly changePaths: readonly string[];
-  readonly files: number;
-  readonly lines: number;
-  readonly maxFiles: number;
-  readonly maxLines: number;
-}): JudgeSubject {
-  return {
-    id: item.id,
-    issueTitle: item.issueTitle,
-    issueBody: item.issueBody,
-    plan: item.plan,
-    implement: item.implement,
-    test: item.test,
-    review: item.review,
-    changes: item.changePaths,
-    files: item.files,
-    lines: item.lines,
-    maxFiles: item.maxFiles,
-    maxLines: item.maxLines,
-  };
 }
 
 function summarize(cases: readonly JudgeCaseReport[], minPassRate: number, spentUsd: number | null): JudgeReport {

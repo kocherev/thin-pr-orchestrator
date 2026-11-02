@@ -1,0 +1,18 @@
+{
+  "action": "labeled",
+  "label": {
+    "name": "thin-pr"
+  },
+  "issue": {
+    "number": 17,
+    "title": "Add decrementBy",
+    "body": "src/counter.ts should export decrementBy(value, step). A count never goes below zero."
+  },
+  "repository": {
+    "name": "sample-repo",
+    "default_branch": "main",
+    "owner": {
+      "login": "example"
+    }
+  }
+}

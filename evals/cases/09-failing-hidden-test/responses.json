@@ -1,0 +1,23 @@
+{
+  "plan": {
+    "summary": "Accept TRUE in parseFlag.",
+    "steps": [
+      "Compare the uppercase token in src/parse.ts"
+    ]
+  },
+  "implement": {
+    "summary": "Accept a capitalized true.",
+    "files": [
+      "src/parse.ts"
+    ]
+  },
+  "review": {
+    "summary": "Lowercase true still parses.",
+    "notes": []
+  },
+  "pullRequest": {
+    "summary": "pass",
+    "title": "Match uppercase true",
+    "body": "parseFlag accepts a capitalized true."
+  }
+}

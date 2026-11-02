@@ -9,6 +9,7 @@
   "references": [
     { "path": "../core" },
     { "path": "../gate" },
-    { "path": "../specialists" }
+    { "path": "../specialists" },
+    { "path": "../workspace" }
   ]
 }

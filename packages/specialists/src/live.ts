@@ -100,7 +100,6 @@ const SHAPES: Record<SpecialistName, string> = {
   planner: '{"summary": string, "steps": [string, ...]} with at least one step.',
   implementer:
     '{"summary": string, "files": [string, ...], "edits": [{"path": string, "content": string}, ...]}. content is the full new file. Change only the files the issue names. Keep the diff inside 2 files and 16 lines.',
-  tester: '{"summary": string, "passed": true} when the change matches the issue. Use false only when the change does not.',
   reviewer: '{"summary": string, "notes": string[]}. notes may be empty.',
   "pr-writer": '{"summary": string, "title": string, "body": string}.',
 };

@@ -1,0 +1,18 @@
+{
+  "action": "labeled",
+  "label": {
+    "name": "thin-pr"
+  },
+  "issue": {
+    "number": 15,
+    "title": "Add request headers",
+    "body": "src/client.ts should export requestHeaders for the model API."
+  },
+  "repository": {
+    "name": "sample-repo",
+    "default_branch": "main",
+    "owner": {
+      "login": "example"
+    }
+  }
+}
