@@ -46,6 +46,9 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           THIN_PR_TRACE_PATH: artifacts/trace.json
+          # With an endpoint set, the trace goes to that OTLP backend instead of the artifact. See docs/telemetry.md.
+          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ vars.OTEL_EXPORTER_OTLP_ENDPOINT }}
+          OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
           # The runner has no git identity. These name the commit on thin-pr/<issue>.
           GIT_AUTHOR_NAME: thin-pr[bot]
           GIT_AUTHOR_EMAIL: thin-pr@example.invalid
@@ -54,7 +57,7 @@ jobs:
         run: node --experimental-sqlite --disable-warning=ExperimentalWarning --import tsx packages/github/src/action.ts
 
       - name: Upload trace
-        if: always()
+        if: always() && vars.OTEL_EXPORTER_OTLP_ENDPOINT == ''
         uses: actions/upload-artifact@v7
         with:
           name: thin-pr-trace

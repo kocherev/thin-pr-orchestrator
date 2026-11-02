@@ -9,8 +9,8 @@ import { replayGitHub } from "./eval.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-async function runTrace(workspace = root): Promise<string> {
-  const tracing = await startTrace();
+async function runTrace(workspace = root): Promise<string | null> {
+  const tracing = startTrace();
   const directory = mkdtempSync(join(tmpdir(), "thin-pr-trace-"));
   // gate-pass.jsonl edits src/stub.ts. The checks only print, so the trace measures the orchestrator.
   const repo = createScratchRepo({
@@ -59,6 +59,10 @@ function isDirectRun(): boolean {
 if (isDirectRun()) {
   runTrace()
     .then((document) => {
+      if (document === null) {
+        process.stdout.write("Trace\nsent to the OTLP endpoint\n");
+        return;
+      }
       const names = spanNames(JSON.parse(document) as unknown);
       const path = process.env.THIN_PR_TRACE_PATH;
       if (path) {

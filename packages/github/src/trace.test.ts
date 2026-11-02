@@ -1,24 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { combineTraceExports, spanNames } from "./trace.js";
+import { spanNames } from "./trace.js";
 
 describe("trace export", () => {
-  it("merges OTLP JSON bodies and lists span names", () => {
-    const body = JSON.stringify({
+  it("lists span names across resources and scopes", () => {
+    const document = {
       resourceSpans: [
-        {
-          scopeSpans: [{ spans: [{ name: "thin-pr.plan" }, { name: "thin-pr.run" }] }],
-        },
+        { scopeSpans: [{ spans: [{ name: "thin-pr.plan" }, { name: "thin-pr.run" }] }] },
+        { scopeSpans: [{ spans: [{ name: "anthropic.messages.create" }] }] },
       ],
-    });
-    const merged = combineTraceExports([body, " \n", body]);
-    expect(spanNames(JSON.parse(merged) as unknown)).toEqual([
-      "thin-pr.plan",
-      "thin-pr.run",
-      "thin-pr.plan",
-      "thin-pr.run",
-    ]);
-    expect(merged.endsWith("\n")).toBe(true);
-    expect(() => combineTraceExports([" "])).toThrow("trace export was empty");
-    expect(() => combineTraceExports(["{}"])).toThrow("trace export invalid at resourceSpans");
+    };
+    expect(spanNames(document)).toEqual(["thin-pr.plan", "thin-pr.run", "anthropic.messages.create"]);
+    expect(() => spanNames({})).toThrow("trace export invalid at resourceSpans");
   });
 });

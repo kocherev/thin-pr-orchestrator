@@ -18,7 +18,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const tracing = await startTrace();
+  const tracing = startTrace();
   let failure = "";
   try {
     const sessions: ModelSession[] = [];
@@ -69,14 +69,17 @@ async function main(): Promise<void> {
 
   try {
     const document = await tracing.stop();
-    const names = spanNames(JSON.parse(document) as unknown);
-    const tracePath = process.env.THIN_PR_TRACE_PATH;
-    if (tracePath) {
-      mkdirSync(dirname(tracePath), { recursive: true });
-      writeFileSync(tracePath, document);
-      core.info(`Trace file: ${tracePath}`);
+    if (document === null) {
+      core.info("Trace sent to the OTLP endpoint");
+    } else {
+      const tracePath = process.env.THIN_PR_TRACE_PATH;
+      if (tracePath) {
+        mkdirSync(dirname(tracePath), { recursive: true });
+        writeFileSync(tracePath, document);
+        core.info(`Trace file: ${tracePath}`);
+      }
+      core.info(`Trace spans: ${spanNames(JSON.parse(document) as unknown).join(", ")}`);
     }
-    core.info(`Trace spans: ${names.join(", ")}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "trace export failed";
     core.warning(message);
