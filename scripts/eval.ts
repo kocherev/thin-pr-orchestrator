@@ -108,7 +108,7 @@ export async function runEval(workspace = root, sessionFor: SessionFor = replayC
         next += 1;
         const item = items[index];
         if (item) {
-          cases[index] = await runCase(workspace, item, sample, logs, sessionFor(item));
+          cases[index] = await runCase(workspace, item, sample, logs, () => sessionFor(item));
         }
       }
     };
@@ -179,7 +179,7 @@ async function runCase(
   item: EvalCase,
   sample: readonly File[],
   logs: string,
-  session: ModelSession,
+  session: () => ModelSession,
 ): Promise<CaseResult> {
   const repo = createScratchRepo(Object.fromEntries(sample.map((file) => [file.path, file.content])));
   const log = openEventLog(join(logs, `${item.id}.sqlite`));
@@ -192,14 +192,17 @@ async function runCase(
     }
     const config = loadRepoConfig(repo.dir);
     const checkout = await openWorkspace({ dir: repo.dir, baseSha: repo.baseSha, config });
-    const handlers = createRunHandlers(session, checkout);
+
     const runId = `eval-${item.id}`;
     const result = await runIssue({
       event,
       template,
       config,
       workspace: checkout,
-      handlers: { ...handlers, verify: withHiddenTests(handlers.verify, repo.dir, item.hidden) },
+      handlers: () => {
+        const handlers = createRunHandlers(session(), checkout);
+        return { ...handlers, verify: withHiddenTests(handlers.verify, repo.dir, item.hidden) };
+      },
       github: replayGitHub(),
       log,
       runId,

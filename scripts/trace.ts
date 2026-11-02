@@ -27,7 +27,7 @@ async function runTrace(workspace = root): Promise<string> {
       runId: "run-7",
       logPath: join(directory, "events.sqlite"),
       github: replayGitHub(),
-      model: createAnthropicClient({ mode: "replay", cassettePath: join(workspace, "fixtures", "gate-pass.jsonl") }),
+      model: () => createAnthropicClient({ mode: "replay", cassettePath: join(workspace, "fixtures", "gate-pass.jsonl") }),
     });
     if (result.status !== "opened") {
       failure = new Error(`trace replay finished ${result.status}`);

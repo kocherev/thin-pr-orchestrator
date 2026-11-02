@@ -281,6 +281,25 @@ describe("issue label", () => {
     expect(second.calls.at(-1)?.body).toContain("## Run report");
   });
 
+  it("comments the setup error when the model cannot start", async () => {
+    const repo = scratch(PASSING_CHECKS);
+    const memory = memoryGitHub();
+    const result = await runAction({
+      payload: readFixture(),
+      templates: join(root, "templates"),
+      checkout: repo.dir,
+      baseSha: repo.baseSha,
+      runId: "run-7",
+      logPath: join(mkdtempSync(join(tmpdir(), "thin-pr-label-")), "events.sqlite"),
+      github: memory.github,
+      model: () => createAnthropicClient({ mode: "live" }, {}),
+    });
+
+    expect(result).toMatchObject({ status: "failed", error: "ANTHROPIC_API_KEY is missing" });
+    expect(memory.calls.find((call) => call.op === "comment")?.body).toContain("- Error: ANTHROPIC_API_KEY is missing");
+    expect(memory.calls.some((call) => call.op === "startCheck")).toBe(false);
+  });
+
   it("ignores a label other than thin-pr", async () => {
     const repo = scratch(PASSING_CHECKS);
     const memory = memoryGitHub();
@@ -302,8 +321,8 @@ describe("issue label", () => {
     expect(readFileSync(fileURLToPath(new URL("./action.ts", import.meta.url)), "utf8")).toContain("pushToken: token");
     expect(workflow).toContain("GIT_AUTHOR_NAME: thin-pr[bot]");
     expect(workflow).toContain("GIT_COMMITTER_EMAIL: thin-pr@example.invalid");
-    expect(workflow).toContain("THIN_PR_MODEL:");
-    expect(workflow).toContain("|| 'replay'");
+    expect(workflow).toContain("ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}");
+    expect(workflow).not.toContain("THIN_PR_MODEL");
     expect(workflow).toContain("contents: write");
     expect(workflow).toContain("checks: write");
     expect(workflow).toContain("issues: write");
@@ -390,7 +409,7 @@ async function run(
     runId: "run-7",
     logPath: join(directory, "events.sqlite"),
     github,
-    model: options.model,
+    model: () => options.model,
   });
 }
 

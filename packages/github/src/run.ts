@@ -52,7 +52,8 @@ export async function runAction(input: {
   readonly runId: string;
   readonly logPath: string;
   readonly github: GitHubSurface;
-  readonly model: ModelSession;
+  /** Called inside the run, so a model that cannot start fails the run with an issue comment. */
+  readonly model: () => ModelSession;
   /** Reaches only the push. The Action passes GITHUB_TOKEN because its checkout keeps no credentials. */
   readonly pushToken?: string;
 }): Promise<LabelRunResult> {
@@ -65,13 +66,12 @@ export async function runAction(input: {
   const workspace = await openWorkspace({ dir: input.checkout, baseSha: input.baseSha, config });
   const log = openEventLog(input.logPath);
   try {
-    const handlers = createRunHandlers(input.model, workspace);
     return await runIssue({
       event,
       template,
       config,
       workspace,
-      handlers,
+      handlers: () => createRunHandlers(input.model(), workspace),
       github: input.github,
       log,
       runId: input.runId,
@@ -92,7 +92,8 @@ export async function runIssue(deps: {
   readonly template: Template;
   readonly config: RepoConfig;
   readonly workspace: GitWorkspace;
-  readonly handlers: Readonly<Record<StepId, StepHandler>>;
+  /** Built first inside the run, so a setup error such as a missing API key is reported on the issue. */
+  readonly handlers: () => Readonly<Record<StepId, StepHandler>>;
   readonly github: GitHubSurface;
   readonly log: EventLog;
   readonly runId: string;
@@ -117,6 +118,7 @@ export async function runIssue(deps: {
   };
 
   try {
+    const handlers = deps.handlers();
     // Before the workflow, so the implementer's run_check already has the dependencies.
     const install = await workspace.install();
     if (install && install.exitCode !== 0) {
@@ -126,7 +128,7 @@ export async function runIssue(deps: {
       runId: deps.runId,
       issue: event.issueText,
       template: deps.template,
-      handlers: deps.handlers,
+      handlers,
       log: deps.log,
       async onEvent(runEvent) {
         timeline.push({ event: runEvent, at: new Date() });
