@@ -11,8 +11,8 @@ function labeled(label: string): Record<string, unknown> {
   return {
     action: "labeled",
     label: { name: label },
-    issue: { number: 7, title: "Add a flag" },
-    repository: { name: "sample-repo", owner: { login: "example" } },
+    issue: { number: 7, title: "Add a flag", body: null },
+    repository: { name: "sample-repo", default_branch: "main", owner: { login: "example" } },
     installation: { id: 42 },
   };
 }
@@ -26,7 +26,10 @@ describe("readDelivery", () => {
         installationId: 42,
         owner: "example",
         repo: "sample-repo",
+        defaultBranch: "main",
         issueNumber: 7,
+        issueTitle: "Add a flag",
+        issueBody: "",
         label: "thin-pr",
       },
     });
@@ -59,7 +62,7 @@ describe("readDelivery", () => {
 
   it("rejects a repository name that cannot be part of a clone URL", () => {
     const payload = labeled("thin-pr");
-    payload.repository = { name: "repo/../../etc", owner: { login: "example" } };
+    payload.repository = { name: "repo/../../etc", default_branch: "main", owner: { login: "example" } };
     expect(readDelivery(headers("issues"), JSON.stringify(payload)).kind).toBe("invalid");
   });
 

@@ -2,6 +2,7 @@ import { createExecutionContext, createMessageBatch, getQueueResult } from "clou
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Job } from "../src/event.js";
+import { stopWhenIdle } from "../src/worker.js";
 import worker, { runner } from "./main.js";
 
 const IncomingRequest = Request<unknown, IncomingRequestCfProperties>;
@@ -13,15 +14,18 @@ const JOB: Job = {
   installationId: 42,
   owner: "example",
   repo: "sample-repo",
+  defaultBranch: "main",
   issueNumber: 7,
+  issueTitle: "Add a flag",
+  issueBody: "Add a --verbose flag.",
   label: "thin-pr",
 };
 
 const LABELED = JSON.stringify({
   action: "labeled",
   label: { name: "thin-pr" },
-  issue: { number: 7, title: "Add a flag" },
-  repository: { name: "sample-repo", owner: { login: "example" } },
+  issue: { number: 7, title: "Add a flag", body: "Add a --verbose flag." },
+  repository: { name: "sample-repo", default_branch: "main", owner: { login: "example" } },
   installation: { id: 42 },
 });
 
@@ -61,16 +65,16 @@ async function consume(job: Job): Promise<{ readonly acked: boolean; readonly re
   };
 }
 
-const tokenRequests: { readonly url: string; readonly body: string }[] = [];
+const githubRequests: { readonly url: string; readonly body: string }[] = [];
 
 beforeEach(() => {
   runner.status = 202;
   runner.starts.length = 0;
   runner.runs.length = 0;
-  tokenRequests.length = 0;
+  githubRequests.length = 0;
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const request = new Request(input, init);
-    tokenRequests.push({ url: request.url, body: await request.text() });
+    githubRequests.push({ url: request.url, body: await request.text() });
     if (request.url === "https://api.github.com/app/installations/42/access_tokens") {
       return Response.json({ token: "ghs_test", expires_at: "2026-11-02T13:00:00Z" }, { status: 201 });
     }
@@ -100,7 +104,7 @@ describe("webhook intake", () => {
         },
       },
     ]);
-    expect(tokenRequests).toEqual([
+    expect(githubRequests).toEqual([
       {
         url: "https://api.github.com/app/installations/42/access_tokens",
         body: JSON.stringify({ repositories: ["sample-repo"] }),
@@ -137,5 +141,41 @@ describe("job consumer", () => {
   it("retries the message when GitHub refuses the installation token", async () => {
     expect(await consume({ ...JOB, installationId: 7 })).toEqual({ acked: false, retried: true });
     expect(runner.starts).toHaveLength(0);
+  });
+});
+
+describe("container lifetime", () => {
+  function container(status: () => Promise<Response>) {
+    const calls: string[] = [];
+    return {
+      calls,
+      async containerFetch(url: string) {
+        calls.push(url);
+        return status();
+      },
+      async stop() {
+        calls.push("stop");
+      },
+    };
+  }
+
+  it("keeps the container while a run is in progress", async () => {
+    const busy = container(async () => Response.json({ running: true }));
+    await stopWhenIdle(busy);
+    expect(busy.calls).toEqual(["http://runner/status"]);
+  });
+
+  it("stops the container once the run ended", async () => {
+    const idle = container(async () => Response.json({ running: false }));
+    await stopWhenIdle(idle);
+    expect(idle.calls).toEqual(["http://runner/status", "stop"]);
+  });
+
+  it("stops a container whose server does not answer", async () => {
+    const gone = container(async () => {
+      throw new Error("connection refused");
+    });
+    await stopWhenIdle(gone);
+    expect(gone.calls).toEqual(["http://runner/status", "stop"]);
   });
 });

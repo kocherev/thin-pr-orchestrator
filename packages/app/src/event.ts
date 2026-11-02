@@ -9,7 +9,10 @@ export const jobSchema = z
     installationId: z.number().int().positive(),
     owner: githubName,
     repo: githubName,
+    defaultBranch: z.string().min(1),
     issueNumber: z.number().int().positive(),
+    issueTitle: z.string().min(1),
+    issueBody: z.string(),
     label: triggerLabel,
   })
   .strict();
@@ -27,8 +30,8 @@ const triggerSchema = z.object({
 });
 
 const labeledIssueSchema = triggerSchema.extend({
-  issue: z.object({ number: z.number() }),
-  repository: z.object({ name: z.string(), owner: z.object({ login: z.string() }) }),
+  issue: z.object({ number: z.number(), title: z.string(), body: z.string().nullish() }),
+  repository: z.object({ name: z.string(), default_branch: z.string(), owner: z.object({ login: z.string() }) }),
   installation: z.object({ id: z.number() }),
 });
 
@@ -54,7 +57,10 @@ export function readDelivery(headers: Headers, body: string): Delivery {
     installationId: event.data.installation.id,
     owner: event.data.repository.owner.login,
     repo: event.data.repository.name,
+    defaultBranch: event.data.repository.default_branch,
     issueNumber: event.data.issue.number,
+    issueTitle: event.data.issue.title,
+    issueBody: event.data.issue.body ?? "",
     label: event.data.label.name,
   });
   if (!job.success) {

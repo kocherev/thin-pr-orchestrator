@@ -1,10 +1,33 @@
 import { Container, ContainerProxy, getContainer } from "@cloudflare/containers";
+import { z } from "zod";
 import { readDelivery, type Job } from "./event.js";
 import { createInstallationToken } from "./installation-token.js";
 import { verifySignature } from "./signature.js";
 
 // The Container class routes allowedHosts through this entrypoint.
 export { ContainerProxy };
+
+const runStatusSchema = z.object({ running: z.boolean() });
+
+/**
+ * Called when `sleepAfter` passes without a request. The run outlives the POST that started it, so the container
+ * stops only once its server reports no run in progress. Returning without stopping renews the timer.
+ */
+export async function stopWhenIdle(runner: {
+  containerFetch(url: string): Promise<Response>;
+  stop(): Promise<void>;
+}): Promise<void> {
+  let running = false;
+  try {
+    const response = await runner.containerFetch("http://runner/status");
+    running = runStatusSchema.parse(await response.json()).running;
+  } catch (error) {
+    console.error("runner status check failed, stopping the container", error);
+  }
+  if (!running) {
+    await runner.stop();
+  }
+}
 
 export class Runner extends Container {
   defaultPort = 8080;
@@ -13,6 +36,10 @@ export class Runner extends Container {
   // HTTPS has to pass through ContainerProxy for allowedHosts to see the hostname.
   interceptHttps = true;
   allowedHosts = ["github.com", "api.github.com", "api.anthropic.com", "registry.npmjs.org"];
+
+  override async onActivityExpired(): Promise<void> {
+    await stopWhenIdle(this);
+  }
 }
 
 export default {
@@ -43,23 +70,20 @@ export default {
 
   async queue(batch, env) {
     for (const message of batch.messages) {
+      const job = message.body;
       try {
-        const response = await dispatch(message.body, env);
-        await response.body?.cancel();
-        if (response.status === 202) {
-          message.ack();
-          continue;
-        }
-        console.error(`runner answered ${response.status} for delivery ${message.body.deliveryId}`);
+        const outcome = await dispatch(job, env);
+        console.log(`delivery ${job.deliveryId} for ${job.owner}/${job.repo}#${job.issueNumber}: ${outcome}`);
+        message.ack();
       } catch (error) {
-        console.error(`dispatch failed for delivery ${message.body.deliveryId}`, error);
+        console.error(`dispatch failed for delivery ${job.deliveryId}`, error);
+        message.retry();
       }
-      message.retry();
     }
   },
 } satisfies ExportedHandler<Env, Job>;
 
-async function dispatch(job: Job, env: Env): Promise<Response> {
+async function dispatch(job: Job, env: Env): Promise<"started"> {
   const installation = await createInstallationToken({
     app: { clientId: env.GITHUB_APP_CLIENT_ID, privateKeyPem: env.GITHUB_APP_PRIVATE_KEY },
     installationId: job.installationId,
@@ -75,9 +99,14 @@ async function dispatch(job: Job, env: Env): Promise<Response> {
       THIN_PR_SPEND_LIMIT_USD: env.THIN_PR_SPEND_LIMIT_USD,
     },
   });
-  return runner.fetch("http://runner/run", {
+  const response = await runner.fetch("http://runner/run", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(job),
   });
+  await response.body?.cancel();
+  if (response.status !== 202) {
+    throw new Error(`runner answered ${response.status}`);
+  }
+  return "started";
 }

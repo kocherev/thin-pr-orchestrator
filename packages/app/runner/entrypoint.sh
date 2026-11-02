@@ -9,4 +9,5 @@ if [ -f "$ca" ]; then
   export NODE_EXTRA_CA_CERTS="$ca"
 fi
 
-exec node --import tsx packages/app/runner/server.ts
+cd /app/packages/app
+exec node --experimental-sqlite --disable-warning=ExperimentalWarning --import tsx runner/main.ts

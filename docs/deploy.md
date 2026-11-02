@@ -1,6 +1,6 @@
 # Deploy the GitHub App on Cloudflare
 
-`packages/app` is a Cloudflare Worker. It receives the `issues` webhook, checks the signature, and puts one job on the `pr-jobs` queue. The queue consumer mints an installation token and starts one container per delivery. The container clones the repository.
+`packages/app` is a Cloudflare Worker. It receives the `issues` webhook, checks the signature, and puts one job on the `pr-jobs` queue. The queue consumer mints an installation token and starts one container per delivery. The container clones the default branch and runs the issue through `runLabeledIssue`, the same function the Action calls. It prints the run record as one JSON line when the run ends.
 
 You need a Cloudflare account with Workers Paid (Containers require it), Docker running locally, `gh` logged in as the repository owner, `jq`, and `openssl`. Run every command from the repo root unless a step says otherwise.
 
@@ -70,9 +70,13 @@ Wrangler builds `runner/Dockerfile` with the repo root as context, pushes the im
 
 Open the app settings. Set Webhook URL to the Worker URL. Check Active. Save.
 
-GitHub sends a `ping`. Recent Deliveries shows `204` for it. Label an issue `thin-pr`. That delivery shows `202`. `pnpm exec wrangler tail` shows the queue consumer, and the container logs show the clone.
+GitHub sends a `ping`. Recent Deliveries shows `204` for it. Label an issue `thin-pr`. That delivery shows `202`. `pnpm exec wrangler tail` shows the queue consumer's line for the delivery. The container's logs in the Cloudflare dashboard end with the run record.
 
 The `thin-pr` workflow in `.github/workflows/thin-pr.yml` reacts to the same label. Disable it in the repository settings when the app is installed, or both will run.
+
+## Container lifetime
+
+A run can outlast the 15 minutes a queue consumer may wait, so `POST /run` answers 202 at once and the run continues in the background. When `sleepAfter` passes, the Worker asks the container's `GET /status` and stops it only when no run is in progress.
 
 ## Check before you deploy
 

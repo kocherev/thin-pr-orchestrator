@@ -6,5 +6,5 @@
     "rootDir": "."
   },
   "include": ["*.ts"],
-  "references": [{ "path": ".." }]
+  "references": [{ "path": ".." }, { "path": "../../github" }, { "path": "../../workspace" }]
 }

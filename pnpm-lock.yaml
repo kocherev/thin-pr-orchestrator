@@ -54,6 +54,12 @@ importers:
       '@cloudflare/containers':
         specifier: 0.3.7
         version: 0.3.7
+      '@thin-pr/github':
+        specifier: workspace:*
+        version: link:../github
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -61,6 +67,9 @@ importers:
       '@cloudflare/vitest-plugin':
         specifier: 1.4.4
         version: 1.4.4(@types/node@26.6.6)(vitest@5.0.5(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+      '@thin-pr/workspace':
+        specifier: workspace:*
+        version: link:../workspace
       wrangler:
         specifier: 4.151.1
         version: 4.151.1(@types/node@26.6.6)
