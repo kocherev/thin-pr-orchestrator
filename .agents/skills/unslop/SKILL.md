@@ -22,7 +22,7 @@ Rule numbers are stable. A removed rule leaves a gap.
 7. **Stock vocabulary.** Additionally, crucial, delve, enduring, enhance, fostering, garner, interplay, intricate, landscape as an abstraction, pivotal, showcase, tapestry as an abstraction, testament, underscore, vibrant. Use a plain word.
 8. **Fancy ways to say "is".** "serves as", "stands as", "boasts", "features". Say "is" or "has".
 9. **"Not just X, but Y."** State the point in one sentence.
-10. **Forced groups of three.** Use the real count. This repo has five specialists and three gate rules. Do not pad a list to three, and do not cut a real fourth item.
+10. **Forced groups of three.** Use the real count. This repo has four model specialists and nine gate rules. Do not pad a list to three, and do not cut a real fourth item.
 11. **Synonym cycling.** Pick one name and repeat it. The control plane is `packages/core`. Do not also call it the engine, the runtime, and the brain.
 12. **False ranges.** "From X to Y" where X and Y are not a scale. List the topics.
 
