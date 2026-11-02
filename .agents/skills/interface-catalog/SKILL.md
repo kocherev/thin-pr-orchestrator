@@ -9,7 +9,7 @@ description: >
 
 This repository has no UI yet. When a change adds one, read the local polish skill first.
 
-- `skills/make-interfaces-feel-better`
+- `.agents/skills/make-interfaces-feel-better`
 
 Published sources for the same rules, and for the wider `better-*` set (accessibility, color, layout, typography, writing, and a combined review):
 

@@ -1,5 +1,7 @@
 # Contributing
 
+Read `AGENTS.md` before changing the repo. It covers the install, each check, the skills under `.agents/skills/`, and the commit and branch rules.
+
 Run these before opening a pull request:
 
 ```bash

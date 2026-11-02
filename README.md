@@ -242,7 +242,7 @@ That image is a still of the live draft diff. It is not a screen recording of th
 
 ## Working notes
 
-See `WORKING.md` and `skills/` before changing the repo. The import ban for `packages/core` is `skills/core-boundary`.
+See `AGENTS.md` and `.agents/skills/` before changing the repo. The import ban for `packages/core` is `.agents/skills/core-boundary`.
 
 - `packages/core` runs a template, appends every transition to SQLite, and imports no model client. `pnpm lint` fails when that package imports one. `packages/core/src/run.test.ts` expects `replay` to match `runWorkflow`.
 - `packages/github` opens a draft pull request only when every gate rule passes. A failed rule comments `## Run report` on the issue and does not open a pull request. The check is `packages/github/src/run.test.ts`.

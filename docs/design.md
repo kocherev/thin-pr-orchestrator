@@ -66,4 +66,4 @@ The judge scores a finished replay. `decide()` still reads plan, tests, contract
 - The Action does not merge the pull request, request reviewers, or close the issue.
 - The label path does not choose a template. It loads `small-feature`.
 - There is no chat UI, no second orchestrator, and no general agent loop.
-- `packages/core` does not grow a model SDK import or a GitHub client import. `skills/core-boundary` is the list.
+- `packages/core` does not grow a model SDK import or a GitHub client import. `.agents/skills/core-boundary` is the list.

@@ -35,7 +35,7 @@ Run these from the repo root, in this order, after `pnpm install`. Each one exit
 
 Runs `eslint .`, then `node --experimental-strip-types scripts/check-core-boundary.ts`.
 
-ESLint bans model-client imports and GitHub client imports in `packages/core`. It also bans GitHub client imports in `packages/specialists`, `packages/gate`, and `scripts`. The script scans `packages/core` for `require()` and dynamic `import()` of the same model clients. Either failure exits non-zero. The banned names are listed in `skills/core-boundary`.
+ESLint bans model-client imports and GitHub client imports in `packages/core`. It also bans GitHub client imports in `packages/specialists`, `packages/gate`, and `scripts`. The script scans `packages/core` for `require()` and dynamic `import()` of the same model clients. Either failure exits non-zero. The banned names are listed in `.agents/skills/core-boundary`.
 
 ### pnpm typecheck
 
@@ -114,16 +114,23 @@ The command replays run `run-7` and exports OTLP JSON. Set `THIN_PR_TRACE_PATH` 
 
 Use ponytail and the working style on every change. Ponytail stops extra code. The working style says how to prove the code that remains.
 
-- `skills/ponytail` for the smallest complete diff.
-- `skills/working-style` for data shape, tests, and role budgets.
-- `skills/core-boundary` for any edit under `packages/core` or to lint.
-- `skills/prove-it-works` before calling a change done.
-- `skills/typescript-best-practices` when editing `.ts` files. Tests and diff size stay with `skills/working-style`.
-- `skills/technical-writing` when editing `README.md`, `docs/`, `WORKING.md`, or pull request text.
-- `skills/unslop` when editing that same public copy.
-- `skills/make-interfaces-feel-better` and `skills/interface-catalog` when a change has UI.
-- `skills/design-engineering` and `skills/design-catalog` when a change has motion or component feel.
+- `.agents/skills/ponytail` for the smallest complete diff.
+- `.agents/skills/working-style` for data shape, tests, and role budgets.
+- `.agents/skills/core-boundary` for any edit under `packages/core` or to lint.
+- `.agents/skills/prove-it-works` before calling a change done.
+- `.agents/skills/typescript-best-practices` when editing `.ts` files. Tests and diff size stay with `.agents/skills/working-style`.
+- `.agents/skills/technical-writing` when editing `README.md`, `docs/`, `AGENTS.md`, or pull request text.
+- `.agents/skills/unslop` when editing that same public copy.
+- `.agents/skills/make-interfaces-feel-better` and `.agents/skills/interface-catalog` when a change has UI.
+- `.agents/skills/design-engineering` and `.agents/skills/design-catalog` when a change has motion or component feel.
+
+## Commits and pull requests
+
+- Write each commit subject as one imperative sentence in sentence case, such as `Run typecheck and tests on the pull request branch`. Do not use a conventional-commit prefix such as `feat:` or `fix:`. A plain-prose body is optional.
+- Name the branch `feat/<slug>`, `fix/<slug>`, `refactor/<slug>`, `chore/<slug>`, or `docs/<slug>`.
+- Open one pull request per change. Merge it with a squash merge.
+- Merge only when CI is green.
 
 ## Hard rule
 
-No model-client import in `packages/core`. ESLint and `scripts/check-core-boundary.ts` both fail the build on one. See `skills/core-boundary`. GitHub clients belong in `packages/github`.
+No model-client import in `packages/core`. ESLint and `scripts/check-core-boundary.ts` both fail the build on one. See `.agents/skills/core-boundary`. GitHub clients belong in `packages/github`.
