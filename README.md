@@ -1,6 +1,6 @@
 # Thin PR Orchestrator
 
-A GitHub issue goes in. A fixed workflow runs in ordinary TypeScript, calls five specialists through a typed boundary, and opens a draft pull request when the gate passes. A person reviews the draft.
+A GitHub issue goes in. A fixed workflow runs in ordinary TypeScript, runs five steps through a typed boundary, and opens a draft pull request when the gate passes. A person reviews the draft.
 
 The control plane does not call a model. This tree injects a replay client that returns fixture JSON. The design note is `docs/design.md`.
 
@@ -16,7 +16,7 @@ flowchart TD
   gate -->|fail| comment["Issue comment"]
 ```
 
-`packages/github` is the only package that talks to GitHub. It loads `templates/small-feature.yaml` and asks `packages/core` to run that template. The control plane calls planner, implementer, tester, reviewer, and pr-writer, in that order, and appends every transition to SQLite. After pr-writer returns, the gate checks plan, tests, and the five specialist contracts. A pass tells the orchestrator to open a draft pull request. A fail tells it to comment the run report on the issue and open nothing.
+`packages/github` is the only package that talks to GitHub. It loads the template whose `label` matches the issue label, `templates/small-feature.yaml` for `thin-pr`, and asks `packages/core` to run it. The control plane runs `plan`, `implement`, `verify`, `review`, and `write`, in that order, and appends every step event with its JSON output to SQLite. After `write` returns, the orchestrator evaluates the gate: plan, tests, the five step contracts, the diff, and the budget. A pass tells the orchestrator to open a draft pull request. A fail tells it to comment the run report on the issue and open nothing.
 
 ## Fork in 5 minutes
 
@@ -95,14 +95,14 @@ Tests passed.
 ### Steps
 - plan: success. Plan the stub change.
 - implement: success. Apply the stub change.
-- test: success. Stub checks passed.
+- verify: success. Stub checks passed.
 - review: success. Stub review found nothing.
+- write: success. pass
 - gate/plan: success. PASS: Plan is present (1 step).
 - gate/tests: success. PASS: Tests passed.
 - gate/contracts: success. PASS: Specialist outputs match their contracts.
 - gate/diff: success. PASS: Diff is present (1 file, 2 lines).
 - gate/budget: success. PASS: Diff is within the budget (1 file, 2 lines; limit 2 files, 16 lines).
-- gate: success. pass
 ```
 
 `fixtures/gate-fail.json` is the other path. Tests are recorded as not passed, the tests rule fails, the issue gets the run report, and no draft is opened.
@@ -144,7 +144,7 @@ Tests passed.
 
 Set `THIN_PR_TRACE_PATH` to choose the file. With that variable empty, `pnpm trace` writes the JSON to stdout.
 
-`docs/demo/trace.json` is one local replay. The span names are `thin-pr.plan`, `thin-pr.implement`, `thin-pr.test`, `thin-pr.review`, `thin-pr.gate`, and `thin-pr.run`. The step spans are children of `thin-pr.run`. The resource attribute `service.name` is `thin-pr-orchestrator`. Each span status code is 1, which is OK. The gate step's `thin_pr.specialist` attribute is `pr-writer`.
+`docs/demo/trace.json` is one local replay. The span names are `thin-pr.plan`, `thin-pr.implement`, `thin-pr.verify`, `thin-pr.review`, `thin-pr.write`, and `thin-pr.run`. The step spans are children of `thin-pr.run`. The resource attribute `service.name` is `thin-pr-orchestrator`. Each span status code is 1, which is OK. Each step span carries `thin_pr.step` and `thin_pr.loop`.
 
 `@opentelemetry/sdk-node` 0.300.0 requires Node.js 22.15 or later. Lint, typecheck, test, and eval still run on Node.js 22.13 or later.
 
@@ -205,9 +205,9 @@ The core replay test writes a SQLite log, closes it, opens it again, and expects
 
 ## Packages
 
-- `packages/core` is the control plane. Typed code only. No model client imports and no GitHub client imports. `runWorkflow` follows a template. `replay` folds the log back into a run state. `loadTemplate` reads `templates/stub-run.json` and the YAML workflows `bugfix`, `small-feature`, and `docs-update`. Zod checks each file when it loads. A bad template throws with the file line. `ping` returns `pong`.
-- `packages/specialists` defines planner, implementer, tester, reviewer, and pr-writer. Each one checks its input and output with Zod. `ReplayModelClient` returns fixture JSON. Invalid output fails the step.
-- `packages/gate` evaluates plan, tests, contracts, the measured diff, and the diff budget. `evaluate()` returns `PASS` or `FAIL` and a reason for each rule. `decide(subject, runner)` returns `pass` only when every rule passes. `decide()` with no subject returns `pass`. `readiness()` returns `ready`.
+- `packages/core` is the control plane. Typed code only. No model client imports and no GitHub client imports. `runWorkflow` calls one handler per step, retries a failed step with the error as feedback, and caps loops. `replay` folds the log back into the run state: outputs, loops, and usage. `templateForLabel` picks one of the YAML templates `bugfix`, `small-feature`, and `docs-update` by label. Zod checks each file when it loads. A bad template throws with the file line.
+- `packages/specialists` defines planner, implementer, tester, reviewer, and pr-writer, and exposes them as step handlers. Each one checks its input and output with Zod. The verify step is the recorded tester verdict plus the runner's parse of the changed files. `ReplayModelClient` returns fixture JSON. Invalid output fails the step.
+- `packages/gate` evaluates plan, tests, contracts, the measured diff, and the diff budget. `evaluate()` returns `PASS` or `FAIL` and a reason for each rule. `decide(evidence)` returns `pass` only when every rule passes.
 - `packages/github` creates the branch, the checks, and the draft pull request. Specialists do not import this package.
 
 `evals/` holds the sample repo, labeled issues, recorded specialist responses, and recorded file contents. See `evals/README.md`.
@@ -244,7 +244,7 @@ That image is a still of the live draft diff. It is not a screen recording of th
 
 See `AGENTS.md` and `.agents/skills/` before changing the repo. The import ban for `packages/core` is `.agents/skills/core-boundary`.
 
-- `packages/core` runs a template, appends every transition to SQLite, and imports no model client. `pnpm lint` fails when that package imports one. `packages/core/src/run.test.ts` expects `replay` to match `runWorkflow`.
+- `packages/core` runs a template, appends every step event to SQLite, and imports no model client. `pnpm lint` fails when that package imports one. `packages/core/src/run.test.ts` expects `replay` to match `runWorkflow`.
 - `packages/github` opens a draft pull request only when every gate rule passes. A failed rule comments `## Run report` on the issue and does not open a pull request. The check is `packages/github/src/run.test.ts`.
 - `pnpm eval` replays 12 labeled issues offline. The floor in `evals/baseline.json` is 8/12, and the report prints `gate pass rate: 8/12 (66.7%)`.
 - `pnpm eval:judge` prints `judge pass rate: 9/12 (75.0%)` on those cases. The rubric report is `docs/demo/judge-report.txt`. The live run is `docs/demo/judge-live.txt`.

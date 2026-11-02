@@ -20,6 +20,9 @@ importers:
       '@thin-pr/specialists':
         specifier: workspace:*
         version: link:packages/specialists
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -54,19 +57,18 @@ importers:
       zod:
         specifier: ^4.6.7
         version: 4.6.7
-    devDependencies:
-      '@thin-pr/gate':
-        specifier: workspace:*
-        version: link:../gate
-      '@thin-pr/specialists':
-        specifier: workspace:*
-        version: link:../specialists
 
   packages/gate:
     dependencies:
+      '@thin-pr/core':
+        specifier: workspace:*
+        version: link:../core
       '@thin-pr/specialists':
         specifier: workspace:*
         version: link:../specialists
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
 
   packages/github:
     dependencies:
@@ -103,9 +105,15 @@ importers:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
 
   packages/specialists:
     dependencies:
+      '@thin-pr/core':
+        specifier: workspace:*
+        version: link:../core
       zod:
         specifier: ^4.6.7
         version: 4.6.7

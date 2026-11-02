@@ -34,4 +34,4 @@ Prefer `satisfies` when you are checking a literal and want to keep its type. Pr
 
 ## Tests
 
-Assert a value a caller can observe. `ping()` returns `pong`. A gate result has a rule, a verdict, and a reason. A private helper's call count is not a test. `.agents/skills/working-style` is the rest of that rule.
+Assert a value a caller can observe. `decide(evidence)` returns `fail` when one rule fails. A gate result has a rule, a verdict, and a reason. A private helper's call count is not a test. `.agents/skills/working-style` is the rest of that rule.

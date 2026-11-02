@@ -1,14 +1,14 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createJudge, type JudgeSubject, type JudgeVerdict } from "@thin-pr/specialists";
-import { loadReplayCases } from "./eval.js";
+import { loadReplayCases, readMinPassRate } from "./eval.js";
 
-export type JudgeCaseReport = JudgeVerdict & {
+type JudgeCaseReport = JudgeVerdict & {
   readonly id: string;
 };
 
-export type JudgeReport = {
+type JudgeReport = {
   readonly cases: readonly JudgeCaseReport[];
   readonly passed: number;
   readonly total: number;
@@ -25,7 +25,7 @@ export async function runJudge(
   env: Record<string, string | undefined> = process.env,
   fetchImpl: typeof fetch = globalThis.fetch,
 ): Promise<JudgeReport> {
-  const minPassRate = readPassRate(jsonFile(join(workspace, "evals", "judge-baseline.json")));
+  const minPassRate = readMinPassRate(join(workspace, "evals", "judge-baseline.json"));
   const session = createJudge(env, fetchImpl);
   const cases: JudgeCaseReport[] = [];
   for (const item of loadReplayCases(workspace)) {
@@ -34,10 +34,6 @@ export async function runJudge(
     cases.push({ id: item.id, ...verdict });
   }
   return summarize(cases, minPassRate, session.spentUsd());
-}
-
-export function judgeSubjects(workspace = root): JudgeSubject[] {
-  return loadReplayCases(workspace).map(subjectOf);
 }
 
 export function formatJudgeReport(report: JudgeReport): string {
@@ -63,7 +59,7 @@ export function exitCode(report: JudgeReport): 0 | 1 {
   return report.meetsBaseline ? 0 : 1;
 }
 
-export function subjectOf(item: {
+function subjectOf(item: {
   readonly id: string;
   readonly issueTitle: string;
   readonly issueBody: string;
@@ -106,21 +102,6 @@ function summarize(cases: readonly JudgeCaseReport[], minPassRate: number, spent
     meetsBaseline: total > 0 && passRate >= minPassRate,
     spentUsd,
   };
-}
-
-function readPassRate(value: unknown): number {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("judge-baseline.json must be an object");
-  }
-  const rate = (value as Record<string, unknown>).minPassRate;
-  if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0 || rate > 1) {
-    throw new Error("judge-baseline.json minPassRate must be greater than 0 and at most 1");
-  }
-  return rate;
-}
-
-function jsonFile(path: string): unknown {
-  return JSON.parse(readFileSync(path, "utf8")) as unknown;
 }
 
 function percent(rate: number): string {

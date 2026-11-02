@@ -2,11 +2,11 @@ import { z } from "zod";
 import { AnthropicModelClient } from "./live.js";
 import { implementerOutput, plannerOutput, reviewerOutput, testerOutput } from "./specialists.js";
 
-export const JUDGE_RULES = ["plan", "files", "tests", "review"] as const;
+const JUDGE_RULES = ["plan", "files", "tests", "review"] as const;
 
-export type JudgeRule = (typeof JUDGE_RULES)[number];
+type JudgeRule = (typeof JUDGE_RULES)[number];
 
-export type JudgeReason = {
+type JudgeReason = {
   readonly rule: JudgeRule;
   readonly verdict: "pass" | "fail";
   readonly reason: string;

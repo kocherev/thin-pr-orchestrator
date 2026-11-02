@@ -1,49 +1,8 @@
 id: small-feature
+label: thin-pr
 steps:
-  - id: plan
-    specialist: planner
-    retries: 1
-    inputs:
-      - issue
-      - templateId
-    outputs:
-      - summary
-      - steps
-  - id: implement
-    specialist: implementer
-    retries: 1
-    inputs:
-      - issue
-      - planSummary
-    outputs:
-      - summary
-      - files
-  - id: test
-    specialist: tester
-    retries: 1
-    inputs:
-      - issue
-      - changeSummary
-    outputs:
-      - summary
-      - passed
-  - id: review
-    specialist: reviewer
-    retries: 1
-    inputs:
-      - issue
-      - testSummary
-    outputs:
-      - summary
-      - notes
-  - id: gate
-    specialist: pr-writer
-    retries: 0
-    inputs:
-      - issue
-      - reviewSummary
-    outputs:
-      - summary
-      - title
-      - body
-    gate: decide
+  - { id: plan,      model: claude-sonnet-5-5, effort: medium, retries: 1 }
+  - { id: implement, model: claude-opus-5-5,   effort: high,   retries: 1 }
+  - { id: verify,    retries: 0, loop: { back_to: implement, max: 2 } }
+  - { id: review,    model: claude-sonnet-5-5, effort: high,   retries: 1, loop: { back_to: implement, max: 2 } }
+  - { id: write,     model: claude-haiku-5-5,  effort: low,    retries: 1 }

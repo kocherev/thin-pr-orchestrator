@@ -19,6 +19,6 @@ describe("trace export", () => {
     ]);
     expect(merged.endsWith("\n")).toBe(true);
     expect(() => combineTraceExports([" "])).toThrow("trace export was empty");
-    expect(() => combineTraceExports(["{}"])).toThrow("trace export has no resourceSpans");
+    expect(() => combineTraceExports(["{}"])).toThrow("trace export invalid at resourceSpans");
   });
 });

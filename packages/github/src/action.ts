@@ -6,6 +6,7 @@ import * as core from "@actions/core";
 import * as github from "@actions/github";
 import { Octokit } from "@octokit/rest";
 import { AnthropicModelClient, createModelClient } from "@thin-pr/specialists";
+import { exportRunRecord } from "./record.js";
 import { runAction } from "./run.js";
 import { createGitHubSurface } from "./surface.js";
 import { spanNames, startTrace } from "./trace.js";
@@ -39,11 +40,13 @@ async function main(): Promise<void> {
       }
     }
 
-    if (result.status === "failed") {
-      failure = result.report.error;
-    } else if (result.status === "completed") {
-      core.info(`Created ${result.branch} at ${result.headSha}`);
-      core.info(`Draft pull request ${result.pullRequest.url}`);
+    if (result.status !== "ignored") {
+      exportRunRecord(result.record, process.env.THIN_PR_RECORD_PATH);
+    }
+    if (result.status === "blocked" || result.status === "failed") {
+      failure = result.error;
+    } else if (result.status === "opened") {
+      core.info(`Draft pull request ${result.record.pullRequest?.url ?? "opened"}`);
     }
   } catch (error) {
     failure = error instanceof Error ? error.message : "run failed";

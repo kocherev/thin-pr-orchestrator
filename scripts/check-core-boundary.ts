@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
  * eslint.config.js bans the same names as static imports.
  * This script also rejects require() and dynamic import().
  */
-export const BANNED_PACKAGES = [
+const BANNED_PACKAGES = [
   "openai",
   "@anthropic-ai/sdk",
   "@ai-sdk/anthropic",
@@ -53,7 +53,7 @@ export function bannedSpecifiersIn(source: string): string[] {
   return [...found].sort();
 }
 
-export type BoundaryHit = {
+type BoundaryHit = {
   readonly file: string;
   readonly specifier: string;
 };
@@ -95,7 +95,7 @@ function isDirectRun(): boolean {
   return resolve(entry) === fileURLToPath(import.meta.url);
 }
 
-export function checkBoundary(root: string): number {
+function checkBoundary(root: string): number {
   const hits = scanDirectory(root);
   for (const hit of hits) {
     process.stderr.write(`${hit.file}: banned model client import "${hit.specifier}"\n`);

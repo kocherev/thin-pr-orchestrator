@@ -7,7 +7,7 @@ import { spanNames } from "@thin-pr/github";
 import { afterEach, describe, expect, it } from "vitest";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const expected = ["thin-pr.run", "thin-pr.plan", "thin-pr.implement", "thin-pr.test", "thin-pr.review", "thin-pr.gate"];
+const expected = ["thin-pr.run", "thin-pr.plan", "thin-pr.implement", "thin-pr.verify", "thin-pr.review", "thin-pr.write"];
 const directories: string[] = [];
 
 afterEach(() => {

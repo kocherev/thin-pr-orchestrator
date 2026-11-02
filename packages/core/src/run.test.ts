@@ -1,14 +1,18 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { decide } from "@thin-pr/gate";
-import { createStubSpecialists, ReplayModelClient } from "@thin-pr/specialists";
-import { loadTemplate, openEventLog, parseTemplate, replay, runWorkflow } from "./index.js";
+import {
+  openEventLog,
+  replay,
+  runWorkflow,
+  type StepContext,
+  type StepHandler,
+  type StepId,
+  type Template,
+  type Usage,
+} from "./index.js";
 
-const templatePath = fileURLToPath(new URL("../../../templates/stub-run.json", import.meta.url));
-const bugfixPath = fileURLToPath(new URL("../../../templates/bugfix.yaml", import.meta.url));
 const directories: string[] = [];
 
 afterEach(() => {
@@ -17,268 +21,202 @@ afterEach(() => {
   }
 });
 
-describe("orchestrator run", () => {
-  it("replays the stored log to the same final state", async () => {
-    const first = await runInNewLog();
-    const reopened = openEventLog(first.path);
-    try {
-      const fromDisk = replay(reopened.read(first.state.runId));
-      expect(fromDisk).toEqual(first.state);
-      expect(fromDisk.phase).toBe("complete");
-      expect(fromDisk.outputs.map((output) => output.summary)).toEqual([
-        "Plan the stub change.",
-        "Apply the stub change.",
-        "Stub checks passed.",
-        "Stub review found nothing.",
-        "pass",
-      ]);
-    } finally {
-      reopened.close();
-    }
+const template: Template = {
+  id: "small-feature",
+  label: "thin-pr",
+  steps: [
+    { id: "plan", retries: 0 },
+    { id: "implement", retries: 1 },
+    { id: "verify", retries: 0, loop: { back_to: "implement", max: 1 } },
+    { id: "review", retries: 0 },
+    { id: "write", retries: 0 },
+  ],
+};
 
-    const second = await runInNewLog();
-    expect(second.state).toEqual(first.state);
-    expect(second.events).toEqual(first.events);
-
-    const truncated = replay(first.events.slice(0, -1));
-    expect(truncated).not.toEqual(first.state);
-  });
-
-  it("runs the bugfix yaml through the specialists named in the file", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "thin-pr-"));
-    directories.push(directory);
-    const log = openEventLog(join(directory, "events.sqlite"));
-    try {
-      const state = await runWorkflow({
-        runId: "run-1",
-        issue: "Fix the stub.",
-        template: loadTemplate(bugfixPath),
-        specialists: createStubSpecialists(),
-        gates: { decide },
-        log,
-      });
-      expect(state.templateId).toBe("bugfix");
-      expect(state.phase).toBe("complete");
-      expect(state.outputs.map((output) => output.step)).toEqual([
-        "plan",
-        "implement",
-        "test",
-        "review",
-        "gate",
-      ]);
-    } finally {
-      log.close();
-    }
-  });
-
-  it("retries a step the number of times the template allows", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "thin-pr-"));
-    directories.push(directory);
-    const log = openEventLog(join(directory, "events.sqlite"));
-    let calls = 0;
-    try {
-      const state = await runWorkflow({
-        runId: "run-1",
-        issue: "Fix the stub.",
-        template: planTemplate(1),
-        specialists: {
-          planner: {
-            async run(input) {
-              calls += 1;
-              if (calls === 1) {
-                throw new Error("not yet");
-              }
-              return { step: input.step, summary: "done" };
-            },
-          },
+describe("runWorkflow", () => {
+  it("replays a run that loops once to the same outputs, loops and usage", async () => {
+    const path = logPath();
+    const seen: StepContext[] = [];
+    const log = openEventLog(path);
+    const state = await runWorkflow({
+      runId: "run-1",
+      issue: "Clamp decrement at zero.",
+      template,
+      log,
+      handlers: handlers({
+        implement: async (context) => {
+          seen.push(context);
+          return { outcome: "done", output: { summary: `edit ${context.loop}` }, usage: [usage(0.02)] };
         },
-        log,
-      });
-      expect(calls).toBe(2);
-      expect(state.outputs).toEqual([{ step: "plan", summary: "done" }]);
-      expect(log.read("run-1")).toHaveLength(2);
-    } finally {
-      log.close();
-    }
-  });
-
-  it("runs the gate hook named by the template", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "thin-pr-"));
-    directories.push(directory);
-    const log = openEventLog(join(directory, "events.sqlite"));
-    try {
-      await expect(
-        runWorkflow({
-          runId: "run-1",
-          issue: "Fix the stub.",
-          template: gateTemplate(),
-          specialists: {
-            "pr-writer": {
-              async run(input) {
-                return { step: input.step, summary: "pass" };
-              },
-            },
-          },
-          gates: { decide: () => "fail" },
-          log,
-        }),
-      ).rejects.toThrow("gate decide returned fail");
-      expect(log.read("run-1")).toEqual([
-        expect.objectContaining({ from: "idle", to: "gate", output: null }),
-      ]);
-    } finally {
-      log.close();
-    }
-  });
-
-  it("rejects a template that names an unknown step", () => {
-    expect(() =>
-      parseTemplate({
-        id: "bad",
-        steps: [
-          {
-            id: "ship",
-            specialist: "planner",
-            retries: 0,
-            inputs: ["issue"],
-            outputs: ["summary"],
-          },
-        ],
+        verify: async (context) =>
+          context.loop === 0
+            ? { outcome: "loop", output: { passed: false }, feedback: "test/counter.test.ts failed", usage: [] }
+            : { outcome: "done", output: { passed: true } },
       }),
-    ).toThrow(/template invalid at steps\.0\.id/);
+    });
+    log.close();
+
+    expect(state.status).toBe("completed");
+    expect(state.outputs).toEqual({
+      plan: { summary: "plan" },
+      implement: { summary: "edit 1" },
+      verify: { passed: true },
+      review: { summary: "review" },
+      write: { summary: "write" },
+    });
+    expect(state.loops).toEqual({ verify: 1 });
+    expect(state.usage.map((item) => item.costUsd)).toEqual([0.01, 0.02, 0.02, 0.01, 0.01]);
+    expect(seen.map((context) => [context.loop, context.attempt, context.feedback])).toEqual([
+      [0, 1, null],
+      [1, 1, "test/counter.test.ts failed"],
+    ]);
+
+    const reopened = openEventLog(path);
+    const events = reopened.read("run-1");
+    reopened.close();
+    expect(replay(events)).toEqual(state);
+    expect(events.map((event) => `${event.step ?? "run"} ${event.kind}`)).toEqual([
+      "run started",
+      "plan started",
+      "plan finished",
+      "implement started",
+      "implement finished",
+      "verify started",
+      "verify looped",
+      "implement started",
+      "implement finished",
+      "verify started",
+      "verify finished",
+      "review started",
+      "review finished",
+      "write started",
+      "write finished",
+      "run completed",
+    ]);
   });
 
-  it("reports a transition before the specialist runs", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "thin-pr-"));
-    directories.push(directory);
-    const log = openEventLog(join(directory, "events.sqlite"));
+  it("fails the run when a step asks to loop past its limit", async () => {
+    const log = openEventLog(logPath());
+    let implementCalls = 0;
+    const state = await runWorkflow({
+      runId: "run-1",
+      issue: "Clamp decrement at zero.",
+      template,
+      log,
+      handlers: handlers({
+        implement: async () => {
+          implementCalls += 1;
+          return { outcome: "done", output: { summary: "edit" } };
+        },
+        verify: async () => ({ outcome: "loop", output: { passed: false }, feedback: "still failing" }),
+      }),
+    });
+    const events = log.read("run-1");
+    log.close();
+
+    expect(state.status).toBe("failed");
+    expect(state.loops).toEqual({ verify: 1 });
+    expect(implementCalls).toBe(2);
+    expect(events.at(-1)).toMatchObject({ step: null, kind: "failed", error: "verify reached its loop limit (1)" });
+    expect(replay(events)).toEqual(state);
+  });
+
+  it("retries a step with the previous error as feedback", async () => {
+    const log = openEventLog(logPath());
+    const seen: (string | null)[] = [];
+    const state = await runWorkflow({
+      runId: "run-1",
+      issue: "Clamp decrement at zero.",
+      template,
+      log,
+      handlers: handlers({
+        implement: async (context) => {
+          seen.push(context.feedback);
+          if (context.attempt === 1) {
+            throw new Error("implementer output invalid at files");
+          }
+          return { outcome: "done", output: { summary: "edit" } };
+        },
+      }),
+    });
+    const failed = log.read("run-1").filter((event) => event.kind === "failed");
+    log.close();
+
+    expect(state.status).toBe("completed");
+    expect(seen).toEqual([null, "implementer output invalid at files"]);
+    expect(failed).toEqual([
+      expect.objectContaining({ step: "implement", attempt: 1, error: "implementer output invalid at files" }),
+    ]);
+  });
+
+  it("fails the run when a step runs out of retries", async () => {
+    const log = openEventLog(logPath());
+    const state = await runWorkflow({
+      runId: "run-1",
+      issue: "Clamp decrement at zero.",
+      template,
+      log,
+      handlers: handlers({
+        plan: async () => {
+          throw new Error("planner output invalid at steps");
+        },
+      }),
+    });
+    const events = log.read("run-1");
+    log.close();
+
+    expect(state.status).toBe("failed");
+    expect(state.outputs).toEqual({});
+    expect(events.at(-1)).toMatchObject({
+      step: null,
+      kind: "failed",
+      error: "plan failed after 1 attempt: planner output invalid at steps",
+    });
+  });
+
+  it("reports each event after it is stored", async () => {
+    const log = openEventLog(logPath());
     const seen: string[] = [];
-    try {
-      await runWorkflow({
-        runId: "run-1",
-        issue: "Fix the stub.",
-        template: planTemplate(),
-        specialists: {
-          planner: {
-            async run() {
-              seen.push("specialist");
-              return { step: "plan", summary: "done" };
-            },
-          },
+    await runWorkflow({
+      runId: "run-1",
+      issue: "Clamp decrement at zero.",
+      template: { ...template, steps: [{ id: "plan", retries: 0 }] },
+      log,
+      handlers: handlers({
+        plan: async () => {
+          seen.push("handler");
+          return { outcome: "done", output: { summary: "plan" } };
         },
-        log,
-        onTransition(transition) {
-          const mark =
-            transition.output === null ? `enter:${transition.to}` : `leave:${transition.output.step}`;
-          seen.push(mark);
-        },
-      });
-      expect(seen).toEqual(["enter:plan", "specialist", "leave:plan"]);
-    } finally {
-      log.close();
-    }
-  });
+      }),
+      onEvent(event) {
+        seen.push(`${event.seq} ${event.step ?? "run"} ${event.kind}`);
+      },
+    });
+    log.close();
 
-  it("writes nothing when a specialist is missing", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "thin-pr-"));
-    directories.push(directory);
-    const path = join(directory, "events.sqlite");
-    const log = openEventLog(path);
-    try {
-      await expect(
-        runWorkflow({
-          runId: "run-1",
-          issue: "Fix the stub.",
-          template: planTemplate(),
-          specialists: {},
-          log,
-        }),
-      ).rejects.toThrow(/missing specialist/);
-      expect(log.read("run-1")).toEqual([]);
-    } finally {
-      log.close();
-    }
-  });
-
-  it("fails the step when specialist output does not match the schema", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "thin-pr-"));
-    directories.push(directory);
-    const path = join(directory, "events.sqlite");
-    const log = openEventLog(path);
-    try {
-      await expect(
-        runWorkflow({
-          runId: "run-1",
-          issue: "Fix the stub.",
-          template: planTemplate(),
-          specialists: createStubSpecialists(
-            new ReplayModelClient({
-              planner: JSON.stringify({ summary: 1, steps: ["edit the stub"] }),
-            }),
-          ),
-          log,
-        }),
-      ).rejects.toThrow("planner output invalid at summary: Invalid input: expected string, received number");
-      expect(log.read("run-1")).toEqual([
-        expect.objectContaining({ from: "idle", to: "plan", output: null }),
-      ]);
-    } finally {
-      log.close();
-    }
+    expect(seen).toEqual(["1 run started", "2 plan started", "handler", "3 plan finished", "4 run completed"]);
   });
 });
 
-function planTemplate(retries = 0) {
-  return parseTemplate({
-    id: "one",
-    steps: [
-      {
-        id: "plan",
-        specialist: "planner",
-        retries,
-        inputs: ["issue", "templateId"],
-        outputs: ["summary", "steps"],
-      },
-    ],
-  });
+function handlers(overrides: Partial<Record<StepId, StepHandler>>): Record<StepId, StepHandler> {
+  const echo =
+    (id: StepId): StepHandler =>
+    async () => ({ outcome: "done", output: { summary: id }, usage: [usage(0.01)] });
+  return {
+    plan: overrides.plan ?? echo("plan"),
+    implement: overrides.implement ?? echo("implement"),
+    verify: overrides.verify ?? echo("verify"),
+    review: overrides.review ?? echo("review"),
+    write: overrides.write ?? echo("write"),
+  };
 }
 
-function gateTemplate() {
-  return parseTemplate({
-    id: "one",
-    steps: [
-      {
-        id: "gate",
-        specialist: "pr-writer",
-        retries: 0,
-        inputs: ["issue", "reviewSummary"],
-        outputs: ["summary", "title", "body"],
-        gate: "decide",
-      },
-    ],
-  });
+function usage(costUsd: number): Usage {
+  return { model: "claude-sonnet-5-5", inputTokens: 100, outputTokens: 20, cacheReadTokens: 0, costUsd, durationMs: 5 };
 }
 
-async function runInNewLog() {
+function logPath(): string {
   const directory = mkdtempSync(join(tmpdir(), "thin-pr-"));
   directories.push(directory);
-  const path = join(directory, "events.sqlite");
-  const log = openEventLog(path);
-  try {
-    const state = await runWorkflow({
-      runId: "run-1",
-      issue: "Fix the stub.",
-      template: loadTemplate(templatePath),
-      specialists: createStubSpecialists(),
-      gates: { decide },
-      log,
-    });
-    const events = log.read(state.runId);
-    const folded = replay(events);
-    expect(folded).toEqual(state);
-    expect(events.length).toBe(state.outputs.length * 2);
-    return { path, state, events };
-  } finally {
-    log.close();
-  }
+  return join(directory, "events.sqlite");
 }

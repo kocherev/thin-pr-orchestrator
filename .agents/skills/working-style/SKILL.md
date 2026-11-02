@@ -18,7 +18,7 @@ Read the callers, tests, and exports the change touches. That list is the scope.
 
 ## Checks
 
-A test asserts something a caller can observe. `ping()` returns `"pong"`. A private helper's call count is not a test.
+A test asserts something a caller can observe. `replay(log)` returns the state `runWorkflow` returned. A private helper's call count is not a test.
 
 Run `pnpm test` for the behavior, `pnpm typecheck` for the types, and `pnpm lint` for the import boundary. A compile on its own is not done.
 

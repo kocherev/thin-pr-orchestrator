@@ -3,10 +3,20 @@ import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
+import { z } from "zod";
 
-export const TRACE_SERVICE_NAME = "thin-pr-orchestrator";
+const TRACE_SERVICE_NAME = "thin-pr-orchestrator";
 
-export type TraceSession = {
+// The parts of an OTLP JSON export this module reads. Spans are copied through as they are.
+const exportSchema = z.object({ resourceSpans: z.array(z.unknown()) });
+
+const spansSchema = z.object({
+  resourceSpans: z.array(
+    z.object({ scopeSpans: z.array(z.object({ spans: z.array(z.object({ name: z.string().min(1) })) })) }),
+  ),
+});
+
+type TraceSession = {
   stop(): Promise<string>;
 };
 
@@ -68,19 +78,9 @@ export function combineTraceExports(bodies: readonly string[]): string {
 }
 
 export function spanNames(document: unknown): string[] {
-  const names: string[] = [];
-  for (const resourceSpan of resourceSpansOf(document)) {
-    const scopes = arrayField(resourceSpan, "scopeSpans");
-    for (const scope of scopes) {
-      for (const span of arrayField(scope, "spans")) {
-        const name = objectValue(span).name;
-        if (typeof name === "string" && name.length > 0) {
-          names.push(name);
-        }
-      }
-    }
-  }
-  return names;
+  return parse(spansSchema, document).resourceSpans.flatMap((resource) =>
+    resource.scopeSpans.flatMap((scope) => scope.spans.map((span) => span.name)),
+  );
 }
 
 function parseExport(body: string): unknown[] {
@@ -90,27 +90,15 @@ function parseExport(body: string): unknown[] {
   } catch {
     throw new Error("trace export is not JSON");
   }
-  return resourceSpansOf(value);
+  return parse(exportSchema, value).resourceSpans;
 }
 
-function resourceSpansOf(value: unknown): unknown[] {
-  return arrayField(value, "resourceSpans");
-}
-
-function arrayField(value: unknown, field: string): unknown[] {
-  const record = objectValue(value);
-  const items = record[field];
-  if (!Array.isArray(items)) {
-    throw new Error(`trace export has no ${field}`);
+function parse<T>(schema: z.ZodType<T>, value: unknown): T {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(`trace export invalid at ${parsed.error.issues[0]?.path.join(".") || "(root)"}`);
   }
-  return items;
-}
-
-function objectValue(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("trace export must be an object");
-  }
-  return value as Record<string, unknown>;
+  return parsed.data;
 }
 
 function listen(server: Server): Promise<void> {
