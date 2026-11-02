@@ -3,10 +3,18 @@ import { z } from "zod";
 import { actionWorkflowEnabled } from "./action-workflow.js";
 import { readDelivery, type Job } from "./event.js";
 import { createInstallationToken } from "./installation-token.js";
+import { runnerAllowedHosts, runnerEnvVars } from "./runner-config.js";
 import { verifySignature } from "./signature.js";
 
 // The Container class routes allowedHosts through this entrypoint.
 export { ContainerProxy };
+
+declare global {
+  interface Env {
+    /** Optional secret. It is not in `secrets.required`, so `wrangler types` does not generate it. */
+    readonly OTEL_EXPORTER_OTLP_HEADERS?: string;
+  }
+}
 
 const runStatusSchema = z.object({ running: z.boolean() });
 
@@ -36,7 +44,12 @@ export class Runner extends Container {
   enableInternet = false;
   // HTTPS has to pass through ContainerProxy for allowedHosts to see the hostname.
   interceptHttps = true;
-  allowedHosts = ["github.com", "api.github.com", "api.anthropic.com", "registry.npmjs.org"];
+  allowedHosts: string[];
+
+  constructor(ctx: ConstructorParameters<typeof Container>[0], env: Env) {
+    super(ctx, env);
+    this.allowedHosts = runnerAllowedHosts(env.OTEL_EXPORTER_OTLP_ENDPOINT);
+  }
 
   override async onActivityExpired(): Promise<void> {
     await stopWhenIdle(this);
@@ -96,14 +109,7 @@ async function dispatch(job: Job, env: Env): Promise<"started" | "left to the Ac
     return "left to the Action";
   }
   const runner = getContainer(env.RUNNER, job.deliveryId);
-  await runner.start({
-    envVars: {
-      GITHUB_TOKEN: installation.token,
-      ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
-      THIN_PR_MODEL: env.THIN_PR_MODEL,
-      THIN_PR_SPEND_LIMIT_USD: env.THIN_PR_SPEND_LIMIT_USD,
-    },
-  });
+  await runner.start({ envVars: runnerEnvVars(env, installation.token) });
   const response = await runner.fetch("http://runner/run", {
     method: "POST",
     headers: { "content-type": "application/json" },

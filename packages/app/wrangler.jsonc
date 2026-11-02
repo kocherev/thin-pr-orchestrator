@@ -48,7 +48,9 @@
   },
   "vars": {
     "THIN_PR_MODEL": "live",
-    "THIN_PR_SPEND_LIMIT_USD": "25"
+    "THIN_PR_SPEND_LIMIT_USD": "25",
+    // Optional. An OTLP endpoint on port 443 turns on traces for App runs. See docs/deploy.md.
+    "OTEL_EXPORTER_OTLP_ENDPOINT": ""
   },
   "secrets": {
     "required": [

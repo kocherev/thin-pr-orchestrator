@@ -72,6 +72,17 @@ Open the app settings. Set Webhook URL to the Worker URL. Check Active. Save.
 
 GitHub sends a `ping`. Recent Deliveries shows `204` for it. Label an issue `thin-pr`. That delivery shows `202`. `pnpm exec wrangler tail` shows the queue consumer's line for the delivery. The container's logs in the Cloudflare dashboard end with the run record.
 
+## 6. Send traces (optional)
+
+App runs export a trace only when `OTEL_EXPORTER_OTLP_ENDPOINT` names a collector. Set it in `vars` in `wrangler.jsonc`, for example `"OTEL_EXPORTER_OTLP_ENDPOINT": "https://api.honeycomb.io"`. The endpoint must use port 443 or 80, because the container can reach nothing else. The Runner adds its host to the egress allowlist. If the collector needs an API key, store the headers as a secret, then deploy again:
+
+```bash
+pnpm exec wrangler secret put OTEL_EXPORTER_OTLP_HEADERS
+pnpm exec wrangler deploy
+```
+
+The container sends the trace when the run ends. `docs/telemetry.md` lists the spans and the values for each backend.
+
 ## Action or App
 
 The Action and the App answer the same `thin-pr` label. One rule decides which one runs: the App defers to an enabled thin-pr workflow.
