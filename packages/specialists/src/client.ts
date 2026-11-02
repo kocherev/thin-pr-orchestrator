@@ -39,9 +39,9 @@ export function createAnthropicClient(
     fetch: options.fetch,
     timeout: TIMEOUT_MS,
     maxRetries: options.mode === "replay" ? 0 : LIVE_MAX_RETRIES,
-    // shortcut: the SDK's own model and tool spans are off, so the run trace keeps one span per step. Turn them on
-    // when the trace exports model usage.
-    openTelemetry: false,
+    // The SDK opens one span per request and per tool run. Set in code, this option also ignores the
+    // ANTHROPIC_OPEN_TELEMETRY_* variables, so no environment can add prompts or file contents to a span.
+    openTelemetry: { traces: { contentMode: "metadata_only" } },
   });
   return { client, meter };
 }
