@@ -117,6 +117,11 @@ export async function runIssue(deps: {
   };
 
   try {
+    // Before the workflow, so the implementer's run_check already has the dependencies.
+    const install = await workspace.install();
+    if (install && install.exitCode !== 0) {
+      return await stop("failed", `install failed (exit ${install.exitCode}): ${install.command}\n${install.logTail}`);
+    }
     const state = await runWorkflow({
       runId: deps.runId,
       issue: event.issueText,

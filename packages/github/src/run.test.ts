@@ -147,15 +147,20 @@ describe("issue label", () => {
     );
   });
 
-  it("installs once before verify and fails the run when the install fails", async () => {
+  it("runs install before the first step and fails the run with its log tail when the install fails", async () => {
     const repo = scratch(`install: echo 'lockfile is out of date'; exit 3\n${PASSING_CHECKS}`);
     const memory = memoryGitHub();
     const result = await run(repo, memory.github, { model: cassette("gate-pass") });
 
     expect(result).toMatchObject({
       status: "failed",
-      error: "verify failed after 1 attempt: install failed (exit 3): echo 'lockfile is out of date'; exit 3\nlockfile is out of date\n",
+      error: "install failed (exit 3): echo 'lockfile is out of date'; exit 3\nlockfile is out of date\n",
     });
+    if (result.status !== "failed") {
+      return;
+    }
+    expect(result.record.steps).toEqual([]);
+    expect(memory.calls.find((call) => call.op === "comment")?.body).toContain("lockfile is out of date");
     expect(git(repo.remote, "branch", "--list", "thin-pr/7")).toBe("");
   });
 
