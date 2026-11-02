@@ -1,0 +1,10 @@
+.git
+.claude
+.worktrees
+**/node_modules
+**/dist
+**/coverage
+**/.wrangler
+**/*.tsbuildinfo
+**/.env
+**/.dev.vars

@@ -1,0 +1,40 @@
+// Worker tests only. Same bindings as wrangler.jsonc, with no container and RUNNER bound to a fake.
+{
+  "name": "thin-pr-app-test",
+  "main": "test/main.ts",
+  "compatibility_date": "2026-10-15",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RUNNER",
+        "class_name": "FakeRunner"
+      }
+    ]
+  },
+  "exports": {
+    "FakeRunner": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  },
+  "queues": {
+    "producers": [
+      {
+        "binding": "JOBS",
+        "queue": "pr-jobs"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "pr-jobs",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 0
+      }
+    ]
+  },
+  "vars": {
+    "THIN_PR_MODEL": "live",
+    "THIN_PR_SPEND_LIMIT_USD": "25"
+  }
+}

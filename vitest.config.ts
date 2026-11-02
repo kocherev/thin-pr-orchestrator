@@ -2,8 +2,16 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    environment: "node",
-    include: ["packages/*/src/**/*.test.ts", "scripts/**/*.test.ts"],
-    execArgv: ["--experimental-sqlite", "--disable-warning=ExperimentalWarning"],
+    projects: [
+      {
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["packages/*/src/**/*.test.ts", "packages/app/runner/*.test.ts", "scripts/**/*.test.ts"],
+          execArgv: ["--experimental-sqlite", "--disable-warning=ExperimentalWarning"],
+        },
+      },
+      "packages/app/vitest.config.ts",
+    ],
   },
 });

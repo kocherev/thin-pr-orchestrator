@@ -318,7 +318,7 @@ describe("issue label", () => {
     expect(workflow).toContain("actions/checkout@v7");
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("persist-credentials: false");
-    expect(readFileSync(fileURLToPath(new URL("./action.ts", import.meta.url)), "utf8")).toContain("pushToken: token");
+    expect(readFileSync(fileURLToPath(new URL("./labeled.ts", import.meta.url)), "utf8")).toContain("pushToken: input.token");
     expect(workflow).toContain("GIT_AUTHOR_NAME: thin-pr[bot]");
     expect(workflow).toContain("GIT_COMMITTER_EMAIL: thin-pr@example.invalid");
     expect(workflow).toContain("ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}");

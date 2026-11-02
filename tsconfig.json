@@ -7,6 +7,8 @@
     { "path": "packages/gate" },
     { "path": "packages/github" },
     { "path": "packages/mcp" },
+    { "path": "packages/app" },
+    { "path": "packages/app/runner" },
     { "path": "scripts" }
   ]
 }

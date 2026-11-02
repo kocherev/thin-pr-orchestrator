@@ -44,7 +44,7 @@ Runs `tsc -b --pretty false`. This is the same compiler pass as `pnpm build`. `p
 
 ### pnpm test
 
-Runs `vitest run`. The config is `vitest.config.ts`. Workers get `--experimental-sqlite` and `--disable-warning=ExperimentalWarning`. Included files are `packages/*/src/**/*.test.ts` and `scripts/**/*.test.ts`.
+Runs `vitest run`. The config is `vitest.config.ts`, with two projects. The `node` project runs `packages/*/src/**/*.test.ts`, `packages/app/runner/*.test.ts` and `scripts/**/*.test.ts`; its workers get `--experimental-sqlite` and `--disable-warning=ExperimentalWarning`. The second project is `packages/app/vitest.config.ts`, which runs the Worker tests in the Workers runtime.
 
 Useful single files:
 
