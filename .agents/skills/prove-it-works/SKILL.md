@@ -13,7 +13,7 @@ A compile is not the result. Run the command and read what it prints. A file tim
 
 ## Checks
 
-From the repo root, after `pnpm install`. Node.js 22.13 or later and pnpm 10.33.4. The install and the meaning of each command are in `WORKING.md`.
+From the repo root, after `pnpm install`. Node.js 22.13 or later and pnpm 10.33.4. The install and the meaning of each command are in `AGENTS.md`.
 
 ```bash
 pnpm lint

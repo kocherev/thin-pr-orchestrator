@@ -2,17 +2,17 @@
 name: technical-writing
 description: >
   How to write docs in this repo. Use when editing README.md, docs/,
-  WORKING.md, CONTRIBUTING.md, or a pull request title and body.
+  AGENTS.md, CONTRIBUTING.md, or a pull request title and body.
 ---
 
 # Technical writing
 
-Write so a tired reader gets the fact on the first pass. Then apply `skills/unslop` to the same text.
+Write so a tired reader gets the fact on the first pass. Then apply `.agents/skills/unslop` to the same text.
 
 One document has one job.
 
 - A tutorial shows the steps and the result the reader should see. The fork section in `README.md` is this.
-- A how-to is a task for someone who already has the checkout. `WORKING.md` is this.
+- A how-to is a task for someone who already has the checkout. `AGENTS.md` is this.
 - A reference lists facts, names, and limits, with no pitch. The eval table and the package list are this.
 - An explanation says why, on one bounded topic. `docs/design.md` is this.
 
@@ -35,4 +35,4 @@ Public docs name the command, the file, and the number the command prints. `pnpm
 
 Code is fenced. A UI label, if one appears, is bold. Pull request text is a short briefing: what changed, how you checked it, and the eval report when eval ran. Do not paste a log that the checks already store.
 
-`skills/working-style` still owns comments in code. Keep a comment only when the code cannot show the reason.
+`.agents/skills/working-style` still owns comments in code. Keep a comment only when the code cannot show the reason.

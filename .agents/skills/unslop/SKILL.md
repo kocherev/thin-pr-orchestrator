@@ -2,13 +2,13 @@
 name: unslop
 description: >
   Cut machine-written patterns from public copy. Use when editing README.md,
-  docs/, WORKING.md, or a pull request title and body. Apply after
-  skills/technical-writing.
+  docs/, AGENTS.md, or a pull request title and body. Apply after
+  .agents/skills/technical-writing.
 ---
 
 # Unslop
 
-Edit the text to remove the patterns below. Preserve the meaning. Match the direct voice already in `README.md` and `WORKING.md`.
+Edit the text to remove the patterns below. Preserve the meaning. Match the direct voice already in `README.md` and `AGENTS.md`.
 
 Rule numbers are stable. A removed rule leaves a gap.
 
