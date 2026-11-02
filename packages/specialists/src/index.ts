@@ -18,4 +18,19 @@ export {
   type JudgeSubject,
   type JudgeVerdict,
 } from "./judge.js";
+export { createAnthropicClient, type AnthropicClientOptions } from "./client.js";
 export { costOf, type PricedModel } from "./pricing.js";
+export {
+  RefusalError,
+  structured,
+  TruncatedOutputError,
+  type Effort,
+  type StructuredRequest,
+} from "./structured.js";
+export {
+  CassetteError,
+  SPECIALIST_HEADER,
+  SpendLimitError,
+  type CassetteEntry,
+  type SpendMeter,
+} from "./transport.js";
