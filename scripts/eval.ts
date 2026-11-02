@@ -1,164 +1,158 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { availableParallelism, tmpdir } from "node:os";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { measureDiff, parseBudget, type FileChange } from "@thin-pr/gate";
-import { readLabelEvent, runAction, type GitHubSurface } from "@thin-pr/github";
+import { openEventLog, templateForLabel, type StepHandler } from "@thin-pr/core";
+import { GATE_RULES } from "@thin-pr/gate";
+import { createRunHandlers, readLabelEvent, runIssue, type GitHubSurface, type RunRecord } from "@thin-pr/github";
 import { implementerOutput, ReplayModelClient } from "@thin-pr/specialists";
+import { createScratchRepo, loadRepoConfig, openWorkspace } from "@thin-pr/workspace";
 import { z } from "zod";
 
-type CaseReport = {
-  readonly id: string;
-  readonly gate: "pass" | "fail";
-  readonly files: number;
-  readonly lines: number;
-  readonly withinBudget: boolean;
-};
-
-type RangeStat = {
-  readonly min: number;
-  readonly median: number;
-  readonly max: number;
-};
-
-type EvalReport = {
-  readonly cases: readonly CaseReport[];
-  readonly passed: number;
-  readonly total: number;
-  readonly passRate: number;
-  readonly minPassRate: number;
-  readonly withinBudget: number;
-  readonly budget: { readonly maxFiles: number; readonly maxLines: number };
-  readonly files: RangeStat;
-  readonly lines: RangeStat;
-  readonly meetsBaseline: boolean;
-};
+type Verdict = "opened" | "blocked";
 
 /** Recorded model replies, keyed by the step that asked for them. */
 const recordingSchema = z.object({
   plan: z.unknown(),
   implement: z.unknown(),
-  test: z.unknown(),
   review: z.unknown(),
   pullRequest: z.unknown(),
 });
 
-const responseSchema = recordingSchema.extend({ changes: z.array(z.string().min(1)).min(1) });
+const expectedSchema = z
+  .object({ verdict: z.enum(["opened", "blocked"]), failedRules: z.array(z.enum(GATE_RULES)).min(1).optional() })
+  .strict();
 
-const baselineSchema = z.object({ minPassRate: z.number().gt(0).lte(1) });
+const baselineSchema = z.object({ minVerdictAccuracy: z.number().gt(0).lte(1) }).strict();
+
+type File = { readonly path: string; readonly content: string };
+
+export type EvalCase = {
+  readonly id: string;
+  readonly payload: unknown;
+  readonly issueTitle: string;
+  readonly issueBody: string;
+  readonly recording: z.infer<typeof recordingSchema>;
+  /** The recorded implementer output: whole files, applied through the workspace. */
+  readonly edits: readonly File[];
+  /** Tests copied into `test/hidden/` right before verify. The implementer never sees them. */
+  readonly hidden: readonly File[];
+  readonly expected: z.infer<typeof expectedSchema>;
+};
+
+type CaseResult = {
+  readonly id: string;
+  readonly expected: EvalCase["expected"];
+  readonly verdict: Verdict;
+  readonly failedRules: readonly string[];
+  /** The step error when the run failed before the gate. */
+  readonly error: string | null;
+  readonly correct: boolean;
+  readonly record: RunRecord;
+};
+
+type EvalReport = {
+  readonly cases: readonly CaseResult[];
+  readonly correct: number;
+  readonly total: number;
+  readonly accuracy: number;
+  readonly minVerdictAccuracy: number;
+  readonly good: { readonly opened: number; readonly total: number };
+  readonly bad: { readonly blocked: number; readonly total: number };
+  readonly meetsBaseline: boolean;
+};
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-type ReplayCase = z.infer<typeof recordingSchema> & {
-  readonly id: string;
-  readonly payload: unknown;
-  readonly issueNumber: number;
-  readonly issueTitle: string;
-  readonly issueBody: string;
-  readonly changePaths: readonly string[];
-  readonly changes: readonly FileChange[];
-  readonly files: number;
-  readonly lines: number;
-  readonly withinBudget: boolean;
-  readonly maxFiles: number;
-  readonly maxLines: number;
-};
-
-export function loadReplayCases(workspace = root): ReplayCase[] {
-  const evalsDir = join(workspace, "evals");
-  const budget = parseBudget(jsonFile(join(evalsDir, "budget.json")));
-  const sampleRoot = join(evalsDir, "sample-repo");
-  const ids = issueIds(join(evalsDir, "issues"));
-  if (ids.length < 10) {
-    throw new Error(`evals need at least 10 issues, found ${ids.length}`);
-  }
-
-  const cases: ReplayCase[] = [];
-  const seenIssues = new Set<number>();
-  for (const id of ids) {
-    const payload = jsonFile(join(evalsDir, "issues", `${id}.json`));
-    const response = readResponse(id, jsonFile(join(evalsDir, "responses", `${id}.json`)));
-    const event = readLabelEvent(payload);
-    if (event.repo !== "sample-repo") {
-      throw new Error(`${id}: issue repository must be sample-repo`);
-    }
-    if (seenIssues.has(event.issue.number)) {
-      throw new Error(`${id}: duplicate issue number ${event.issue.number}`);
-    }
-    seenIssues.add(event.issue.number);
-    const changes = readChanges(id, sampleRoot, join(evalsDir, "diffs", id), response.changes);
-    const diff = measureDiff(changes);
-    cases.push({
-      id,
-      payload,
-      issueNumber: event.issue.number,
-      issueTitle: event.issue.title,
-      issueBody: event.issue.body,
-      plan: response.plan,
-      implement: response.implement,
-      test: response.test,
-      review: response.review,
-      pullRequest: response.pullRequest,
-      changePaths: response.changes,
-      changes,
-      files: diff.files,
-      lines: diff.lines,
-      withinBudget: diff.files <= budget.maxFiles && diff.lines <= budget.maxLines,
-      maxFiles: budget.maxFiles,
-      maxLines: budget.maxLines,
+export function loadCases(workspace = root): EvalCase[] {
+  const casesDir = join(workspace, "evals", "cases");
+  const seen = new Set<number>();
+  return readdirSync(casesDir)
+    .sort()
+    .map((id) => {
+      const dir = join(casesDir, id);
+      const payload = jsonFile(join(dir, "issue.json"));
+      const event = readLabelEvent(payload);
+      if (event.repo !== "sample-repo" || seen.has(event.issue.number)) {
+        throw new Error(`${id}: the issue must be a unique number on sample-repo`);
+      }
+      seen.add(event.issue.number);
+      const recording = recordingSchema.parse(jsonFile(join(dir, "responses.json")));
+      const edits = readTree(join(dir, "files"));
+      const listed = implementerOutput.safeParse(recording.implement).data?.files;
+      if (listed && !sameItems(listed, edits.map((edit) => edit.path))) {
+        throw new Error(`${id}: implement files do not match files/`);
+      }
+      return {
+        id,
+        payload,
+        issueTitle: event.issue.title,
+        issueBody: event.issue.body,
+        recording,
+        edits,
+        hidden: readTree(join(dir, "hidden")),
+        expected: expectedSchema.parse(jsonFile(join(dir, "expected.json"))),
+      };
     });
-  }
-  return cases;
 }
 
+/**
+ * Runs every case through the labeled-issue path on a scratch copy of `evals/sample-repo`. The model replies are
+ * recorded. Typecheck and tests run for real, with this repo's `tsc` and `vitest` on PATH.
+ */
 export async function runEval(workspace = root): Promise<EvalReport> {
-  const minPassRate = readMinPassRate(join(workspace, "evals", "baseline.json"));
-  const loaded = loadReplayCases(workspace);
-  const first = loaded[0];
-  if (!first) {
-    throw new Error("evals need at least 10 issues, found 0");
-  }
-
-  const directory = mkdtempSync(join(tmpdir(), "thin-pr-eval-"));
+  const { minVerdictAccuracy } = baselineSchema.parse(jsonFile(join(workspace, "evals", "baseline.json")));
+  const sample = readTree(join(workspace, "evals", "sample-repo"));
+  const logs = mkdtempSync(join(tmpdir(), "thin-pr-eval-"));
+  const path = process.env.PATH;
+  process.env.PATH = [join(workspace, "node_modules", ".bin"), path].join(delimiter);
   try {
-    const cases: CaseReport[] = [];
-    for (const item of loaded) {
-      const gate = await replay(workspace, directory, item);
-      cases.push({
-        id: item.id,
-        gate,
-        files: item.files,
-        lines: item.lines,
-        withinBudget: item.withinBudget,
-      });
-    }
-    return summarize(cases, minPassRate, { maxFiles: first.maxFiles, maxLines: first.maxLines });
+    // Each case has its own scratch repo, so a few run at once. Results keep the case order.
+    const items = loadCases(workspace);
+    const cases: CaseResult[] = [];
+    let next = 0;
+    const worker = async () => {
+      while (next < items.length) {
+        const index = next;
+        next += 1;
+        const item = items[index];
+        if (item) {
+          cases[index] = await runCase(workspace, item, sample, logs);
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.max(1, Math.floor(availableParallelism() / 2)) }, worker));
+    return summarize(cases, minVerdictAccuracy);
   } finally {
-    rmSync(directory, { recursive: true, force: true });
+    process.env.PATH = path;
+    rmSync(logs, { recursive: true, force: true });
   }
-}
-
-export function meetsBaseline(passed: number, total: number, minPassRate: number): boolean {
-  if (total <= 0) {
-    return false;
-  }
-  return passed / total >= minPassRate;
 }
 
 export function formatReport(report: EvalReport): string {
+  const failed = new Set(report.cases.flatMap((item) => item.failedRules));
   const lines = [
     "Replay eval",
     `cases: ${report.total}`,
-    `gate pass rate: ${report.passed}/${report.total} (${percent(report.passRate)})`,
-    `baseline: ${percent(report.minPassRate)}`,
-    `diff budget: ${report.budget.maxFiles} files, ${report.budget.maxLines} lines`,
-    `within budget: ${report.withinBudget}/${report.total}`,
-    `files changed: min ${formatNumber(report.files.min)}, median ${formatNumber(report.files.median)}, max ${formatNumber(report.files.max)}`,
-    `lines changed: min ${formatNumber(report.lines.min)}, median ${formatNumber(report.lines.median)}, max ${formatNumber(report.lines.max)}`,
+    `verdict accuracy: ${report.correct}/${report.total} (${percent(report.accuracy)})`,
+    `baseline: ${percent(report.minVerdictAccuracy)}`,
+    `opened good: ${report.good.opened}/${report.good.total}`,
+    `blocked bad: ${report.bad.blocked}/${report.bad.total}`,
+    `rules failed by a case: ${GATE_RULES.filter((rule) => failed.has(rule)).join(", ") || "none"}`,
+    `rules no case fails: ${GATE_RULES.filter((rule) => !failed.has(rule)).join(", ") || "none"}`,
   ];
   for (const item of report.cases) {
-    const budget = item.withinBudget ? "within budget" : "over budget";
-    lines.push(`${item.id} ${item.gate} files ${item.files} lines ${item.lines} ${budget}`);
+    const files = item.record.diff?.files ?? [];
+    const changed = files.reduce((sum, file) => sum + file.added + file.removed, 0);
+    const expected = `${item.expected.verdict}${item.expected.failedRules ? ` on ${item.expected.failedRules.join(", ")}` : ""}`;
+    const detail = item.error
+      ? ` run failed: ${item.error}`
+      : item.failedRules.length > 0
+        ? ` failed rules: ${item.failedRules.join(", ")}`
+        : "";
+    lines.push(
+      `${item.id} ${item.verdict} ${item.correct ? "ok" : `MISMATCH (expected ${expected})`} files ${files.length} lines ${changed}${detail}`,
+    );
   }
   return lines.join("\n");
 }
@@ -167,167 +161,134 @@ export function exitCode(report: EvalReport): 0 | 1 {
   return report.meetsBaseline ? 0 : 1;
 }
 
-/** The `minPassRate` floor from a baseline file. */
-export function readMinPassRate(path: string): number {
-  return baselineSchema.parse(jsonFile(path)).minPassRate;
-}
-
-/** A replay client that answers each specialist with its recorded reply. */
-export function replayModel(value: unknown): ReplayModelClient {
+/** A replay client that answers each specialist with its recorded reply. `edits` become the implementer's files. */
+export function replayModel(value: unknown, edits?: readonly File[]): ReplayModelClient {
   const recording = recordingSchema.parse(value);
+  const implement = edits && isRecord(recording.implement) ? { ...recording.implement, edits } : recording.implement;
   return new ReplayModelClient({
     planner: JSON.stringify(recording.plan),
-    implementer: JSON.stringify(recording.implement),
-    tester: JSON.stringify(recording.test),
+    implementer: JSON.stringify(implement),
     reviewer: JSON.stringify(recording.review),
     "pr-writer": JSON.stringify(recording.pullRequest),
   });
 }
 
-function summarize(
-  cases: readonly CaseReport[],
-  minPassRate: number,
-  budget: EvalReport["budget"],
-): EvalReport {
-  const passed = cases.filter((item) => item.gate === "pass").length;
-  const total = cases.length;
-  const passRate = passed / total;
-  return {
-    cases,
-    passed,
-    total,
-    passRate,
-    minPassRate,
-    withinBudget: cases.filter((item) => item.withinBudget).length,
-    budget,
-    files: rangeStat(cases.map((item) => item.files)),
-    lines: rangeStat(cases.map((item) => item.lines)),
-    meetsBaseline: meetsBaseline(passed, total, minPassRate),
-  };
-}
-
-async function replay(workspace: string, directory: string, item: ReplayCase): Promise<"pass" | "fail"> {
-  let result: Awaited<ReturnType<typeof runAction>>;
-  try {
-    result = await runAction({
-      payload: item.payload,
-      workspace,
-      runId: `eval-${item.issueNumber}`,
-      logPath: join(directory, `${item.id}.sqlite`),
-      github: replayGitHub(),
-      changes: item.changes,
-      model: replayModel(item),
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "replay failed";
-    throw new Error(`${item.id}: ${message}`, { cause: error });
-  }
-  if (result.status === "ignored") {
-    throw new Error(`${item.id}: issue is not a thin-pr label event`);
-  }
-  return result.status === "opened" ? "pass" : "fail";
-}
-
+/** A GitHub surface that accepts every call and opens draft 1. Evals and traces never reach GitHub. */
 export function replayGitHub(): GitHubSurface {
   let nextId = 1;
   return {
-    async branchSha() {
-      return "abc123";
-    },
-    async createBranch() {
-      return undefined;
-    },
     async startCheck() {
-      const id = nextId;
       nextId += 1;
-      return id;
+      return nextId - 1;
     },
-    async finishCheck() {
-      return undefined;
+    async finishCheck() {},
+    async comment() {},
+    async listPullsForHead() {
+      return [];
     },
-    async comment() {
-      return undefined;
-    },
-    async readText() {
-      return null;
-    },
-    async commitFiles() {
-      return "def456";
+    async updatePull(input) {
+      return { number: input.number, url: `https://example.test/${input.owner}/${input.repo}/pull/${input.number}` };
     },
     async openDraft(input) {
-      return {
-        number: 1,
-        url: `https://example.test/${input.owner}/${input.repo}/pull/1`,
-      };
+      return { number: 1, url: `https://example.test/${input.owner}/${input.repo}/pull/1` };
     },
   };
 }
 
-function readChanges(id: string, sampleRoot: string, diffRoot: string, paths: readonly string[]): FileChange[] {
-  return paths.map((rel) => ({
-    path: rel,
-    before: readTreeFile(id, sampleRoot, rel, true),
-    after: readTreeFile(id, diffRoot, rel, false),
-  }));
-}
-
-function readTreeFile(id: string, tree: string, rel: string, allowMissing: boolean): string {
-  const full = resolve(tree, rel);
-  const fromRoot = relative(resolve(tree), full);
-  if (fromRoot === "" || fromRoot.startsWith("..")) {
-    throw new Error(`${id}: diff path escapes the tree: ${rel}`);
-  }
-  if (!existsSync(full)) {
-    if (!allowMissing) {
-      throw new Error(`${id}: missing recorded file ${rel}`);
+async function runCase(workspace: string, item: EvalCase, sample: readonly File[], logs: string): Promise<CaseResult> {
+  const repo = createScratchRepo(Object.fromEntries(sample.map((file) => [file.path, file.content])));
+  const log = openEventLog(join(logs, `${item.id}.sqlite`));
+  try {
+    appendFileSync(join(repo.dir, ".git", "info", "exclude"), "/test/hidden/\n");
+    const event = readLabelEvent(item.payload);
+    const template = templateForLabel(join(workspace, "templates"), event.label);
+    if (event.action !== "labeled" || !template) {
+      throw new Error("the issue is not a thin-pr label event");
     }
-    const parent = dirname(full);
-    if (!existsSync(parent) || !statSync(parent).isDirectory()) {
-      throw new Error(`${id}: ${rel} is outside the sample repo`);
+    const config = loadRepoConfig(repo.dir);
+    const checkout = await openWorkspace({ dir: repo.dir, baseSha: repo.baseSha, config });
+    const handlers = createRunHandlers(replayModel(item.recording, item.edits), checkout);
+    const result = await runIssue({
+      event,
+      template,
+      config,
+      workspace: checkout,
+      handlers: { ...handlers, verify: withHiddenTests(handlers.verify, repo.dir, item.hidden) },
+      github: replayGitHub(),
+      log,
+      runId: `eval-${item.id}`,
+    });
+    if (result.status === "ignored") {
+      throw new Error("the run ignored the issue");
     }
-    return "";
+    const verdict = result.status === "opened" ? "opened" : "blocked";
+    const failedRules = result.record.gate.filter((rule) => rule.verdict === "FAIL").map((rule) => rule.rule);
+    const rulesMatch = !item.expected.failedRules || sameItems(item.expected.failedRules, failedRules);
+    return {
+      id: item.id,
+      expected: item.expected,
+      verdict,
+      failedRules,
+      error: result.status === "failed" ? result.error : null,
+      correct: verdict === item.expected.verdict && rulesMatch,
+      record: result.record,
+    };
+  } catch (error) {
+    throw new Error(`${item.id}: ${error instanceof Error ? error.message : "replay failed"}`, { cause: error });
+  } finally {
+    log.close();
+    repo.remove();
   }
-  if (!statSync(full).isFile()) {
-    throw new Error(`${id}: ${rel} is not a file`);
-  }
-  return readFileSync(full, "utf8");
 }
 
-function readResponse(id: string, value: unknown): z.infer<typeof responseSchema> {
-  const response = responseSchema.parse(value);
-  if (new Set(response.changes).size !== response.changes.length) {
-    throw new Error(`${id}: duplicate diff path`);
-  }
-  const implement = implementerOutput.safeParse(response.implement);
-  if (implement.success && !samePaths(implement.data.files, response.changes)) {
-    throw new Error(`${id}: implement files do not match the recorded diff`);
-  }
-  return response;
-}
-
-function issueIds(directory: string): string[] {
-  return readdirSync(directory)
-    .filter((name) => name.endsWith(".json"))
-    .map((name) => name.slice(0, -".json".length))
-    .sort();
-}
-
-function rangeStat(values: readonly number[]): RangeStat {
-  const sorted = [...values].sort((left, right) => left - right);
-  const mid = Math.floor(sorted.length / 2);
-  const upper = sorted[mid] ?? 0;
-  const median = sorted.length % 2 === 1 ? upper : ((sorted[mid - 1] ?? 0) + upper) / 2;
-  return {
-    min: sorted[0] ?? 0,
-    median,
-    max: sorted[sorted.length - 1] ?? 0,
+function withHiddenTests(verify: StepHandler, dir: string, hidden: readonly File[]): StepHandler {
+  return (context) => {
+    for (const file of hidden) {
+      const path = join(dir, "test", "hidden", file.path);
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, file.content);
+    }
+    return verify(context);
   };
 }
 
-function samePaths(left: readonly string[], right: readonly string[]): boolean {
-  const a = [...left].sort();
-  const b = [...right].sort();
-  return a.length === b.length && a.every((path, index) => path === b[index]);
+function summarize(cases: readonly CaseResult[], minVerdictAccuracy: number): EvalReport {
+  const correct = cases.filter((item) => item.correct).length;
+  const good = cases.filter((item) => item.expected.verdict === "opened");
+  const bad = cases.filter((item) => item.expected.verdict === "blocked");
+  const accuracy = cases.length === 0 ? 0 : correct / cases.length;
+  return {
+    cases,
+    correct,
+    total: cases.length,
+    accuracy,
+    minVerdictAccuracy,
+    good: { opened: good.filter((item) => item.verdict === "opened").length, total: good.length },
+    bad: { blocked: bad.filter((item) => item.verdict === "blocked").length, total: bad.length },
+    meetsBaseline: cases.length > 0 && accuracy >= minVerdictAccuracy,
+  };
+}
+
+/** Every file under `dir`, with paths relative to it. A missing directory has no files. */
+function readTree(dir: string): File[] {
+  let entries: string[];
+  try {
+    entries = readdirSync(dir, { recursive: true, encoding: "utf8" });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((path) => statSync(join(dir, path)).isFile())
+    .sort()
+    .map((path) => ({ path: path.split("\\").join("/"), content: readFileSync(join(dir, path), "utf8") }));
+}
+
+function sameItems(left: readonly string[], right: readonly string[]): boolean {
+  return [...left].sort().join("\n") === [...right].sort().join("\n");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function jsonFile(path: string): unknown {
@@ -338,16 +299,9 @@ function percent(rate: number): string {
   return `${(rate * 100).toFixed(1)}%`;
 }
 
-function formatNumber(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
-}
-
 function isDirectRun(): boolean {
   const entry = process.argv[1];
-  if (!entry) {
-    return false;
-  }
-  return resolve(entry) === fileURLToPath(import.meta.url);
+  return entry !== undefined && resolve(entry) === fileURLToPath(import.meta.url);
 }
 
 if (isDirectRun()) {
@@ -357,8 +311,7 @@ if (isDirectRun()) {
       process.exitCode = exitCode(report);
     })
     .catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : "eval failed";
-      process.stderr.write(`${message}\n`);
+      process.stderr.write(`${error instanceof Error ? error.message : "eval failed"}\n`);
       process.exitCode = 1;
     });
 }

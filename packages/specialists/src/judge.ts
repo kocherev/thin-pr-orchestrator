@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { AnthropicModelClient } from "./live.js";
-import { implementerOutput, plannerOutput, reviewerOutput, testerOutput } from "./specialists.js";
+import { implementerOutput, plannerOutput, reviewerOutput } from "./specialists.js";
+import type { CheckResult } from "./workspace.js";
 
 const JUDGE_RULES = ["plan", "files", "tests", "review"] as const;
 
@@ -23,7 +24,7 @@ export type JudgeSubject = {
   readonly issueBody: string;
   readonly plan: unknown;
   readonly implement: unknown;
-  readonly test: unknown;
+  readonly checks: readonly CheckResult[];
   readonly review: unknown;
   readonly changes: readonly string[];
   readonly files: number;
@@ -63,8 +64,8 @@ export function judgePrompt(subject: JudgeSubject): string {
     "Rules:",
     "- plan: pass when the plan matches the planner contract, including at least one step. Fail when steps is empty.",
     "- files: pass when the implementer files list equals the recorded change paths.",
-    "- tests: pass when passed is true and the plan has steps. Pass when passed is false and the review notes are non-empty. Fail when passed is true and the plan has no steps. Fail when passed is false and the review notes are empty.",
-    "- review: pass when an empty plan, a failed test, or an over-budget diff has at least one review note. Pass when none of those problems are present. Fail when a problem is present and notes is empty.",
+    "- tests: the checks pass when there is at least one and every exitCode is 0. Pass when the checks pass and the plan has steps. Pass when the checks do not pass and the review notes are non-empty. Fail when the checks pass and the plan has no steps. Fail when the checks do not pass and the review notes are empty.",
+    "- review: pass when an empty plan, failed checks, or an over-budget diff has at least one review note. Pass when none of those problems are present. Fail when a problem is present and notes is empty.",
     "The budget is maxFiles and maxLines on the subject. files and lines are the measured diff.",
     "Subject:",
     JSON.stringify(subject),
@@ -151,22 +152,22 @@ function judgeFiles(subject: JudgeSubject): JudgeReason {
 }
 
 function judgeTests(subject: JudgeSubject): JudgeReason {
-  const parsed = testerOutput.safeParse(subject.test);
-  if (!parsed.success) {
-    return { rule: "tests", verdict: "fail", reason: "Tester output does not match the contract." };
+  const passed = checksPassed(subject);
+  if (passed && !plannerOutput.safeParse(subject.plan).success) {
+    return { rule: "tests", verdict: "fail", reason: "Checks passed without a plan." };
   }
-  const plan = plannerOutput.safeParse(subject.plan);
-  if (parsed.data.passed && !plan.success) {
-    return { rule: "tests", verdict: "fail", reason: "Tester recorded passed true without a plan." };
-  }
-  if (!parsed.data.passed) {
+  if (!passed) {
     const notes = reviewNotes(subject);
     if (notes === 0) {
-      return { rule: "tests", verdict: "fail", reason: "Tester recorded passed false and the review has no notes." };
+      return { rule: "tests", verdict: "fail", reason: "Checks did not pass and the review has no notes." };
     }
-    return { rule: "tests", verdict: "pass", reason: "Tester recorded passed false and the review notes say so." };
+    return { rule: "tests", verdict: "pass", reason: "Checks did not pass and the review notes say so." };
   }
-  return { rule: "tests", verdict: "pass", reason: "Tester recorded passed true." };
+  return { rule: "tests", verdict: "pass", reason: "Checks passed." };
+}
+
+function checksPassed(subject: JudgeSubject): boolean {
+  return subject.checks.length > 0 && subject.checks.every((check) => check.exitCode === 0);
 }
 
 function judgeReview(subject: JudgeSubject): JudgeReason {
@@ -181,7 +182,8 @@ function judgeReview(subject: JudgeSubject): JudgeReason {
   if (problem) {
     return { rule: "review", verdict: "pass", reason: "Review notes cover the failed check." };
   }
-  return { rule: "review", verdict: "pass", reason: "Review notes are empty on a passing run." };
+  const reason = parsed.data.notes.length === 0 ? "Review notes are empty on a passing run." : "Review has notes on a passing run.";
+  return { rule: "review", verdict: "pass", reason };
 }
 
 function reviewProblem(subject: JudgeSubject): string | null {
@@ -190,9 +192,8 @@ function reviewProblem(subject: JudgeSubject): string | null {
     const lines = subject.lines === 1 ? "1 line" : `${subject.lines} lines`;
     return `Review has no notes for a diff over the budget (${files}, ${lines}).`;
   }
-  const tests = testerOutput.safeParse(subject.test);
-  if (tests.success && !tests.data.passed) {
-    return "Review has no notes for a failed test.";
+  if (!checksPassed(subject)) {
+    return "Review has no notes for failed checks.";
   }
   if (!plannerOutput.safeParse(subject.plan).success) {
     return "Review has no notes for an empty plan.";

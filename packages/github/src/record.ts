@@ -1,8 +1,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { RunEvent, StepId, Usage } from "@thin-pr/core";
-import type { DiffMeasurement, GateRuleResult } from "@thin-pr/gate";
-import { summaryOf } from "@thin-pr/specialists";
+import type { GateRuleResult } from "@thin-pr/gate";
+import { summaryOf, type CheckResult, type Diff } from "@thin-pr/specialists";
 import type { LabelEvent } from "./event.js";
 
 export type RunRecord = {
@@ -23,7 +23,8 @@ export type RunRecord = {
     readonly summary: string;
   }[];
   readonly gate: readonly GateRuleResult[];
-  readonly diff: DiffMeasurement | null;
+  readonly diff: Diff | null;
+  readonly checks: readonly CheckResult[];
   readonly pullRequest: { readonly number: number; readonly url: string } | null;
   readonly totals: {
     readonly costUsd: number;
@@ -43,7 +44,8 @@ export function toRunRecord(run: {
   readonly status: RunRecord["status"];
   readonly timeline: readonly TimedEvent[];
   readonly gate: readonly GateRuleResult[];
-  readonly diff: DiffMeasurement | null;
+  readonly diff: Diff | null;
+  readonly checks: readonly CheckResult[];
   readonly pullRequest: RunRecord["pullRequest"];
 }): RunRecord {
   const steps: RunRecord["steps"][number][] = [];
@@ -90,6 +92,7 @@ export function toRunRecord(run: {
     steps,
     gate: run.gate,
     diff: run.diff,
+    checks: run.checks,
     pullRequest: run.pullRequest,
     totals: {
       costUsd: usage.reduce((sum, item) => sum + item.costUsd, 0),

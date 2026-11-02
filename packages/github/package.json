@@ -17,7 +17,7 @@
     "@thin-pr/core": "workspace:*",
     "@thin-pr/gate": "workspace:*",
     "@thin-pr/specialists": "workspace:*",
-    "typescript": "6.0.3",
+    "@thin-pr/workspace": "workspace:*",
     "zod": "^4.6.7"
   }
 }

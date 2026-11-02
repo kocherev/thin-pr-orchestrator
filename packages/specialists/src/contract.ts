@@ -1,4 +1,4 @@
-export type SpecialistName = "planner" | "implementer" | "tester" | "reviewer" | "pr-writer";
+export type SpecialistName = "planner" | "implementer" | "reviewer" | "pr-writer";
 
 export interface ModelClient {
   complete(request: {

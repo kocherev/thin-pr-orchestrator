@@ -2,30 +2,30 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { FileChange } from "@thin-pr/gate";
 import { runAction, spanNames, startTrace } from "@thin-pr/github";
+import { createScratchRepo } from "@thin-pr/workspace";
 import { replayGitHub, replayModel } from "./eval.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-const STUB_CHANGE: FileChange = {
-  path: "src/stub.ts",
-  before: "export function stub(): number {\n  return 0;\n}\n",
-  after: "export function stub(): number {\n  return 1;\n}\n",
-};
-
 async function runTrace(workspace = root): Promise<string> {
   const tracing = await startTrace();
   const directory = mkdtempSync(join(tmpdir(), "thin-pr-trace-"));
+  // gate-pass.json edits src/stub.ts. The checks only print, so the trace measures the orchestrator.
+  const repo = createScratchRepo({
+    "src/stub.ts": "export function stub(): number {\n  return 0;\n}\n",
+    ".thin-pr.yml": "checks:\n  typecheck: echo typecheck ok\n  test: echo test ok\n",
+  });
   let failure: unknown;
   try {
     const result = await runAction({
       payload: jsonFile(join(workspace, "fixtures", "sample-issue-labeled.json")),
-      workspace,
+      templates: join(workspace, "templates"),
+      checkout: repo.dir,
+      baseSha: repo.baseSha,
       runId: "run-7",
       logPath: join(directory, "events.sqlite"),
       github: replayGitHub(),
-      changes: [STUB_CHANGE],
       model: replayModel(jsonFile(join(workspace, "fixtures", "gate-pass.json"))),
     });
     if (result.status !== "opened") {
@@ -36,6 +36,7 @@ async function runTrace(workspace = root): Promise<string> {
   }
   const document = await tracing.stop();
   rmSync(directory, { recursive: true, force: true });
+  repo.remove();
   if (failure) {
     throw failure;
   }

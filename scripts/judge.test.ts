@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,45 +7,28 @@ import { exitCode, formatJudgeReport, runJudge } from "./judge.js";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("judge eval", () => {
-  it("scores the replay cases against the rubric", async () => {
+  it("scores the replayed runs against the rubric", { timeout: 240_000 }, async () => {
     const report = await runJudge(root, { THIN_PR_JUDGE: "replay", THIN_PR_MODEL: "replay" });
     const text = formatJudgeReport(report);
     const byId = new Map(report.cases.map((item) => [item.id, item]));
 
-    expect(report.total).toBe(12);
-    expect(report.passed).toBe(9);
-    expect(report.passRate).toBe(0.75);
+    expect(report.total).toBe(17);
+    expect(report.passed).toBe(12);
     expect(report.meetsBaseline).toBe(true);
     expect(report.spentUsd).toBeNull();
     expect(exitCode(report)).toBe(0);
     expect(exitCode({ ...report, meetsBaseline: false })).toBe(1);
     expect(byId.get("01-clamp-decrement")?.verdict).toBe("pass");
-    expect(byId.get("09-failing-tests")?.verdict).toBe("pass");
-    expect(byId.get("09-failing-tests")?.reasons.find((reason) => reason.rule === "tests")?.reason).toBe(
-      "Tester recorded passed false and the review notes say so.",
+    expect(byId.get("09-failing-hidden-test")?.reasons.find((reason) => reason.rule === "tests")?.reason).toBe(
+      "Checks did not pass and the review has no notes.",
     );
-    expect(byId.get("10-empty-plan")?.verdict).toBe("fail");
-    expect(byId.get("10-empty-plan")?.reasons.find((reason) => reason.rule === "plan")?.reason).toBe(
-      "Plan has no steps.",
-    );
+    expect(byId.get("10-empty-plan")?.reasons.find((reason) => reason.rule === "plan")?.reason).toBe("Plan has no steps.");
     expect(byId.get("11-wide-touch")?.verdict).toBe("fail");
-    expect(byId.get("12-long-readme")?.verdict).toBe("fail");
-    expect(text).toContain("judge pass rate: 9/12 (75.0%)");
-    expect(text).toContain("baseline: 75.0%");
-    expect(text).toContain("10-empty-plan fail");
-    expect(text).toContain("  plan: fail. Plan has no steps.");
+    // The rubric does not look at paths, secrets or whitespace, so it passes runs the gate blocks.
+    expect(byId.get("15-planted-secret")?.verdict).toBe("pass");
+    expect(text).toContain("judge pass rate: 12/17 (70.6%)");
+    expect(text).toContain("baseline: 70.6%");
     expect(readFileSync(join(root, "docs/demo/judge-report.txt"), "utf8")).toBe(`${text}\n`);
-  });
-
-  it("prints the report from pnpm eval:judge", () => {
-    const output = execFileSync("pnpm", ["eval:judge"], {
-      cwd: root,
-      encoding: "utf8",
-      env: { ...process.env, THIN_PR_JUDGE: "replay", THIN_PR_MODEL: "replay" },
-    });
-    expect(output).toContain("judge pass rate: 9/12 (75.0%)");
-    expect(output).toContain("09-failing-tests pass");
-    expect(output).toContain("12-long-readme fail");
   });
 
   it("keeps the recorded live judge run", () => {

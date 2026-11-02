@@ -1,19 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { createJudge, judgePrompt, judgeReplay, LIVE_EFFORT, LIVE_MODEL_ID, parseJudgeText, type JudgeSubject } from "./index.js";
+import {
+  createJudge,
+  judgePrompt,
+  judgeReplay,
+  LIVE_EFFORT,
+  LIVE_MODEL_ID,
+  parseJudgeText,
+  type CheckResult,
+  type JudgeSubject,
+} from "./index.js";
 
 describe("judge rubric", () => {
   it("fails an empty plan", () => {
     const verdict = judgeReplay(
       subject({
         plan: { summary: "Rename the helpers.", steps: [] },
-        test: { summary: "The comment is present.", passed: true },
         review: { summary: "No behavior changed.", notes: [] },
       }),
     );
     expect(verdict.verdict).toBe("fail");
     expect(verdict.reasons.map((reason) => reason.rule)).toEqual(["plan", "files", "tests", "review"]);
     expect(verdict.reasons[0]).toMatchObject({ verdict: "fail", reason: "Plan has no steps." });
-    expect(verdict.reasons[2]).toMatchObject({ verdict: "fail", reason: "Tester recorded passed true without a plan." });
+    expect(verdict.reasons[2]).toMatchObject({ verdict: "fail", reason: "Checks passed without a plan." });
     expect(verdict.reasons[3]).toMatchObject({ verdict: "fail", reason: "Review has no notes for an empty plan." });
   });
 
@@ -36,16 +44,22 @@ describe("judge rubric", () => {
     });
   });
 
-  it("passes when the tester records a failure and the review notes it", () => {
+  it("passes when a check fails and the review notes it", () => {
     const verdict = judgeReplay(
       subject({
-        test: { summary: "TRUE still fails the recorded check.", passed: false },
+        checks: [check("typecheck", 0), check("test", 1)],
         review: { summary: "The check is case-sensitive.", notes: ["The recorded tests did not pass."] },
       }),
     );
     expect(verdict.verdict).toBe("pass");
     expect(verdict.reasons.map((reason) => reason.verdict)).toEqual(["pass", "pass", "pass", "pass"]);
-    expect(verdict.reasons[2]?.reason).toBe("Tester recorded passed false and the review notes say so.");
+    expect(verdict.reasons[2]?.reason).toBe("Checks did not pass and the review notes say so.");
+  });
+
+  it("fails failed checks that the review does not mention", () => {
+    const verdict = judgeReplay(subject({ checks: [check("typecheck", 2), check("test", 0)] }));
+    expect(verdict.reasons[2]).toMatchObject({ verdict: "fail", reason: "Checks did not pass and the review has no notes." });
+    expect(verdict.reasons[3]).toMatchObject({ verdict: "fail", reason: "Review has no notes for failed checks." });
   });
 
   it("stays on the rubric unless the live flags and a key are set", async () => {
@@ -116,10 +130,14 @@ function passingText(): unknown {
     reasons: [
       { rule: "plan", verdict: "pass", reason: "Plan has 1 step." },
       { rule: "files", verdict: "pass", reason: "Files match." },
-      { rule: "tests", verdict: "pass", reason: "Tester recorded passed true." },
+      { rule: "tests", verdict: "pass", reason: "Checks passed." },
       { rule: "review", verdict: "pass", reason: "Review notes are empty on a passing run." },
     ],
   };
+}
+
+function check(name: CheckResult["name"], exitCode: number): CheckResult {
+  return { name, command: name === "typecheck" ? "tsc --noEmit" : "vitest run", exitCode, durationMs: 400, logTail: "" };
 }
 
 function subject(overrides: Partial<JudgeSubject>): JudgeSubject {
@@ -129,7 +147,7 @@ function subject(overrides: Partial<JudgeSubject>): JudgeSubject {
     issueBody: "decrement in src/counter.ts should not return a negative count.",
     plan: { summary: "Stop decrement from going below zero.", steps: ["Change decrement in src/counter.ts"] },
     implement: { summary: "Clamp decrement at zero.", files: ["src/counter.ts"] },
-    test: { summary: "Decrement stays at zero.", passed: true },
+    checks: [check("typecheck", 0), check("test", 0)],
     review: { summary: "The clamp matches the issue.", notes: [] },
     changes: ["src/counter.ts"],
     files: 1,

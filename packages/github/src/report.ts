@@ -1,6 +1,7 @@
 import type { Json, StepId } from "@thin-pr/core";
-import { plannerOutput, verifyOutput } from "@thin-pr/specialists";
+import { plannerOutput } from "@thin-pr/specialists";
 import type { RunRecord } from "./record.js";
+import { verifyOutput } from "./steps.js";
 
 /** The `## Run report` the run comments on the issue, and the last section of the draft body. */
 export function formatRunReport(record: RunRecord, branch: string, error: string | null): string {
@@ -27,9 +28,7 @@ export function formatRunReport(record: RunRecord, branch: string, error: string
 }
 
 export function formatDraftBody(outputs: Readonly<Partial<Record<StepId, Json>>>, report: string): string {
-  return ["## Plan", "", formatPlan(outputs.plan), "", "## Test results", "", formatTests(outputs.verify), "", report].join(
-    "\n",
-  );
+  return ["## Plan", "", formatPlan(outputs.plan), "", "## Checks", "", formatChecks(outputs.verify), "", report].join("\n");
 }
 
 function formatPlan(output: Json | undefined): string {
@@ -40,10 +39,12 @@ function formatPlan(output: Json | undefined): string {
   return `${plan.data.summary}\n\n${plan.data.steps.map((step) => `- ${step}`).join("\n")}`;
 }
 
-function formatTests(output: Json | undefined): string {
-  const test = verifyOutput.safeParse(output);
-  if (!test.success) {
-    return "Test result is missing.";
+function formatChecks(output: Json | undefined): string {
+  const verify = verifyOutput.safeParse(output);
+  if (!verify.success) {
+    return "Checks did not run.";
   }
-  return `${test.data.summary}\n\n${test.data.passed ? "Tests passed." : "Tests did not pass."}`;
+  return verify.data.checks
+    .map((check) => `- ${check.name}: exit ${check.exitCode} in ${check.durationMs} ms. \`${check.command}\``)
+    .join("\n");
 }

@@ -14,11 +14,6 @@ export const implementerOutput = z
   })
   .strict();
 
-export const testerOutput = z.object({ summary: text, passed: z.boolean() }).strict();
-
-/** The verify step's output: the recorded tester verdict plus the runner's parse of the changed sources. */
-export const verifyOutput = testerOutput.extend({ sourcesParse: z.boolean() }).strict();
-
 export const reviewerOutput = z.object({ summary: text, notes: z.array(z.string()) }).strict();
 
 export const prWriterOutput = z.object({ summary: text, title: text, body: text }).strict();
@@ -30,7 +25,10 @@ type StepSpec = {
   readonly read: (context: StepContext) => unknown;
 };
 
-const STEPS: Record<StepId, StepSpec> = {
+/** The steps a model answers. `verify` runs the repo's checks instead. */
+type ModelStepId = Exclude<StepId, "verify">;
+
+const STEPS: Record<ModelStepId, StepSpec> = {
   plan: {
     specialist: "planner",
     input: z.object({ issue: text }).strict(),
@@ -42,12 +40,6 @@ const STEPS: Record<StepId, StepSpec> = {
     input: z.object({ issue: text, planSummary: text }).strict(),
     output: implementerOutput,
     read: (context) => ({ issue: context.issue, planSummary: summaryOf(context.outputs.plan) }),
-  },
-  verify: {
-    specialist: "tester",
-    input: z.object({ issue: text, changeSummary: text }).strict(),
-    output: testerOutput,
-    read: (context) => ({ issue: context.issue, changeSummary: summaryOf(context.outputs.implement) }),
   },
   review: {
     specialist: "reviewer",
@@ -66,17 +58,15 @@ const STEPS: Record<StepId, StepSpec> = {
 const FIXTURES: Record<SpecialistName, Json> = {
   planner: { summary: "Plan the stub change.", steps: ["edit the stub"] },
   implementer: { summary: "Apply the stub change.", files: ["src/stub.ts"] },
-  tester: { summary: "Stub checks passed.", passed: true },
   reviewer: { summary: "Stub review found nothing.", notes: [] },
   "pr-writer": { summary: "pass", title: "Fix the stub", body: "Stub draft." },
 };
 
-/** One handler per step. Each one validates its input, asks the model, and validates the reply. */
-export function createStepHandlers(model: ModelClient): Record<StepId, StepHandler> {
+/** One handler per model step. Each one validates its input, asks the model, and validates the reply. */
+export function createStepHandlers(model: ModelClient): Record<ModelStepId, StepHandler> {
   return {
     plan: handler(STEPS.plan, model),
     implement: handler(STEPS.implement, model),
-    verify: handler(STEPS.verify, model),
     review: handler(STEPS.review, model),
     write: handler(STEPS.write, model),
   };

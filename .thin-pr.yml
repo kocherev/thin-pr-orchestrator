@@ -1,0 +1,4 @@
+# The labeled-issue workflow runs on this repo. A thin-pr branch here must pass the same checks as CI.
+checks:
+  typecheck: pnpm typecheck
+  test: pnpm test

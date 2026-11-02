@@ -1,0 +1,23 @@
+{
+  "plan": {
+    "summary": "Add a header helper for the model API.",
+    "steps": [
+      "Create src/client.ts with requestHeaders"
+    ]
+  },
+  "implement": {
+    "summary": "Export requestHeaders.",
+    "files": [
+      "src/client.ts"
+    ]
+  },
+  "review": {
+    "summary": "The headers send JSON.",
+    "notes": []
+  },
+  "pullRequest": {
+    "summary": "pass",
+    "title": "Add request headers",
+    "body": "requestHeaders returns the model API headers."
+  }
+}

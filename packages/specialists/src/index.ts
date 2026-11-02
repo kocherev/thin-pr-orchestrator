@@ -7,8 +7,8 @@ export {
   ReplayModelClient,
   reviewerOutput,
   summaryOf,
-  verifyOutput,
 } from "./specialists.js";
+export type { CheckResult, Diff, Workspace } from "./workspace.js";
 export { AnthropicModelClient, createModelClient, LIVE_EFFORT, LIVE_MODEL_ID } from "./live.js";
 export {
   createJudge,
