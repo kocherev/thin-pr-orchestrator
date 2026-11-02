@@ -55,7 +55,7 @@ pnpm exec vitest run packages/specialists/src/client.test.ts
 pnpm exec vitest run scripts/eval.test.ts
 ```
 
-`packages/core/src/run.test.ts` writes a SQLite log for a run that loops once, reopens it, and expects `replay` to rebuild the same outputs, loops, and usage. `packages/github/src/run.test.ts` runs `fixtures/sample-issue-labeled.json` against a scratch git checkout with an in-memory GitHub client. `packages/specialists/src/client.test.ts` records and replays model calls against a fake API and checks pricing, the spend limit, and refusals. `packages/workspace/src/git.test.ts` edits, diffs, checks, and pushes a scratch checkout. `scripts/eval.test.ts` runs the eval and expects 17/17. `scripts/judge.test.ts` expects the judge report at 12/17. `scripts/trace.test.ts` expects 15 spans in one trace, with the GenAI attributes, the parent links, request costs that match the pricing, and no prompt or file text. It also sends the spans to a local OTLP receiver.
+`packages/core/src/run.test.ts` writes a SQLite log for a run that loops once, reopens it, and expects `replay` to rebuild the same outputs, loops, and usage. `packages/github/src/run.test.ts` runs `fixtures/sample-issue-labeled.json` against a scratch git checkout with an in-memory GitHub client. `packages/specialists/src/client.test.ts` records and replays model calls against a fake API and checks pricing, the spend limit, and refusals. `packages/workspace/src/git.test.ts` edits, diffs, checks, and pushes a scratch checkout. `scripts/eval.test.ts` runs the eval, expects 18/18, and checks that the committed report matches the run. `scripts/record.test.ts` records a case through the scripted upstream and checks the spend limit. `scripts/judge.test.ts` checks the human labels and records and replays a judge batch through the scripted upstream. `scripts/trace.test.ts` expects 15 spans in one trace, with the GenAI attributes, the parent links, request costs that match the pricing, and no prompt or file text. It also sends the spans to a local OTLP receiver.
 
 The eval and judge tests run `tsc` and `vitest` in scratch repos, so each takes tens of seconds. They set their own timeouts.
 
@@ -67,35 +67,28 @@ Stdout on the committed cases starts with:
 
 ```text
 Replay eval
-cases: 17
-verdict accuracy: 17/17 (100.0%)
-baseline: 100.0%
-opened good: 8/8
-blocked bad: 9/9
-rules failed by a case: diff, budget, paths, secrets, typecheck, tests, review
-rules no case fails: plan, contracts
+cases: 18
+verdict accuracy: 18/18 (100.0%)
+resolve rate: 9/9 (100.0%)
+cost per resolved case: 0.029992 USD
+p50 step latency: 3195 ms
 ```
 
-The command then prints one line per case: id, `opened` or `blocked`, `ok` or `MISMATCH`, file count, line count, and the failed rules or the step error. The full table is in `README.md`. Each case runs on a scratch git copy of `evals/sample-repo`, with this repo's `node_modules/.bin` on `PATH` for `tsc` and `vitest`. Exit 0 means the verdict accuracy is at least `evals/baseline.json`.
+The command then prints the totals by model, the baseline, the gate rules some case fails, and one line per case: id, `opened` or `blocked`, `ok` or `MISMATCH`, file count, line count, and the failed rules or the step error. Each case runs on a scratch git copy of `evals/sample-repo`, with this repo's `node_modules/.bin` on `PATH` for `tsc` and `vitest`. Exit 0 means the verdict accuracy is at least `evals/baseline.json` and `evals/report.json` and `evals/runs/` match the run.
 
-Do not lower `evals/baseline.json`, and do not edit `scripts/eval.test.ts`, to turn a red eval green. If you change a case, update the README table in the same change and keep the test honest.
+When you change a case, a cassette, or anything a run records, run `pnpm eval -- --write` and commit `evals/report.json` and `evals/runs/` in the same change. Do not lower `evals/baseline.json`, and do not edit `scripts/eval.test.ts`, to turn a red eval green. Update the README table when a case changes.
+
+### pnpm eval:record
+
+Runs `node --disable-warning=ExperimentalWarning --import tsx scripts/record.ts`. It is not part of `pnpm verify`.
+
+`pnpm eval:record <caseId>` or `pnpm eval:record --all` runs cases against the live API and rewrites their cassettes. It needs `ANTHROPIC_API_KEY` in the environment and stops at `THIN_PR_SPEND_LIMIT_USD`, 25 by default. See `evals/README.md`.
 
 ### pnpm eval:judge
 
 Runs `node --disable-warning=ExperimentalWarning --import tsx scripts/judge.ts`.
 
-Stdout on the committed cases starts with:
-
-```text
-Judge eval
-cases: 17
-judge pass rate: 12/17 (70.6%)
-baseline: 70.6%
-```
-
-The command replays the eval cases first, then prints one block per case. The block is the case id, `pass` or `fail`, and four lines for `plan`, `files`, `tests`, and `review`. Each rule line is the verdict and the reason. Exit 0 means the pass rate is at least `evals/judge-baseline.json`. The committed report is `docs/demo/judge-report.txt`.
-
-`THIN_PR_JUDGE=live` with `THIN_PR_MODEL=live` and `ANTHROPIC_API_KEY` calls `claude-haiku-5-5`. CI leaves both mode variables unset, which selects the rubric. `docs/demo/judge-live.txt` records one live run over the earlier 12 cases. Its spend line is `live spend: 0.002965 USD`.
+The command replays `evals/judge-cassette.jsonl` over the replayed eval and compares each grade with `evals/cases/<id>/judge.json`. Exit 0 means the agreement is at least `evals/judge-baseline.json`. The cassette is not recorded yet, so on the committed cases the command prints `judge cassette: not recorded.` and exits 0. `pnpm eval:judge -- --record` grades the runs in one Message Batches request and needs `ANTHROPIC_API_KEY`.
 
 ### pnpm trace
 
