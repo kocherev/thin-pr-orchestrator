@@ -198,6 +198,7 @@ corepack prepare pnpm@10.33.4 --activate
 - `pnpm eval:judge` scores the same 17 cases with the judge rubric. It exits non-zero when the pass rate is below `evals/judge-baseline.json`.
 - `pnpm trace` writes an OTLP JSON trace for the `run-7` replay. Set `THIN_PR_TRACE_PATH` to choose the file.
 - `pnpm build` runs `tsc -b` and writes `dist/` in each project.
+- `pnpm thin-pr run --repo <path> --issue <file | text>` runs an issue against a local checkout without GitHub. `docs/mcp.md` covers it and the MCP server.
 
 `typecheck` and `build` use the same compiler pass. A type error fails both.
 

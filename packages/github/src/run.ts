@@ -98,11 +98,13 @@ export async function runIssue(deps: {
   readonly log: EventLog;
   readonly runId: string;
   readonly pushToken?: string;
+  /** Defaults to `thin-pr/<issue>`. */
+  readonly branch?: string;
 }): Promise<LabelRunResult> {
   const { event, workspace, github } = deps;
   const target = { owner: event.owner, repo: event.repo };
   const checkRuns = createCheckRuns(github, target);
-  const branch = `thin-pr/${event.issue.number}`;
+  const branch = deps.branch ?? `thin-pr/${event.issue.number}`;
   const timeline: TimedEvent[] = [];
   let diff: Diff | null = null;
   let checks: readonly CheckResult[] = [];
