@@ -1,0 +1,7 @@
+{
+  "plan_relevance": "pass",
+  "minimal_diff": "pass",
+  "test_adequacy": "pass",
+  "review_quality": "pass",
+  "note": "yes and no join the existing checks and nothing else changes. No tests were added. The approval fits."
+}

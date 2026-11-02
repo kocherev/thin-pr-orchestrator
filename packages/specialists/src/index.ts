@@ -11,12 +11,14 @@ export {
 } from "./specialists.js";
 export type { CheckResult, Diff, Workspace } from "./workspace.js";
 export {
-  createJudge,
+  JUDGE_CRITERIA,
   JUDGE_EFFORT,
   JUDGE_MODEL,
-  judgePrompt,
-  judgeReplay,
-  parseJudgeText,
+  judgeRequest,
+  readJudgeResult,
+  runJudgeBatch,
+  type JudgeCriterion,
+  type JudgeResult,
   type JudgeSubject,
   type JudgeVerdict,
 } from "./judge.js";
@@ -29,7 +31,7 @@ export {
 } from "./client.js";
 export { runImplementer, TurnLimitError } from "./implementer.js";
 export { costOf, type PricedModel } from "./pricing.js";
-export { scriptedUpstream, type Script, type ScriptedTurn } from "./scripted.js";
+export { scriptedBatchUpstream, scriptedUpstream, type Script, type ScriptedTurn } from "./scripted.js";
 export {
   RefusalError,
   structured,

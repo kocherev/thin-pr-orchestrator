@@ -1,0 +1,7 @@
+{
+  "plan_relevance": "pass",
+  "minimal_diff": "pass",
+  "test_adequacy": "pass",
+  "review_quality": "fail",
+  "note": "The plan and the five added lines fit the issue, but formatPercent assigns a number to a string. Typecheck failed and the review approved."
+}

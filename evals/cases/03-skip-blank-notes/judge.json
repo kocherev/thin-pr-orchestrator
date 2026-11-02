@@ -1,0 +1,7 @@
+{
+  "plan_relevance": "pass",
+  "minimal_diff": "pass",
+  "test_adequacy": "pass",
+  "review_quality": "pass",
+  "note": "The filter drops empty lines, which is what the issue body asks. No tests were added. The approval fits."
+}

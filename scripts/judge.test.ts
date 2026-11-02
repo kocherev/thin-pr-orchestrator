@@ -1,47 +1,114 @@
-import { readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { JUDGE_CRITERIA, scriptedBatchUpstream, type JudgeSubject, type JudgeVerdict } from "@thin-pr/specialists";
 import { describe, expect, it } from "vitest";
-import { exitCode, formatJudgeReport, runJudge } from "./judge.js";
+import {
+  agreement,
+  exitCode,
+  formatJudgeReport,
+  JUDGE_CASSETTE,
+  judgeReport,
+  loadLabels,
+  recordJudge,
+  replayJudge,
+  runJudge,
+  type Label,
+} from "./judge.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("judge eval", () => {
-  it("scores the replayed runs against the rubric", { timeout: 240_000 }, async () => {
-    const report = await runJudge(root, { THIN_PR_JUDGE: "replay", THIN_PR_MODEL: "replay" });
-    const text = formatJudgeReport(report);
-    const byId = new Map(report.cases.map((item) => [item.id, item]));
-
-    expect(report.total).toBe(17);
-    expect(report.passed).toBe(12);
-    expect(report.meetsBaseline).toBe(true);
-    expect(report.spentUsd).toBeNull();
-    expect(exitCode(report)).toBe(0);
-    expect(exitCode({ ...report, meetsBaseline: false })).toBe(1);
-    expect(byId.get("01-clamp-decrement")?.verdict).toBe("pass");
-    expect(byId.get("09-failing-hidden-test")?.reasons.find((reason) => reason.rule === "tests")?.reason).toBe(
-      "Checks did not pass and the review has no notes.",
+  it("keeps a human label for every criterion of every case", () => {
+    const labels = loadLabels(root);
+    expect(labels.size).toBe(18);
+    const fails = Object.fromEntries(
+      JUDGE_CRITERIA.map((criterion) => [criterion, [...labels].filter(([, label]) => label[criterion] === "fail").map(([id]) => id)]),
     );
-    // The plan step fails on the empty plan, so the run keeps no plan output for the judge to read.
-    expect(byId.get("10-empty-plan")?.reasons.find((reason) => reason.rule === "plan")?.reason).toBe(
-      "Plan does not match the planner contract.",
-    );
-    expect(byId.get("11-wide-touch")?.verdict).toBe("fail");
-    // The rubric does not look at paths, secrets or whitespace, so it passes runs the gate blocks.
-    expect(byId.get("15-planted-secret")?.verdict).toBe("pass");
-    expect(text).toContain("judge pass rate: 12/17 (70.6%)");
-    expect(text).toContain("baseline: 70.6%");
-    expect(readFileSync(join(root, "docs/demo/judge-report.txt"), "utf8")).toBe(`${text}\n`);
+    expect(fails).toEqual({
+      plan_relevance: ["10-empty-plan", "14-denied-path"],
+      minimal_diff: ["16-whitespace-only"],
+      test_adequacy: ["18-live-edit"],
+      review_quality: [
+        "06-document-helpers",
+        "09-failing-hidden-test",
+        "10-empty-plan",
+        "13-type-error",
+        "14-denied-path",
+        "15-planted-secret",
+        "16-whitespace-only",
+      ],
+    });
   });
 
-  it("keeps the recorded live judge run", () => {
-    const text = readFileSync(join(root, "docs/demo/judge-live.txt"), "utf8");
-    expect(text).toContain("judge pass rate: 9/12 (75.0%)");
-    expect(text).toContain("live spend: 0.002965 USD");
-    expect(text).toContain("09-failing-tests pass");
-    expect(text).toContain("10-empty-plan fail");
-    expect(text).toContain("11-wide-touch fail");
-    expect(text).toContain("12-long-readme fail");
+  it("says the judge is pending until a judge cassette is recorded", async () => {
+    expect(existsSync(join(root, JUDGE_CASSETTE))).toBe(false);
+    const report = await runJudge(root, { record: false, env: {} });
+    const text = formatJudgeReport(report);
+    expect(text).toContain("judge: claude-sonnet-5-5 at medium effort, one Message Batches request per case");
+    expect(text).toContain("always-pass agreement: 61/72 (84.7%)");
+    expect(text).toContain("baseline: 90.0%");
+    expect(text).toContain("judge cassette: not recorded.");
+    expect(exitCode(report)).toBe(0);
+    await expect(runJudge(root, { record: true, env: {} })).rejects.toThrow("needs ANTHROPIC_API_KEY");
+  });
+
+  it("records one batch, replays it offline, and refuses a stale cassette", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "thin-pr-judge-"));
+    try {
+      const cassettePath = join(dir, "judge-cassette.jsonl");
+      const subjects = [subject("01-good"), subject("02-bad")];
+      const labels = new Map<string, Label>([
+        ["01-good", label({})],
+        ["02-bad", label({ review_quality: "fail" })],
+      ]);
+      const polls: string[] = [];
+
+      const recorded = await recordJudge(subjects, {
+        cassettePath,
+        env: { ANTHROPIC_API_KEY: "test-key" },
+        pollMs: 0,
+        fetch: scriptedBatchUpstream({ "01-good": verdict({}), "02-bad": verdict({ minimal_diff: "fail" }) }),
+        log: (line) => polls.push(line),
+      });
+      expect(polls).toEqual(["batch msgbatch_scripted in_progress, 2 processing"]);
+      const lines = readFileSync(cassettePath, "utf8").trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(lines.map((line) => [line.source, line.caseId])).toEqual([
+        ["live", "01-good"],
+        ["live", "02-bad"],
+      ]);
+
+      const replayed = replayJudge(subjects, cassettePath);
+      expect(replayed).toEqual(recorded);
+
+      const report = judgeReport(replayed, labels, 0.9);
+      if (!report.recorded) throw new Error("expected a recorded report");
+      // 02-bad: the judge failed minimal_diff where the label passes, and passed review_quality where the label fails.
+      expect(report.agreement).toMatchObject({ matched: 6, total: 8, failsCaught: { matched: 0, total: 1 } });
+      expect(report.agreement.byCriterion.review_quality).toEqual({ matched: 1, total: 2 });
+      expect(report.meetsBaseline).toBe(false);
+      expect(exitCode(report)).toBe(1);
+      const text = formatJudgeReport(report);
+      expect(text).toContain("judge agreement: 6/8 (75.0%)");
+      expect(text).toContain("always-pass agreement: 7/8 (87.5%)");
+      expect(text).toContain("fail labels caught: 0/1");
+      expect(text).toContain("  minimal_diff: fail MISMATCH (label pass). Graded minimal_diff.");
+      expect(text).toMatch(/judge cost: 0\.\d{6} USD at the batch rate/);
+
+      const changed = [subjects[0] ?? subject("01-good"), { ...subject("02-bad"), patch: "+  return 0;" }];
+      expect(() => replayJudge(changed, cassettePath)).toThrow(`${cassettePath} is stale for 02-bad`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("counts a case the judge could not grade as agreeing on nothing", () => {
+    const counted = agreement([
+      { caseId: "01", label: label({}), result: { outcome: "graded", verdict: verdict({}), costUsd: 0 } },
+      { caseId: "02", label: label({ plan_relevance: "fail" }), result: { outcome: "error", error: "the request expired", costUsd: 0 } },
+    ]);
+    expect(counted).toMatchObject({ matched: 4, total: 8, failsCaught: { matched: 0, total: 1 } });
   });
 
   it("keeps the judge on the CI workflow", () => {
@@ -49,3 +116,32 @@ describe("judge eval", () => {
     expect(workflow).toContain("run: pnpm eval:judge");
   });
 });
+
+type Grades = Partial<Record<(typeof JUDGE_CRITERIA)[number], "pass" | "fail">>;
+
+function label(grades: Grades): Label {
+  return { plan_relevance: "pass", minimal_diff: "pass", test_adequacy: "pass", review_quality: "pass", note: "Read by hand.", ...grades };
+}
+
+function verdict(grades: Grades): JudgeVerdict {
+  const grade = (criterion: (typeof JUDGE_CRITERIA)[number]) => ({ verdict: grades[criterion] ?? "pass", reason: `Graded ${criterion}.` });
+  return {
+    plan_relevance: grade("plan_relevance"),
+    minimal_diff: grade("minimal_diff"),
+    test_adequacy: grade("test_adequacy"),
+    review_quality: grade("review_quality"),
+  };
+}
+
+function subject(caseId: string): JudgeSubject {
+  return {
+    caseId,
+    issue: "Clamp decrement at zero\n\ndecrement in src/counter.ts should not return a negative count.",
+    status: "opened",
+    error: null,
+    plan: { summary: "Clamp decrement.", steps: ["Change decrement in src/counter.ts"] },
+    patch: "-  return value - 1;\n+  return Math.max(0, value - 1);",
+    checks: [{ name: "test", command: "vitest run", exitCode: 0, durationMs: 0, logTail: "" }],
+    review: { summary: "Fine.", verdict: "approve", notes: [] },
+  };
+}

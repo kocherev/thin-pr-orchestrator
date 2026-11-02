@@ -1,0 +1,7 @@
+{
+  "plan_relevance": "pass",
+  "minimal_diff": "fail",
+  "test_adequacy": "pass",
+  "review_quality": "fail",
+  "note": "Re-indenting is one reading of clean up, so the plan passes. The diff only re-indents two lines against the file style and changes no behavior. The review approved the churn."
+}

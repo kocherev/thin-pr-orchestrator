@@ -1,0 +1,7 @@
+{
+  "plan_relevance": "pass",
+  "minimal_diff": "pass",
+  "test_adequacy": "pass",
+  "review_quality": "pass",
+  "note": "The plan and the four added lines fit the issue. decrementBy goes below zero, and the review names exactly that bug and requests changes."
+}

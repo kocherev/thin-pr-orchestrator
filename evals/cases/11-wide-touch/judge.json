@@ -1,0 +1,7 @@
+{
+  "plan_relevance": "pass",
+  "minimal_diff": "pass",
+  "test_adequacy": "pass",
+  "review_quality": "pass",
+  "note": "The issue asks for a note in each helper file, so four one-line comments are in scope. The budget rule blocks the size, not the judge. The approval fits the request."
+}

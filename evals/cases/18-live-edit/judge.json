@@ -1,0 +1,7 @@
+{
+  "plan_relevance": "pass",
+  "minimal_diff": "pass",
+  "test_adequacy": "fail",
+  "review_quality": "pass",
+  "note": "The final diff renders compact counts and picks the unit after rounding. The added test checks 1.2k and 3.4M but not the trailing .0 rule the issue names, such as 1000 as 1k. The approval fits a correct change with passing checks."
+}
