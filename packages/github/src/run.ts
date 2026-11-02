@@ -23,7 +23,7 @@ import { loadRepoConfig, openWorkspace, type GitWorkspace, type RepoConfig } fro
 import { createCheckRuns } from "./checks.js";
 import { readLabelEvent, type LabelEvent } from "./event.js";
 import { toRunRecord, type RunRecord, type TimedEvent } from "./record.js";
-import { formatDraftBody, formatRunReport } from "./report.js";
+import { formatRunReport } from "./report.js";
 import { createRunHandlers } from "./steps.js";
 import type { GitHubSurface } from "./surface.js";
 
@@ -109,13 +109,14 @@ export async function runIssue(deps: {
   let diff: Diff | null = null;
   let checks: readonly CheckResult[] = [];
   let gate: readonly GateRuleResult[] = [];
+  let outputs: Readonly<Partial<Record<StepId, Json>>> = {};
 
   const record = (status: RunRecord["status"], pullRequest: RunRecord["pullRequest"] = null): RunRecord =>
     toRunRecord({ runId: deps.runId, event, template: deps.template.id, status, timeline, gate, diff, checks, pullRequest });
 
   const stop = async (status: "blocked" | "failed", error: string): Promise<LabelRunResult> => {
     const result = record(status);
-    await github.comment({ ...target, issue: event.issue.number, body: formatRunReport(result, branch, error) });
+    await github.comment({ ...target, issue: event.issue.number, body: formatRunReport({ record: result, outputs, branch, error }) });
     return { status, record: result, error };
   };
 
@@ -137,6 +138,7 @@ export async function runIssue(deps: {
         await checkRuns.onEvent(runEvent, workspace.baseSha);
       },
     });
+    outputs = state.outputs;
     diff = await workspace.diff();
     checks = verifyOutput.safeParse(state.outputs.verify).data?.checks ?? [];
     if (state.status !== "completed") {
@@ -161,7 +163,8 @@ export async function runIssue(deps: {
     const message = `Apply thin-pr/#${event.issue.number}`;
     const head = await workspace.commitAndPush({ branch, message, token: deps.pushToken });
     await checkRuns.postRules(gate, head);
-    const pullRequest = await publishDraft(github, event, branch, state.outputs, formatRunReport(record("opened"), branch, null));
+    const body = formatRunReport({ record: record("opened"), outputs, branch, error: null });
+    const pullRequest = await publishDraft(github, event, branch, outputs, body);
     return { status: "opened", record: record("opened", pullRequest) };
   } catch (error) {
     let message = error instanceof Error && error.message.length > 0 ? error.message : "run failed";
@@ -180,10 +183,9 @@ async function publishDraft(
   event: LabelEvent,
   branch: string,
   outputs: Readonly<Partial<Record<StepId, Json>>>,
-  report: string,
+  body: string,
 ): Promise<{ readonly number: number; readonly url: string }> {
   const target = { owner: event.owner, repo: event.repo };
-  const body = formatDraftBody(outputs, report);
   const [open] = await github.listPullsForHead({ ...target, branch });
   if (open) {
     return github.updatePull({ ...target, number: open.number, body });

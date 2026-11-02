@@ -29,8 +29,8 @@ describe("thin-pr run", () => {
     });
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("## Run report");
-    expect(result.stdout).toContain("- gate/tests: success. PASS: Tests passed: vitest run");
+    expect(result.stdout).toMatch(/^\*\*Gate passed\.\*\* All 9 rules passed for #1\./);
+    expect(result.stdout).toContain("| `tests` | PASS | Tests passed: vitest run ");
     expect(result.stdout).toContain("Status: opened\nBranch: thin-pr/local-1\n");
     expect(git(repo.dir, "log", "--format=%s", "thin-pr/local-1")).toBe("Apply thin-pr/#1\nBase");
     expect(git(repo.dir, "diff", "--name-only", "main", "thin-pr/local-1")).toBe("src/counter.ts");

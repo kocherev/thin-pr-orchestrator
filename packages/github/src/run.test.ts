@@ -90,10 +90,18 @@ describe("issue label", () => {
     expect(memory.calls.at(-2)).toMatchObject({ op: "listPullsForHead", branch: "thin-pr/7" });
     const draft = memory.calls.at(-1);
     expect(draft).toMatchObject({ op: "openDraft", title: "Fix the stub", head: "thin-pr/7", base: "main", draft: true });
-    expect(draft?.body).toContain("## Plan\n\nPlan the stub change.\n\n- edit the stub");
-    expect(draft?.body).toContain("## Checks\n\n- typecheck: exit 0 in ");
-    expect(draft?.body).toContain("- verify: success. typecheck passed; test passed.");
-    expect(draft?.body).toContain("- gate/secrets: success. PASS: No added line looks like a secret.");
+    const body = String(draft?.body);
+    expect(body.split("\n")[0]).toBe("**Gate passed.** All 9 rules passed for #7.");
+    expect(gateRows(body)).toEqual(result.record.gate.map((rule) => `${rule.rule} PASS`));
+    expect(body).toMatch(/^Run: 0\.\d{6} USD, [\d,]+ input and [\d,]+ output tokens, .+ end to end\.$/m);
+    expect(body).toMatch(/^- `claude-opus-5-5`: 3 requests, /m);
+    expect(sections(body)).toEqual([
+      "Plan",
+      "Checks: typecheck exit 0, test exit 0",
+      "Review: approve",
+      "Run report: 5 step runs, 0 loops, 0 retries",
+    ]);
+    expect(body).toContain("Plan the stub change.\n\n- edit the stub");
     expect(memory.calls.some((call) => call.op === "comment")).toBe(false);
   });
 
@@ -117,8 +125,12 @@ describe("issue label", () => {
     expect(ruleChecks.every((call) => call.sha === repo.baseSha)).toBe(true);
     const comment = memory.calls.find((call) => call.op === "comment");
     expect(comment).toMatchObject({ issue: 7, owner: "example", repo: "sample-repo" });
-    expect(comment?.body).toContain("- Error: gate failed: review");
-    expect(comment?.body).toContain("- gate/review: failure. FAIL: Reviewer requested changes (1 note).");
+    const body = String(comment?.body);
+    expect(body.split("\n")[0]).toBe("**Gate failed.** 1 of 9 rules failed: `review`. Nothing was pushed.");
+    expect(gateRows(body)[0]).toBe("review FAIL");
+    expect(body).toContain("| `review` | **FAIL** | Reviewer requested changes (1 note). |");
+    expect(sections(body)).toContain("Review: changes_requested");
+    expect(sections(body)).toContain("Run report: 11 step runs, 2 loops, 0 retries");
   });
 
   it("loops verify back to implement on a failing test, then blocks on the tests rule", async () => {
@@ -145,6 +157,11 @@ describe("issue label", () => {
     expect(result.record.gate.find((rule) => rule.rule === "tests")?.reason).toBe(
       "Tests failed (exit 1): echo '1 failed'; exit 1",
     );
+    const body = String(memory.calls.find((call) => call.op === "comment")?.body);
+    expect(gateRows(body)[0]).toBe("tests FAIL");
+    expect(sections(body)).toContain("Checks: typecheck exit 0, test exit 1 (open)");
+    expect(body).toContain("`test` exited 1 in ");
+    expect(body).toContain("```text\n1 failed\n```");
   });
 
   it("runs install before the first step and fails the run with its log tail when the install fails", async () => {
@@ -160,7 +177,10 @@ describe("issue label", () => {
       return;
     }
     expect(result.record.steps).toEqual([]);
-    expect(memory.calls.find((call) => call.op === "comment")?.body).toContain("lockfile is out of date");
+    const body = String(memory.calls.find((call) => call.op === "comment")?.body);
+    expect(body.split("\n")[0]).toBe("**Run failed.** install failed (exit 3): echo 'lockfile is out of date'; exit 3");
+    expect(body).toContain("```text\nlockfile is out of date\n```");
+    expect(body).toContain("The gate did not run.");
     expect(git(repo.remote, "branch", "--list", "thin-pr/7")).toBe("");
   });
 
@@ -172,7 +192,7 @@ describe("issue label", () => {
     });
 
     expect(result).toMatchObject({ status: "blocked", error: "gate failed: diff" });
-    expect(memory.calls.find((call) => call.op === "comment")?.body).toContain("FAIL: Diff is empty.");
+    expect(memory.calls.find((call) => call.op === "comment")?.body).toContain("| `diff` | **FAIL** | Diff is empty. |");
   });
 
   it("comments the run report when a step fails", async () => {
@@ -194,8 +214,10 @@ describe("issue label", () => {
       ["plan", 2, "failed"],
     ]);
     const comment = memory.calls.find((call) => call.op === "comment");
-    expect(comment?.body).toContain("- Error: plan failed after 2 attempts");
-    expect(comment?.body).toContain("- plan: failure. planner output invalid at summary");
+    const body = String(comment?.body);
+    expect(body.split("\n")[0]).toMatch(/^\*\*Run failed\.\*\* plan failed after 2 attempts: /);
+    expect(sections(body)).toContain("Run report: 2 step runs, 0 loops, 1 retry");
+    expect(body).toMatch(/^\| plan \| 2 \| 0 \| failed \| .* \| planner output invalid at summary/m);
     expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
   });
 
@@ -277,7 +299,7 @@ describe("issue label", () => {
     expect(git(repo.remote, "rev-list", "--count", "main..thin-pr/7")).toBe("1");
     expect(second.calls.some((call) => call.op === "openDraft")).toBe(false);
     expect(second.calls.at(-1)).toMatchObject({ op: "updatePull", number: 11 });
-    expect(second.calls.at(-1)?.body).toContain("## Run report");
+    expect(second.calls.at(-1)?.body).toMatch(/^\*\*Gate passed\.\*\*/);
   });
 
   it("comments the setup error when the model cannot start", async () => {
@@ -295,7 +317,7 @@ describe("issue label", () => {
     });
 
     expect(result).toMatchObject({ status: "failed", error: "ANTHROPIC_API_KEY is missing" });
-    expect(memory.calls.find((call) => call.op === "comment")?.body).toContain("- Error: ANTHROPIC_API_KEY is missing");
+    expect(memory.calls.find((call) => call.op === "comment")?.body).toMatch(/^\*\*Run failed\.\*\* ANTHROPIC_API_KEY is missing\n/);
     expect(memory.calls.some((call) => call.op === "startCheck")).toBe(false);
   });
 
@@ -353,6 +375,18 @@ describe("issue label", () => {
     expect(surface).toContain("draft: true");
   });
 });
+
+/** Each gate table row as "rule VERDICT", in the order the body lists them. */
+function gateRows(body: string): string[] {
+  return [...body.matchAll(/^\| `(\w+)` \| \**(PASS|FAIL)\** \|/gm)].map((match) => `${match[1]} ${match[2]}`);
+}
+
+/** The summary of each collapsible section, marked when it opens by default. */
+function sections(body: string): string[] {
+  return [...body.matchAll(/^<details( open)?>\n<summary>(.*)<\/summary>$/gm)].map(
+    (match) => `${match[2]}${match[1] ? " (open)" : ""}`,
+  );
+}
 
 function readFixture(): Record<string, unknown> {
   return JSON.parse(readFileSync(join(root, "fixtures", "sample-issue-labeled.json"), "utf8")) as Record<string, unknown>;
