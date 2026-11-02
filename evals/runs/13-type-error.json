@@ -1,0 +1,255 @@
+{
+  "version": 1,
+  "runId": "eval-13-type-error",
+  "repo": "example/sample-repo",
+  "issue": {
+    "number": 13,
+    "title": "Add a percent formatter",
+    "url": "https://github.com/example/sample-repo/issues/13"
+  },
+  "template": "small-feature",
+  "status": "blocked",
+  "steps": [
+    {
+      "id": "plan",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:40:44.000Z",
+      "durationMs": 3225,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 324,
+          "outputTokens": 155,
+          "cacheReadTokens": 0,
+          "costUsd": 0.002198,
+          "durationMs": 3225
+        }
+      ],
+      "summary": "Add formatPercent next to formatCount."
+    },
+    {
+      "id": "implement",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:40:47.225Z",
+      "durationMs": 9615,
+      "usage": [
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 801,
+          "outputTokens": 143,
+          "cacheReadTokens": 0,
+          "costUsd": 0.006064,
+          "durationMs": 3045
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 876,
+          "outputTokens": 186,
+          "cacheReadTokens": 0,
+          "costUsd": 0.007224,
+          "durationMs": 3690
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 981,
+          "outputTokens": 132,
+          "cacheReadTokens": 0,
+          "costUsd": 0.006564,
+          "durationMs": 2880
+        }
+      ],
+      "summary": "Export formatPercent."
+    },
+    {
+      "id": "verify",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "looped",
+      "startedAt": "2026-11-02T16:40:56.840Z",
+      "durationMs": 0,
+      "usage": [],
+      "summary": "typecheck failed (exit 2): tsc --noEmit\nsrc/format.ts(6,9): error TS2322: Type 'number' is not assignable to type 'string'.\n"
+    },
+    {
+      "id": "implement",
+      "attempt": 1,
+      "loop": 1,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:40:56.840Z",
+      "durationMs": 2880,
+      "usage": [
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 842,
+          "outputTokens": 132,
+          "cacheReadTokens": 0,
+          "costUsd": 0.006008,
+          "durationMs": 2880
+        }
+      ],
+      "summary": "Export formatPercent."
+    },
+    {
+      "id": "verify",
+      "attempt": 1,
+      "loop": 1,
+      "outcome": "looped",
+      "startedAt": "2026-11-02T16:40:59.720Z",
+      "durationMs": 0,
+      "usage": [],
+      "summary": "typecheck failed (exit 2): tsc --noEmit\nsrc/format.ts(6,9): error TS2322: Type 'number' is not assignable to type 'string'.\n"
+    },
+    {
+      "id": "implement",
+      "attempt": 1,
+      "loop": 2,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:40:59.720Z",
+      "durationMs": 2880,
+      "usage": [
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 842,
+          "outputTokens": 132,
+          "cacheReadTokens": 0,
+          "costUsd": 0.006008,
+          "durationMs": 2880
+        }
+      ],
+      "summary": "Export formatPercent."
+    },
+    {
+      "id": "verify",
+      "attempt": 1,
+      "loop": 2,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:41:02.600Z",
+      "durationMs": 0,
+      "usage": [],
+      "summary": "typecheck failed (exit 2); test passed."
+    },
+    {
+      "id": "review",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:41:02.600Z",
+      "durationMs": 3105,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 558,
+          "outputTokens": 147,
+          "cacheReadTokens": 0,
+          "costUsd": 0.002586,
+          "durationMs": 3105
+        }
+      ],
+      "summary": "formatCount is unchanged."
+    },
+    {
+      "id": "write",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:41:05.705Z",
+      "durationMs": 3240,
+      "usage": [
+        {
+          "model": "claude-haiku-5-5",
+          "inputTokens": 343,
+          "outputTokens": 156,
+          "cacheReadTokens": 0,
+          "costUsd": 0.0001123,
+          "durationMs": 3240
+        }
+      ],
+      "summary": "pass"
+    }
+  ],
+  "gate": [
+    {
+      "rule": "plan",
+      "verdict": "PASS",
+      "reason": "Plan is present (1 step)."
+    },
+    {
+      "rule": "contracts",
+      "verdict": "PASS",
+      "reason": "Step outputs match their contracts."
+    },
+    {
+      "rule": "diff",
+      "verdict": "PASS",
+      "reason": "Diff is present (1 file, 5 lines)."
+    },
+    {
+      "rule": "budget",
+      "verdict": "PASS",
+      "reason": "Diff is within the budget (1 file, 5 lines; limit 2 files, 16 lines)."
+    },
+    {
+      "rule": "paths",
+      "verdict": "PASS",
+      "reason": "Every changed path is allowed."
+    },
+    {
+      "rule": "secrets",
+      "verdict": "PASS",
+      "reason": "No added line looks like a secret."
+    },
+    {
+      "rule": "typecheck",
+      "verdict": "FAIL",
+      "reason": "Typecheck failed (exit 2): tsc --noEmit"
+    },
+    {
+      "rule": "tests",
+      "verdict": "PASS",
+      "reason": "Tests passed: vitest run 2>&1"
+    },
+    {
+      "rule": "review",
+      "verdict": "PASS",
+      "reason": "Reviewer approved."
+    }
+  ],
+  "diff": {
+    "files": [
+      {
+        "path": "src/format.ts",
+        "added": 5,
+        "removed": 0
+      }
+    ],
+    "meaningful": true,
+    "patch": "diff --git a/src/format.ts b/src/format.ts\nindex c4cc2f1..d2687e2 100644\n--- a/src/format.ts\n+++ b/src/format.ts\n@@ -1,3 +1,8 @@\n export function formatCount(value: number): string {\n   return String(value);\n }\n+\n+export function formatPercent(value: number): string {\n+  const rounded: string = Math.round(value * 100);\n+  return `${rounded}%`;\n+}\n"
+  },
+  "checks": [
+    {
+      "name": "typecheck",
+      "command": "tsc --noEmit",
+      "exitCode": 2,
+      "durationMs": 0,
+      "logTail": "src/format.ts(6,9): error TS2322: Type 'number' is not assignable to type 'string'.\n"
+    },
+    {
+      "name": "test",
+      "command": "vitest run 2>&1",
+      "exitCode": 0,
+      "durationMs": 0,
+      "logTail": "\n RUN  v5.0.5 .\n\n\n Test Files  5 passed (5)\n      Tests  5 passed (5)\n\n"
+    }
+  ],
+  "pullRequest": null,
+  "totals": {
+    "costUsd": 0.0367643,
+    "durationMs": 24945,
+    "inputTokens": 5567,
+    "outputTokens": 1183
+  }
+}

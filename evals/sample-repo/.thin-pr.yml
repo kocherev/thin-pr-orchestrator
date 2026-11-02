@@ -1,3 +1,4 @@
 checks:
   typecheck: tsc --noEmit
-  test: vitest run
+  # vitest writes failures to stderr. One stream keeps the log in the order vitest wrote it.
+  test: vitest run 2>&1

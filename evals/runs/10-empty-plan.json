@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "runId": "eval-10-empty-plan",
+  "repo": "example/sample-repo",
+  "issue": {
+    "number": 10,
+    "title": "Rename the helpers",
+    "url": "https://github.com/example/sample-repo/issues/10"
+  },
+  "template": "small-feature",
+  "status": "failed",
+  "steps": [
+    {
+      "id": "plan",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "failed",
+      "startedAt": "2026-11-02T16:40:44.000Z",
+      "durationMs": 3000,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 313,
+          "outputTokens": 140,
+          "cacheReadTokens": 0,
+          "costUsd": 0.002026,
+          "durationMs": 3000
+        }
+      ],
+      "summary": "planner output invalid at steps: Too small: expected array to have >=1 items"
+    },
+    {
+      "id": "plan",
+      "attempt": 2,
+      "loop": 0,
+      "outcome": "failed",
+      "startedAt": "2026-11-02T16:40:47.000Z",
+      "durationMs": 3000,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 341,
+          "outputTokens": 140,
+          "cacheReadTokens": 0,
+          "costUsd": 0.002082,
+          "durationMs": 3000
+        }
+      ],
+      "summary": "planner output invalid at steps: Too small: expected array to have >=1 items"
+    }
+  ],
+  "gate": [],
+  "diff": {
+    "files": [],
+    "meaningful": false,
+    "patch": ""
+  },
+  "checks": [],
+  "pullRequest": null,
+  "totals": {
+    "costUsd": 0.0041080000000000005,
+    "durationMs": 6000,
+    "inputTokens": 654,
+    "outputTokens": 280
+  }
+}

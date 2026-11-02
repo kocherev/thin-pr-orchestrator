@@ -1,0 +1,200 @@
+{
+  "version": 1,
+  "runId": "eval-08-reject-empty-notes",
+  "repo": "example/sample-repo",
+  "issue": {
+    "number": 8,
+    "title": "Reject empty note text",
+    "url": "https://github.com/example/sample-repo/issues/8"
+  },
+  "template": "small-feature",
+  "status": "opened",
+  "steps": [
+    {
+      "id": "plan",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:40:44.000Z",
+      "durationMs": 3195,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 318,
+          "outputTokens": 153,
+          "cacheReadTokens": 0,
+          "costUsd": 0.002166,
+          "durationMs": 3195
+        }
+      ],
+      "summary": "Return no lines for blank note text."
+    },
+    {
+      "id": "implement",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:40:47.195Z",
+      "durationMs": 9720,
+      "usage": [
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 794,
+          "outputTokens": 143,
+          "cacheReadTokens": 0,
+          "costUsd": 0.006036,
+          "durationMs": 3045
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 869,
+          "outputTokens": 190,
+          "cacheReadTokens": 0,
+          "costUsd": 0.007276,
+          "durationMs": 3750
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 978,
+          "outputTokens": 135,
+          "cacheReadTokens": 0,
+          "costUsd": 0.006612,
+          "durationMs": 2925
+        }
+      ],
+      "summary": "Return no lines for blank text."
+    },
+    {
+      "id": "verify",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:40:56.915Z",
+      "durationMs": 0,
+      "usage": [],
+      "summary": "typecheck passed; test passed."
+    },
+    {
+      "id": "review",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:40:56.915Z",
+      "durationMs": 3135,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 508,
+          "outputTokens": 149,
+          "cacheReadTokens": 0,
+          "costUsd": 0.002506,
+          "durationMs": 3135
+        }
+      ],
+      "summary": "The guard runs before the split."
+    },
+    {
+      "id": "write",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:41:00.050Z",
+      "durationMs": 3240,
+      "usage": [
+        {
+          "model": "claude-haiku-5-5",
+          "inputTokens": 341,
+          "outputTokens": 156,
+          "cacheReadTokens": 0,
+          "costUsd": 0.0001121,
+          "durationMs": 3240
+        }
+      ],
+      "summary": "pass"
+    }
+  ],
+  "gate": [
+    {
+      "rule": "plan",
+      "verdict": "PASS",
+      "reason": "Plan is present (1 step)."
+    },
+    {
+      "rule": "contracts",
+      "verdict": "PASS",
+      "reason": "Step outputs match their contracts."
+    },
+    {
+      "rule": "diff",
+      "verdict": "PASS",
+      "reason": "Diff is present (1 file, 3 lines)."
+    },
+    {
+      "rule": "budget",
+      "verdict": "PASS",
+      "reason": "Diff is within the budget (1 file, 3 lines; limit 2 files, 16 lines)."
+    },
+    {
+      "rule": "paths",
+      "verdict": "PASS",
+      "reason": "Every changed path is allowed."
+    },
+    {
+      "rule": "secrets",
+      "verdict": "PASS",
+      "reason": "No added line looks like a secret."
+    },
+    {
+      "rule": "typecheck",
+      "verdict": "PASS",
+      "reason": "Typecheck passed: tsc --noEmit"
+    },
+    {
+      "rule": "tests",
+      "verdict": "PASS",
+      "reason": "Tests passed: vitest run 2>&1"
+    },
+    {
+      "rule": "review",
+      "verdict": "PASS",
+      "reason": "Reviewer approved."
+    }
+  ],
+  "diff": {
+    "files": [
+      {
+        "path": "src/notes.ts",
+        "added": 3,
+        "removed": 0
+      }
+    ],
+    "meaningful": true,
+    "patch": "diff --git a/src/notes.ts b/src/notes.ts\nindex db28111..0a821e5 100644\n--- a/src/notes.ts\n+++ b/src/notes.ts\n@@ -1,3 +1,6 @@\n export function splitNotes(text: string): string[] {\n+  if (text.trim().length === 0) {\n+    return [];\n+  }\n   return text.split(\"\\n\");\n }\n"
+  },
+  "checks": [
+    {
+      "name": "typecheck",
+      "command": "tsc --noEmit",
+      "exitCode": 0,
+      "durationMs": 0,
+      "logTail": ""
+    },
+    {
+      "name": "test",
+      "command": "vitest run 2>&1",
+      "exitCode": 0,
+      "durationMs": 0,
+      "logTail": "\n RUN  v5.0.5 .\n\n\n Test Files  5 passed (5)\n      Tests  5 passed (5)\n\n"
+    }
+  ],
+  "pullRequest": {
+    "number": 1,
+    "url": "https://example.test/example/sample-repo/pull/1"
+  },
+  "totals": {
+    "costUsd": 0.0247081,
+    "durationMs": 19290,
+    "inputTokens": 3808,
+    "outputTokens": 926
+  }
+}

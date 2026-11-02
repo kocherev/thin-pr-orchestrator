@@ -20,7 +20,13 @@ export {
   type JudgeSubject,
   type JudgeVerdict,
 } from "./judge.js";
-export { clientOptionsFromEnv, createAnthropicClient, type AnthropicClientOptions, type ModelSession } from "./client.js";
+export {
+  clientOptionsFromEnv,
+  createAnthropicClient,
+  spendLimitFrom,
+  type AnthropicClientOptions,
+  type ModelSession,
+} from "./client.js";
 export { runImplementer, TurnLimitError } from "./implementer.js";
 export { costOf, type PricedModel } from "./pricing.js";
 export { scriptedUpstream, type Script, type ScriptedTurn } from "./scripted.js";

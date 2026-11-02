@@ -1,0 +1,266 @@
+{
+  "version": 1,
+  "runId": "eval-18-live-edit",
+  "repo": "example/sample-repo",
+  "issue": {
+    "number": 18,
+    "title": "Show large counts in compact form",
+    "url": "https://github.com/example/sample-repo/issues/18"
+  },
+  "template": "small-feature",
+  "status": "opened",
+  "steps": [
+    {
+      "id": "plan",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T17:15:15.040Z",
+      "durationMs": 2900,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 345,
+          "outputTokens": 189,
+          "cacheReadTokens": 0,
+          "costUsd": 0.00258,
+          "durationMs": 2900
+        }
+      ],
+      "summary": "Render counts of 1000 or more as k and M in formatCount."
+    },
+    {
+      "id": "implement",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T17:15:17.940Z",
+      "durationMs": 12970,
+      "usage": [
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 856,
+          "outputTokens": 169,
+          "cacheReadTokens": 0,
+          "costUsd": 0.006804,
+          "durationMs": 3037
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1020,
+          "outputTokens": 302,
+          "cacheReadTokens": 0,
+          "costUsd": 0.01012,
+          "durationMs": 3174
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1268,
+          "outputTokens": 141,
+          "cacheReadTokens": 0,
+          "costUsd": 0.007892,
+          "durationMs": 3311
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1395,
+          "outputTokens": 153,
+          "cacheReadTokens": 0,
+          "costUsd": 0.00864,
+          "durationMs": 3448
+        }
+      ],
+      "summary": "formatCount renders counts of 1000 or more as k and M with one decimal, and a test covers 1.2k and 3.4M."
+    },
+    {
+      "id": "verify",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "looped",
+      "startedAt": "2026-11-02T17:15:30.910Z",
+      "durationMs": 0,
+      "usage": [],
+      "summary": "test failed (exit 1): vitest run 2>&1\n\n RUN  v5.0.5 .\n\n ❯ test/hidden/format.test.ts (2 tests | 1 failed)\n   × moves to the next unit when rounding reaches it\n\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  test/hidden/format.test.ts > moves to the next unit when rounding reaches it\nAssertionError: expected '1000k' to be '1M' // Object.is equality\n\nExpected: \"1M\"\nReceived: \"1000k\"\n\n ❯ test/hidden/format.test.ts:12:32\n     10|\n     11| it(\"moves to the next unit when rounding reaches it\", () => {\n     12|   expect(formatCount(999_999)).toBe(\"1M\");\n       |                                ^\n     13| });\n     14|\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n\n Test Files  1 failed | 4 passed (5)\n      Tests  1 failed | 6 passed (7)\n\n"
+    },
+    {
+      "id": "implement",
+      "attempt": 1,
+      "loop": 1,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T17:15:30.910Z",
+      "durationMs": 12762,
+      "usage": [
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1099,
+          "outputTokens": 144,
+          "cacheReadTokens": 0,
+          "costUsd": 0.007276,
+          "durationMs": 2985
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1223,
+          "outputTokens": 270,
+          "cacheReadTokens": 0,
+          "costUsd": 0.010292,
+          "durationMs": 3122
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1414,
+          "outputTokens": 142,
+          "cacheReadTokens": 0,
+          "costUsd": 0.008496,
+          "durationMs": 3259
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1537,
+          "outputTokens": 149,
+          "cacheReadTokens": 0,
+          "costUsd": 0.009128,
+          "durationMs": 3396
+        }
+      ],
+      "summary": "formatCount now picks the unit after rounding, so 999999 renders as 1M instead of 1000k."
+    },
+    {
+      "id": "verify",
+      "attempt": 1,
+      "loop": 1,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T17:15:43.672Z",
+      "durationMs": 0,
+      "usage": [],
+      "summary": "typecheck passed; test passed."
+    },
+    {
+      "id": "review",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T17:15:43.672Z",
+      "durationMs": 2933,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 738,
+          "outputTokens": 158,
+          "cacheReadTokens": 0,
+          "costUsd": 0.003056,
+          "durationMs": 2933
+        }
+      ],
+      "summary": "formatCount renders compact counts and picks the unit after rounding."
+    },
+    {
+      "id": "write",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T17:15:46.605Z",
+      "durationMs": 3070,
+      "usage": [
+        {
+          "model": "claude-haiku-5-5",
+          "inputTokens": 401,
+          "outputTokens": 200,
+          "cacheReadTokens": 0,
+          "costUsd": 0.0001401,
+          "durationMs": 3070
+        }
+      ],
+      "summary": "Show large counts in compact form."
+    }
+  ],
+  "gate": [
+    {
+      "rule": "plan",
+      "verdict": "PASS",
+      "reason": "Plan is present (2 steps)."
+    },
+    {
+      "rule": "contracts",
+      "verdict": "PASS",
+      "reason": "Step outputs match their contracts."
+    },
+    {
+      "rule": "diff",
+      "verdict": "PASS",
+      "reason": "Diff is present (2 files, 11 lines)."
+    },
+    {
+      "rule": "budget",
+      "verdict": "PASS",
+      "reason": "Diff is within the budget (2 files, 11 lines; limit 2 files, 16 lines)."
+    },
+    {
+      "rule": "paths",
+      "verdict": "PASS",
+      "reason": "Every changed path is allowed."
+    },
+    {
+      "rule": "secrets",
+      "verdict": "PASS",
+      "reason": "No added line looks like a secret."
+    },
+    {
+      "rule": "typecheck",
+      "verdict": "PASS",
+      "reason": "Typecheck passed: tsc --noEmit"
+    },
+    {
+      "rule": "tests",
+      "verdict": "PASS",
+      "reason": "Tests passed: vitest run 2>&1"
+    },
+    {
+      "rule": "review",
+      "verdict": "PASS",
+      "reason": "Reviewer approved."
+    }
+  ],
+  "diff": {
+    "files": [
+      {
+        "path": "src/format.ts",
+        "added": 6,
+        "removed": 0
+      },
+      {
+        "path": "test/format.test.ts",
+        "added": 5,
+        "removed": 0
+      }
+    ],
+    "meaningful": true,
+    "patch": "diff --git a/src/format.ts b/src/format.ts\nindex c4cc2f1..3147372 100644\n--- a/src/format.ts\n+++ b/src/format.ts\n@@ -1,3 +1,9 @@\n export function formatCount(value: number): string {\n+  for (const [size, unit] of [[1_000_000, \"M\"], [1000, \"k\"]] as const) {\n+    const scaled = Number((value / size).toFixed(1));\n+    if (Math.abs(value) >= 1000 && Math.abs(scaled) >= 1) {\n+      return `${scaled}${unit}`;\n+    }\n+  }\n   return String(value);\n }\ndiff --git a/test/format.test.ts b/test/format.test.ts\nindex fadddd1..60f7fa5 100644\n--- a/test/format.test.ts\n+++ b/test/format.test.ts\n@@ -4,3 +4,8 @@ import { formatCount } from \"../src/format.js\";\n it(\"renders a small count as digits\", () => {\n   expect(formatCount(42)).toBe(\"42\");\n });\n+\n+it(\"renders large counts in compact form\", () => {\n+  expect(formatCount(1240)).toBe(\"1.2k\");\n+  expect(formatCount(3_400_000)).toBe(\"3.4M\");\n+});\n"
+  },
+  "checks": [
+    {
+      "name": "typecheck",
+      "command": "tsc --noEmit",
+      "exitCode": 0,
+      "durationMs": 0,
+      "logTail": ""
+    },
+    {
+      "name": "test",
+      "command": "vitest run 2>&1",
+      "exitCode": 0,
+      "durationMs": 0,
+      "logTail": "\n RUN  v5.0.5 .\n\n\n Test Files  5 passed (5)\n      Tests  7 passed (7)\n\n"
+    }
+  ],
+  "pullRequest": {
+    "number": 1,
+    "url": "https://example.test/example/sample-repo/pull/1"
+  },
+  "totals": {
+    "costUsd": 0.0744241,
+    "durationMs": 34635,
+    "inputTokens": 11296,
+    "outputTokens": 2017
+  }
+}
