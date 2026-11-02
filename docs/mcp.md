@@ -31,7 +31,7 @@ The sample package checks with bare `tsc` and `vitest`. Put this repo's `node_mo
 
 ## Connect an MCP client
 
-`packages/mcp` is a stdio MCP server built on `@modelcontextprotocol/sdk`. Its entry is `packages/mcp/bin/thin-pr-mcp.js`. A client that reads a JSON server list takes the entry below. Replace the paths with your own.
+`packages/mcp` is a stdio MCP server built on `@modelcontextprotocol/server` 2.3.1, the v2 line of the TypeScript SDK. Its entry is `packages/mcp/bin/thin-pr-mcp.js`. A client that reads a JSON server list takes the entry below. Replace the paths with your own.
 
 ```json
 {
@@ -65,4 +65,4 @@ The sample package checks with bare `tsc` and `vitest`. Put this repo's `node_mo
 
 A tool that fails answers with an MCP tool error, `isError: true` and the message as text. Examples are an unknown `runId`, an unknown `caseId`, a relative `repo`, or `THIN_PR_RUNS_DIR` unset. The server keeps running.
 
-`packages/mcp/src/server.test.ts` connects a client over the SDK's in-memory transport. It lists the tools, reads a temp runs directory, checks the tool errors, and replays `09-failing-hidden-test`. `packages/github/src/cli.test.ts` runs the command line on case 01 against a scratch copy of the sample repo.
+`packages/mcp/src/server.test.ts` connects a `@modelcontextprotocol/client` over the `InMemoryTransport` from `@modelcontextprotocol/server`. It lists the tools, reads a temp runs directory, checks the tool errors, and replays `09-failing-hidden-test`. `packages/github/src/cli.test.ts` runs the command line on case 01 against a scratch copy of the sample repo.

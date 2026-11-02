@@ -1,6 +1,6 @@
 import { delimiter } from "node:path";
 import { fileURLToPath } from "node:url";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { createServer } from "./server.js";
 
 // The eval cases check with bare tsc and vitest, so replay_case needs this repo's binaries, as pnpm eval does.
