@@ -154,10 +154,13 @@ export async function runCases(
 ): Promise<CaseResult[]> {
   const sample = readTree(join(workspace, "evals", "sample-repo"));
   const logs = mkdtempSync(join(tmpdir(), "thin-pr-eval-"));
-  const env = { PATH: process.env.PATH, NO_COLOR: process.env.NO_COLOR };
-  process.env.PATH = [join(workspace, "node_modules", ".bin"), env.PATH].join(delimiter);
-  // vitest colors its output on CI. Plain logs read the same on every machine.
-  process.env.NO_COLOR = "1";
+  const restore = pinEnv({
+    PATH: [join(workspace, "node_modules", ".bin"), process.env.PATH].join(delimiter),
+    // The checks inherit this environment. CI runners and local shells differ in these, and vitest reads them.
+    CI: "true",
+    NO_COLOR: "1",
+    FORCE_COLOR: undefined,
+  });
   try {
     const cases: CaseResult[] = [];
     let next = 0;
@@ -174,14 +177,25 @@ export async function runCases(
     await Promise.all(Array.from({ length: parallel }, worker));
     return cases;
   } finally {
-    process.env.PATH = env.PATH;
-    if (env.NO_COLOR === undefined) {
-      delete process.env.NO_COLOR;
-    } else {
-      process.env.NO_COLOR = env.NO_COLOR;
-    }
+    restore();
     rmSync(logs, { recursive: true, force: true });
   }
+}
+
+/** Sets or unsets each variable in `process.env`, and returns a function that puts the old values back. */
+function pinEnv(values: Readonly<Record<string, string | undefined>>): () => void {
+  const saved = Object.keys(values).map((name) => [name, process.env[name]] as const);
+  const apply = (entries: readonly (readonly [string, string | undefined])[]) => {
+    for (const [name, value] of entries) {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    }
+  };
+  apply(Object.entries(values));
+  return () => apply(saved);
 }
 
 export function scoreRuns(

@@ -1,4 +1,6 @@
 checks:
   typecheck: tsc --noEmit
-  # vitest writes failures to stderr. One stream keeps the log in the order vitest wrote it.
-  test: vitest run 2>&1
+  # vitest picks its reporter from the environment, so name one: minimal prints each failing test in full and the
+  # totals. Files run one at a time. An explicit --isolate keeps the default isolation and drops a timing hint.
+  # stderr joins stdout, so the log keeps the order vitest wrote it.
+  test: vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1

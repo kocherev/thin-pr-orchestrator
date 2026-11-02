@@ -4,7 +4,7 @@ The evals run the real orchestrator over 18 labeled issues against a small TypeS
 
 ## Layout
 
-`evals/sample-repo` is the tree before each change. It has four helper files under `src/`, visible vitest tests under `test/`, and a `.thin-pr.yml` whose checks are `tsc --noEmit` and `vitest run 2>&1`. The test command merges stderr into stdout, so the check log keeps the order vitest wrote it.
+`evals/sample-repo` is the tree before each change. It has four helper files under `src/`, visible vitest tests under `test/`, and a `.thin-pr.yml` whose checks are `tsc --noEmit` and `vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1`. vitest picks its default reporter from the environment, so the command names one. The minimal reporter prints each failing test in full and the totals. Files run one at a time. The explicit `--isolate` keeps the default isolation and turns off a hint that vitest prints only when worker startup is slow. The command merges stderr into stdout, so the log keeps the order vitest wrote it.
 
 Each directory under `evals/cases` is one labeled issue:
 
@@ -78,7 +78,7 @@ blocked bad: 9/9
 
 `pnpm eval -- --write` writes `evals/report.json` and one RunRecord per case under `evals/runs/`. The console reads them. The report has `version`, `generatedAt`, and one entry per case with `caseId`, `title`, `expected`, `actual`, `failedRules`, `costUsd`, `durationMs`, and `models`.
 
-A fresh run reproduces both files byte for byte. `generatedAt` is the newest cassette's first `recordedAt`. Each step's duration is the sum of its recorded model calls, and the steps start back to back from the cassette's first `recordedAt`. Check durations vary by machine, so they are 0. Check logs drop the scratch path and the vitest timings.
+A fresh run reproduces both files byte for byte. `generatedAt` is the newest cassette's first `recordedAt`. Each step's duration is the sum of its recorded model calls, and the steps start back to back from the cassette's first `recordedAt`. The eval sets `CI=true` and `NO_COLOR=1` and unsets `FORCE_COLOR` for the checks, so a laptop and a CI runner give vitest the same environment. The writer then normalizes four things and nothing else. Check durations are 0. The scratch checkout path becomes `.`. The vitest `Start at` and `Duration` lines are dropped. A trailing duration such as ` 7ms` is cut from each log line.
 
 `pnpm eval` without `--write` compares the committed files with a fresh run. When they differ, it names the first differing line of each file and tells you to run `pnpm eval -- --write`. CI runs `pnpm eval`, so a stale report fails CI.
 

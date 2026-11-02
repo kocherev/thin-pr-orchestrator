@@ -152,7 +152,7 @@
     {
       "rule": "tests",
       "verdict": "PASS",
-      "reason": "Tests passed: vitest run 2>&1"
+      "reason": "Tests passed: vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1"
     },
     {
       "rule": "review",
@@ -181,7 +181,7 @@
     },
     {
       "name": "test",
-      "command": "vitest run 2>&1",
+      "command": "vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1",
       "exitCode": 0,
       "durationMs": 0,
       "logTail": "\n RUN  v5.0.5 .\n\n\n Test Files  4 passed (4)\n      Tests  4 passed (4)\n\n"

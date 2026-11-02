@@ -173,7 +173,6 @@ describe("run trace", () => {
         ...process.env,
         THIN_PR_TRACE_PATH: path,
         THIN_PR_MODEL: "replay",
-        THIN_PR_JUDGE: "replay",
         OTEL_EXPORTER_OTLP_ENDPOINT: "",
         OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "",
       },

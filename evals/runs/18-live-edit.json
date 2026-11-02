@@ -80,7 +80,7 @@
       "startedAt": "2026-11-02T17:15:30.910Z",
       "durationMs": 0,
       "usage": [],
-      "summary": "test failed (exit 1): vitest run 2>&1\n\n RUN  v5.0.5 .\n\n ❯ test/hidden/format.test.ts (2 tests | 1 failed)\n   × moves to the next unit when rounding reaches it\n\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  test/hidden/format.test.ts > moves to the next unit when rounding reaches it\nAssertionError: expected '1000k' to be '1M' // Object.is equality\n\nExpected: \"1M\"\nReceived: \"1000k\"\n\n ❯ test/hidden/format.test.ts:12:32\n     10|\n     11| it(\"moves to the next unit when rounding reaches it\", () => {\n     12|   expect(formatCount(999_999)).toBe(\"1M\");\n       |                                ^\n     13| });\n     14|\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n\n Test Files  1 failed | 4 passed (5)\n      Tests  1 failed | 6 passed (7)\n\n"
+      "summary": "test failed (exit 1): vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1\n\n RUN  v5.0.5 .\n\n ❯ test/hidden/format.test.ts (2 tests | 1 failed)\n   × moves to the next unit when rounding reaches it\n\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  test/hidden/format.test.ts > moves to the next unit when rounding reaches it\nAssertionError: expected '1000k' to be '1M' // Object.is equality\n\nExpected: \"1M\"\nReceived: \"1000k\"\n\n ❯ test/hidden/format.test.ts:12:32\n     10|\n     11| it(\"moves to the next unit when rounding reaches it\", () => {\n     12|   expect(formatCount(999_999)).toBe(\"1M\");\n       |                                ^\n     13| });\n     14|\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n\n Test Files  1 failed | 4 passed (5)\n      Tests  1 failed | 6 passed (7)\n\n"
     },
     {
       "id": "implement",
@@ -213,7 +213,7 @@
     {
       "rule": "tests",
       "verdict": "PASS",
-      "reason": "Tests passed: vitest run 2>&1"
+      "reason": "Tests passed: vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1"
     },
     {
       "rule": "review",
@@ -247,7 +247,7 @@
     },
     {
       "name": "test",
-      "command": "vitest run 2>&1",
+      "command": "vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1",
       "exitCode": 0,
       "durationMs": 0,
       "logTail": "\n RUN  v5.0.5 .\n\n\n Test Files  5 passed (5)\n      Tests  7 passed (7)\n\n"
