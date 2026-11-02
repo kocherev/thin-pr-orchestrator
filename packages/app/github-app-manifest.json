@@ -1,0 +1,19 @@
+{
+  "name": "thin-pr",
+  "url": "https://github.com/kocherev/thin-pr-orchestrator",
+  "redirect_url": "https://github.com/kocherev/thin-pr-orchestrator",
+  "description": "Turns an issue labeled thin-pr into a draft pull request.",
+  "public": false,
+  "hook_attributes": {
+    "url": "https://example.com/replace-after-deploy",
+    "active": false
+  },
+  "default_permissions": {
+    "checks": "write",
+    "contents": "write",
+    "issues": "write",
+    "metadata": "read",
+    "pull_requests": "write"
+  },
+  "default_events": ["issues"]
+}
