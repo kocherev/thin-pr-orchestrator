@@ -148,15 +148,15 @@ Plan the stub change.
 
 ## Traces
 
-`pnpm trace` replays `fixtures/sample-issue-labeled.json` and `fixtures/gate-pass.jsonl` with run id `run-7`. That is the same pair as the draft example above. `packages/core` opens a span for the run and a span for each template step through `@opentelemetry/api`. `packages/github` starts `@opentelemetry/sdk-node` and posts OTLP JSON to a receiver on `127.0.0.1`. The receiver writes one JSON document.
+`pnpm trace` replays `fixtures/sample-issue-labeled.json` and `fixtures/gate-pass.jsonl` with run id `run-7`. That is the same pair as the draft example above. `packages/core` opens a span for the run and a span for each template step through `@opentelemetry/api`. The Anthropic SDK opens an `anthropic.messages.create` span for each model request under its step, with the GenAI attributes for the model, the effort, and the tokens. Each request span also carries `thin_pr.specialist` and `thin_pr.cost_usd`. Step and run spans carry the totals.
 
-Set `THIN_PR_TRACE_PATH` to choose the file. With that variable empty, `pnpm trace` writes the JSON to stdout.
+With `OTEL_EXPORTER_OTLP_ENDPOINT` set, `pnpm trace` sends the spans to that OTLP backend. Otherwise it writes one OTLP JSON document to `THIN_PR_TRACE_PATH`, or to stdout when that variable is empty.
 
-`docs/demo/trace.json` is one local replay. The span names are `thin-pr.plan`, `thin-pr.implement`, `thin-pr.verify`, `thin-pr.review`, `thin-pr.write`, and `thin-pr.run`. The step spans are children of `thin-pr.run`. The resource attribute `service.name` is `thin-pr-orchestrator`. Each span status code is 1, which is OK. Each step span carries `thin_pr.step` and `thin_pr.loop`.
+`docs/demo/trace.json` is one local replay with 15 spans in one trace. `docs/telemetry.md` has the span tree, the attribute list, the Jaeger, Honeycomb, and Grafana Cloud setup, and what the spans leave out. No span carries a prompt, the issue text, a model reply, or file contents.
 
 `@opentelemetry/sdk-node` 0.300.0 requires Node.js 22.15 or later. Lint, typecheck, test, and eval still run on Node.js 22.13 or later.
 
-The labeled-issue workflow sets `THIN_PR_TRACE_PATH` to `artifacts/trace.json` and uploads the artifact `thin-pr-trace`. CI does the same after `pnpm trace`.
+The labeled-issue workflow sets `THIN_PR_TRACE_PATH` to `artifacts/trace.json` and uploads the artifact `thin-pr-trace`. CI does the same after `pnpm trace`. When the repository variable `OTEL_EXPORTER_OTLP_ENDPOINT` is set, the labeled-issue workflow sends the trace there instead.
 
 ## Judge
 

@@ -66,7 +66,7 @@ CI runs `pnpm eval` after the tests. Lowering `evals/baseline.json` to make a re
 
 ## Traces and the judge
 
-`runWorkflow` opens a span for the run and one for each pass over a step with `@opentelemetry/api`. A process that never starts the SDK records nothing. `packages/github` starts the SDK for `pnpm trace` and for the labeled-issue Action. The exported document is OTLP JSON. The sample is `docs/demo/trace.json`.
+`runWorkflow` opens a span for the run and one for each pass over a step with `@opentelemetry/api`. A process that never starts the SDK records nothing. `packages/github` starts the SDK for `pnpm trace` and for the labeled-issue Action. The Anthropic SDK's own request spans nest under the step spans, so the repo does not reimplement the GenAI attributes. The transport middleware runs inside each request span and adds the specialist and the cost the spend meter computed. The sample is `docs/demo/trace.json`, and `docs/telemetry.md` lists the attributes.
 
 The judge scores a finished replay. `decide()` still chooses the draft. `pnpm eval:judge` replays the 17 cases and applies the rubric in `packages/specialists/src/judge.ts` to each run's step outputs, diff, and check results. The live judge in that package runs when `THIN_PR_JUDGE` and `THIN_PR_MODEL` are both `live` and `ANTHROPIC_API_KEY` is set.
 

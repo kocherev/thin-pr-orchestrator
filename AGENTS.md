@@ -55,7 +55,7 @@ pnpm exec vitest run packages/specialists/src/client.test.ts
 pnpm exec vitest run scripts/eval.test.ts
 ```
 
-`packages/core/src/run.test.ts` writes a SQLite log for a run that loops once, reopens it, and expects `replay` to rebuild the same outputs, loops, and usage. `packages/github/src/run.test.ts` runs `fixtures/sample-issue-labeled.json` against a scratch git checkout with an in-memory GitHub client. `packages/specialists/src/client.test.ts` records and replays model calls against a fake API and checks pricing, the spend limit, and refusals. `packages/workspace/src/git.test.ts` edits, diffs, checks, and pushes a scratch checkout. `scripts/eval.test.ts` runs the eval and expects 17/17. `scripts/judge.test.ts` expects the judge report at 12/17. `scripts/trace.test.ts` expects six span names in the OTLP file.
+`packages/core/src/run.test.ts` writes a SQLite log for a run that loops once, reopens it, and expects `replay` to rebuild the same outputs, loops, and usage. `packages/github/src/run.test.ts` runs `fixtures/sample-issue-labeled.json` against a scratch git checkout with an in-memory GitHub client. `packages/specialists/src/client.test.ts` records and replays model calls against a fake API and checks pricing, the spend limit, and refusals. `packages/workspace/src/git.test.ts` edits, diffs, checks, and pushes a scratch checkout. `scripts/eval.test.ts` runs the eval and expects 17/17. `scripts/judge.test.ts` expects the judge report at 12/17. `scripts/trace.test.ts` expects 15 spans in one trace, with the GenAI attributes, the parent links, request costs that match the pricing, and no prompt or file text. It also sends the spans to a local OTLP receiver.
 
 The eval and judge tests run `tsc` and `vitest` in scratch repos, so each takes tens of seconds. They set their own timeouts.
 
@@ -101,7 +101,7 @@ The command replays the eval cases first, then prints one block per case. The bl
 
 Runs `node --disable-warning=ExperimentalWarning --import tsx scripts/trace.ts`.
 
-The command replays run `run-7` on a scratch checkout and exports OTLP JSON. Set `THIN_PR_TRACE_PATH` to write a file. With the variable empty, the JSON goes to stdout. `docs/demo/trace.json` is one file from this command. `@opentelemetry/sdk-node` 0.300.0 requires Node.js 22.15 or later.
+The command replays run `run-7` on a scratch checkout and exports OTLP JSON. Set `THIN_PR_TRACE_PATH` to write a file. With the variable empty, the JSON goes to stdout. With `OTEL_EXPORTER_OTLP_ENDPOINT` set, the spans go to that endpoint and no file is written. `docs/telemetry.md` has the backends and the attributes. `docs/demo/trace.json` is one file from this command. `@opentelemetry/sdk-node` 0.300.0 requires Node.js 22.15 or later.
 
 ## Layout
 
