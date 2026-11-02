@@ -3,7 +3,7 @@ import type { GateRuleResult } from "@thin-pr/gate";
 import { summaryOf } from "@thin-pr/specialists";
 import type { GitHubSurface } from "./surface.js";
 
-export type CheckRuns = {
+type CheckRuns = {
   /** Opens a check when a step starts and closes it when the step finishes, loops, or the run fails. */
   onEvent(event: RunEvent, sha: string): Promise<void>;
   /** Posts one finished check per gate rule. */

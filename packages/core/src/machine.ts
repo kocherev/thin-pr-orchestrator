@@ -3,7 +3,7 @@ import { withSpan } from "./span.js";
 import type { Template, TemplateStep } from "./template.js";
 import type { RunEvent, RunState, StepHandler, StepId, StepResult } from "./types.js";
 
-export type RunInput = {
+type RunInput = {
   readonly runId: string;
   readonly issue: string;
   readonly template: Template;

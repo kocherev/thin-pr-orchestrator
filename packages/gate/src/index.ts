@@ -6,8 +6,9 @@ import {
   reviewerOutput,
   verifyOutput,
 } from "@thin-pr/specialists";
+import { z } from "zod";
 
-export type GateVerdict = "PASS" | "FAIL";
+type GateVerdict = "PASS" | "FAIL";
 
 export type GateRuleResult = {
   readonly rule: string;
@@ -27,10 +28,9 @@ export type DiffMeasurement = {
   readonly meaningful: boolean;
 };
 
-export type BudgetLimits = {
-  readonly maxFiles: number;
-  readonly maxLines: number;
-};
+const budgetSchema = z.object({ maxFiles: z.number().int().positive(), maxLines: z.number().int().positive() }).strict();
+
+export type BudgetLimits = z.infer<typeof budgetSchema>;
 
 export type RunEvidence = {
   /** Step outputs as the run log stores them. */
@@ -73,7 +73,7 @@ export function measureDiff(changes: readonly FileChange[]): DiffMeasurement {
   return { files, lines, meaningful };
 }
 
-export function lineChangeCount(before: string, after: string): number {
+function lineChangeCount(before: string, after: string): number {
   const removed = sourceLines(before);
   const added = sourceLines(after);
   const shared = longestCommonSubsequence(removed, added);
@@ -81,11 +81,7 @@ export function lineChangeCount(before: string, after: string): number {
 }
 
 export function parseBudget(value: unknown): BudgetLimits {
-  const record = objectValue(value, "budget");
-  return {
-    maxFiles: positiveInteger(record.maxFiles, "budget maxFiles"),
-    maxLines: positiveInteger(record.maxLines, "budget maxLines"),
-  };
+  return budgetSchema.parse(value);
 }
 
 function planRule({ outputs }: RunEvidence): GateRuleResult {
@@ -196,18 +192,4 @@ function longestCommonSubsequence(left: readonly string[], right: readonly strin
     }
   }
   return prev[right.length] ?? 0;
-}
-
-function objectValue(value: unknown, field: string): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error(`${field} must be an object`);
-  }
-  return value as Record<string, unknown>;
-}
-
-function positiveInteger(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
-    throw new Error(`${field} must be a positive integer`);
-  }
-  return value;
 }

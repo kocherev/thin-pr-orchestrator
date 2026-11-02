@@ -4,8 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FileChange } from "@thin-pr/gate";
 import { runAction, spanNames, startTrace } from "@thin-pr/github";
-import { ReplayModelClient } from "@thin-pr/specialists";
-import { replayGitHub } from "./eval.js";
+import { replayGitHub, replayModel } from "./eval.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -15,7 +14,7 @@ const STUB_CHANGE: FileChange = {
   after: "export function stub(): number {\n  return 1;\n}\n",
 };
 
-export async function runTrace(workspace = root): Promise<string> {
+async function runTrace(workspace = root): Promise<string> {
   const tracing = await startTrace();
   const directory = mkdtempSync(join(tmpdir(), "thin-pr-trace-"));
   let failure: unknown;
@@ -27,7 +26,7 @@ export async function runTrace(workspace = root): Promise<string> {
       logPath: join(directory, "events.sqlite"),
       github: replayGitHub(),
       changes: [STUB_CHANGE],
-      model: modelFromFixture(jsonFile(join(workspace, "fixtures", "gate-pass.json"))),
+      model: replayModel(jsonFile(join(workspace, "fixtures", "gate-pass.json"))),
     });
     if (result.status !== "opened") {
       failure = new Error(`trace replay finished ${result.status}`);
@@ -43,26 +42,8 @@ export async function runTrace(workspace = root): Promise<string> {
   return document;
 }
 
-function modelFromFixture(value: unknown): ReplayModelClient {
-  const fixture = objectValue(value);
-  return new ReplayModelClient({
-    planner: JSON.stringify(fixture.plan),
-    implementer: JSON.stringify(fixture.implement),
-    tester: JSON.stringify(fixture.test),
-    reviewer: JSON.stringify(fixture.review),
-    "pr-writer": JSON.stringify(fixture.pullRequest),
-  });
-}
-
 function jsonFile(path: string): unknown {
   return JSON.parse(readFileSync(path, "utf8")) as unknown;
-}
-
-function objectValue(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("gate fixture must be an object");
-  }
-  return value as Record<string, unknown>;
 }
 
 function isDirectRun(): boolean {

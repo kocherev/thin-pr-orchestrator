@@ -63,6 +63,13 @@ describe("@thin-pr/gate", () => {
     expect(rule(evidence({}, diff), "budget")?.verdict).toBe("FAIL");
   });
 
+  it("counts inserted and deleted lines", () => {
+    const lines = (before: string, after: string) => measureDiff([{ path: "src/a.ts", before, after }]).lines;
+    expect(lines("return value - 1;\n", "return Math.max(0, value - 1);\n")).toBe(2);
+    expect(lines("", "export function reset(): number {\n  return 0;\n}\n")).toBe(3);
+    expect(lines("same\n", "same\n")).toBe(0);
+  });
+
   it("fails a rule when a step output does not match its contract", () => {
     expect(rule(evidence({ review: { summary: "ok", notes: [1] } }, twoLines), "contracts")).toEqual({
       rule: "contracts",

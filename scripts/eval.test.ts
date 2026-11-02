@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { exitCode, formatReport, lineChangeCount, meetsBaseline, runEval } from "./eval.js";
+import { exitCode, formatReport, meetsBaseline, runEval } from "./eval.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -40,12 +40,6 @@ describe("replay eval", () => {
     expect(text).toContain(`gate pass rate: ${report.passed}/${report.total}`);
     expect(text).toContain(`diff budget: ${report.budget.maxFiles} files, ${report.budget.maxLines} lines`);
     expect(text).toContain("11-wide-touch fail files 4 lines 4 over budget");
-  });
-
-  it("counts inserted and deleted lines", () => {
-    expect(lineChangeCount("return value - 1;\n", "return Math.max(0, value - 1);\n")).toBe(2);
-    expect(lineChangeCount("", "export function reset(): number {\n  return 0;\n}\n")).toBe(3);
-    expect(lineChangeCount("same\n", "same\n")).toBe(0);
   });
 
   it("keeps the pass-rate check on the CI workflow", () => {

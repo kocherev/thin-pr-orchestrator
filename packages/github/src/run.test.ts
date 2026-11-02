@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import type { FileChange } from "@thin-pr/gate";
 import { ReplayModelClient, type ModelClient } from "@thin-pr/specialists";
-import { runAction, type LabelRunResult } from "./index.js";
+import { runAction, type LabelRunResult } from "./run.js";
 import type { GitHubSurface } from "./surface.js";
 
 const root = fileURLToPath(new URL("../../..", import.meta.url));
