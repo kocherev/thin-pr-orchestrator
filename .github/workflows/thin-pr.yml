@@ -42,6 +42,8 @@ jobs:
     # contents: push the branch, and delete it on cancel. checks: one check per step and rule. issues: the progress
     # comment and command replies. pull-requests: open or update the draft, read reviews, reply on the draft.
     permissions:
+      # actions: start the repo's CI on the pushed branch (the ci-workflow input).
+      actions: write
       contents: write
       checks: write
       issues: write
@@ -74,6 +76,7 @@ jobs:
         uses: ./
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          ci-workflow: ci.yml
           # With an endpoint set, the trace goes to that OTLP backend instead of the artifact. See docs/telemetry.md.
           otel-endpoint: ${{ vars.OTEL_EXPORTER_OTLP_ENDPOINT }}
           otel-headers: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}

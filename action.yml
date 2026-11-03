@@ -18,6 +18,12 @@ inputs:
   otel-headers:
     description: Headers for the OTLP endpoint, such as an API key. Pass them from a secret.
     default: ""
+  ci-workflow:
+    description: >-
+      Your CI workflow file, such as ci.yml. GitHub runs no workflow for a push made with the job's own token, so the
+      Action starts this one on the branch it pushed. It needs a workflow_dispatch trigger, and the job needs actions:
+      write. Empty starts nothing.
+    default: ""
   trace-artifact:
     description: The artifact name for the trace. Two thin-pr jobs in one workflow need two names.
     default: thin-pr-trace
@@ -57,6 +63,7 @@ runs:
       shell: bash
       env:
         THIN_PR_CHECK_USER: thin-pr-check
+        THIN_PR_CI_WORKFLOW: ${{ inputs.ci-workflow }}
         GITHUB_TOKEN: ${{ inputs.github-token }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         # Outside the checkout, so the trace never shows up in the diff.

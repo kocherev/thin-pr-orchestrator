@@ -5,7 +5,7 @@ import * as github from "@actions/github";
 import { exportRunRecord } from "./record.js";
 import { routeEvent, type Trigger } from "./router.js";
 import { spanNames, startTrace } from "./trace.js";
-import { runResultOf, runTrigger } from "./trigger.js";
+import { pushedBranch, runResultOf, runTrigger } from "./trigger.js";
 
 /** The account GitHub posts as for a workflow's `GITHUB_TOKEN`. */
 const ACTIONS_BOT = "github-actions[bot]";
@@ -74,6 +74,7 @@ async function handle(trigger: Trigger, token: string): Promise<string> {
     botLogin: ACTIONS_BOT,
     env: process.env,
   });
+  await startCi(trigger, pushedBranch(trigger, outcome), token);
   if (outcome.kind === "command") {
     const { result } = outcome;
     core.info(`Command: ${result.status}${result.status === "refused" ? `. ${result.reason}` : ""}`);
@@ -114,6 +115,30 @@ async function handle(trigger: Trigger, token: string): Promise<string> {
     case "awaiting_approval":
       core.info(`Pushed ${result.stored.branch.name}. The diff is over the budget and waits for approval on the issue.`);
       return "";
+  }
+}
+
+/**
+ * GitHub starts no workflow for a push made with the workflow's own token, except a workflow_dispatch. So with
+ * THIN_PR_CI_WORKFLOW set, the Action starts that workflow on the branch it pushed, and its checks land on the draft.
+ * A failure here is a warning: the change itself is fine.
+ */
+async function startCi(trigger: Trigger, branch: string | null, token: string): Promise<void> {
+  const workflow = process.env.THIN_PR_CI_WORKFLOW;
+  if (!workflow || !branch) {
+    return;
+  }
+  try {
+    await github.getOctokit(token).rest.actions.createWorkflowDispatch({
+      owner: trigger.repo.owner,
+      repo: trigger.repo.name,
+      workflow_id: workflow,
+      ref: branch,
+    });
+    core.info(`Started ${workflow} on ${branch}.`);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "dispatch failed";
+    core.warning(`Could not start ${workflow} on ${branch}: ${reason}. It needs a workflow_dispatch trigger, and the job needs actions: write.`);
   }
 }
 

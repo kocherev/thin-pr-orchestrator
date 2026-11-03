@@ -12,6 +12,7 @@ thin-pr runs as a GitHub Action from `action.yml` at the root of this repo. This
   - `thin-pr:docs`
 - **A `.thin-pr.yml` at the repo root.** It sets the install, the two checks and the path rules. See below.
 - **The workflow file below on the default branch.** GitHub runs `issues` and comment events only from there.
+- **`workflow_dispatch` in your CI workflow's `on:` list,** so the Action can start your CI on each draft. Without it, a draft shows only thin-pr's own checks until someone pushes to it.
 
 ## The workflow
 
@@ -62,6 +63,8 @@ jobs:
     # contents: push the branch, and delete it on cancel. checks: one check per step and rule. issues: the progress
     # comment and command replies. pull-requests: open or update the draft, read reviews, reply on the draft.
     permissions:
+      # actions: start the repo's CI on the pushed branch (the ci-workflow input).
+      actions: write
       contents: write
       checks: write
       issues: write
@@ -87,6 +90,8 @@ jobs:
         uses: kocherev/thin-pr-orchestrator@<commit sha>
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Starts your CI on the draft's branch. Add workflow_dispatch to that workflow's on: list.
+          ci-workflow: ci.yml
 ```
 
 ## What the Action does
@@ -105,6 +110,7 @@ jobs:
 | `github-token` | `github.token` | The token that comments, pushes `thin-pr/<issue>`, and opens the draft. |
 | `otel-endpoint` | empty | An OTLP endpoint for the trace. |
 | `otel-headers` | empty | Headers for that endpoint, such as its API key. |
+| `ci-workflow` | empty | Your CI workflow file, such as `ci.yml`. GitHub starts no workflow for a push made with the job's own token, so the Action starts this one on the branch it pushed. The workflow needs `workflow_dispatch` in its `on:` list, and the job needs `actions: write`. |
 | `trace-artifact` | `thin-pr-trace` | The artifact name, when one workflow runs thin-pr twice. |
 
 ## `.thin-pr.yml`

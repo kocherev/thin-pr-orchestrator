@@ -37,6 +37,11 @@ export type LabelRunResult =
   | { readonly status: "awaiting_approval"; readonly record: RunRecord; readonly stored: StoredRun }
   | { readonly status: "blocked" | "failed"; readonly record: RunRecord; readonly error: string };
 
+/** The branch a label run pushes for an issue. */
+export function draftBranch(issue: number): string {
+  return `thin-pr/${issue}`;
+}
+
 /** What one run may change and spend: the template's limits with the `.thin-pr.yml` overrides applied field by field. */
 export type RunLimits = {
   readonly budget: { readonly max_files: number; readonly max_lines: number };
@@ -126,7 +131,7 @@ export async function runIssue(deps: RunDeps & {
 }): Promise<LabelRunResult> {
   const { event, github } = deps;
   const target = { owner: event.owner, repo: event.repo };
-  const branch = deps.branch ?? `thin-pr/${event.issue.number}`;
+  const branch = deps.branch ?? draftBranch(event.issue.number);
   return gatedRun<LabelRunResult>({
     ...deps,
     comment: { issue: event.issue.number, title: `Running the ${deps.template.id} template on #${event.issue.number}.` },
