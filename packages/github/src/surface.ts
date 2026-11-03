@@ -46,8 +46,11 @@ export type GitHubRest = {
       readonly repo: string;
       readonly name: string;
       readonly head_sha: string;
-      readonly status: "in_progress";
+      readonly status: "in_progress" | "completed";
       readonly started_at: string;
+      readonly completed_at?: string;
+      readonly conclusion?: CheckConclusion;
+      readonly output?: { readonly title: string; readonly summary: string };
     }): Promise<{ data: { id: number } }>;
     update(params: {
       readonly owner: string;
@@ -152,6 +155,16 @@ export type GitHubSurface = {
     readonly summary: string;
     readonly title?: string;
   }): Promise<void>;
+  /** One check that is already finished, in one call, so nothing updates a check GitHub may not show yet. */
+  postCheck(input: {
+    readonly owner: string;
+    readonly repo: string;
+    readonly name: string;
+    readonly sha: string;
+    readonly conclusion: CheckConclusion;
+    readonly summary: string;
+    readonly title: string;
+  }): Promise<void>;
   /** Comments on an issue or pull request and returns the comment id. */
   createComment(input: {
     readonly owner: string;
@@ -200,32 +213,68 @@ export type GitHubSurface = {
   }): Promise<PullRequest>;
 };
 
+// Right after a push GitHub can answer 404 or 422 for the new commit's checks for a moment.
+const FRESH_COMMIT_RETRIES = [500, 1500, 3000];
+
+async function onceVisible<T>(call: () => Promise<T>): Promise<T> {
+  for (const wait of FRESH_COMMIT_RETRIES) {
+    try {
+      return await call();
+    } catch (error) {
+      const status = typeof error === "object" && error !== null && "status" in error ? error.status : null;
+      if (status !== 404 && status !== 422) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
+  return call();
+}
+
 export function createGitHubSurface(octokit: GitHubRest): GitHubSurface {
   return {
     async startCheck(input) {
-      const { data } = await octokit.checks.create({
+      const { data } = await onceVisible(() => octokit.checks.create({
         owner: input.owner,
         repo: input.repo,
         name: input.name,
         head_sha: input.sha,
         status: "in_progress",
         started_at: new Date().toISOString(),
-      });
+      }));
       return data.id;
     },
+    async postCheck(input) {
+      const now = new Date().toISOString();
+      await onceVisible(() =>
+        octokit.checks.create({
+          owner: input.owner,
+          repo: input.repo,
+          name: input.name,
+          head_sha: input.sha,
+          status: "completed",
+          started_at: now,
+          completed_at: now,
+          conclusion: input.conclusion,
+          output: { title: input.title, summary: input.summary },
+        }),
+      );
+    },
     async finishCheck(input) {
-      await octokit.checks.update({
-        owner: input.owner,
-        repo: input.repo,
-        check_run_id: input.checkRunId,
-        status: "completed",
-        conclusion: input.conclusion,
-        completed_at: new Date().toISOString(),
-        output: {
-          title: input.title ?? { success: "Passed", failure: "Failed", neutral: "Needs approval" }[input.conclusion],
-          summary: input.summary,
-        },
-      });
+      await onceVisible(() =>
+        octokit.checks.update({
+          owner: input.owner,
+          repo: input.repo,
+          check_run_id: input.checkRunId,
+          status: "completed",
+          conclusion: input.conclusion,
+          completed_at: new Date().toISOString(),
+          output: {
+            title: input.title ?? { success: "Passed", failure: "Failed", neutral: "Needs approval" }[input.conclusion],
+            summary: input.summary,
+          },
+        }),
+      );
     },
     async createComment(input) {
       const { data } = await octokit.issues.createComment({

@@ -2,6 +2,53 @@ import { describe, expect, it } from "vitest";
 import { createGitHubSurface, type GitHubRest } from "./surface.js";
 
 describe("Octokit surface", () => {
+  it("posts a finished gate check in one call, and waits for a commit GitHub does not show yet", async () => {
+    const calls: unknown[] = [];
+    let attempts = 0;
+    const base = restWith(calls, {});
+    const octokit: GitHubRest = {
+      ...base,
+      checks: {
+        ...base.checks,
+        async create(params) {
+          attempts += 1;
+          if (attempts === 1) {
+            throw Object.assign(new Error("No commit found for SHA: sha-9"), { status: 422 });
+          }
+          calls.push(["checks.create", params]);
+          return { data: { id: 43 } };
+        },
+      },
+    };
+    const target = { owner: "example", repo: "sample-repo" };
+
+    await createGitHubSurface(octokit).postCheck({
+      ...target,
+      name: "thin-pr / gate / tests",
+      sha: "sha-9",
+      conclusion: "success",
+      summary: "PASS: Tests passed.",
+      title: "PASS",
+    });
+
+    expect(attempts).toBe(2);
+    expect(calls).toEqual([
+      [
+        "checks.create",
+        {
+          ...target,
+          name: "thin-pr / gate / tests",
+          head_sha: "sha-9",
+          status: "completed",
+          started_at: expect.any(String),
+          completed_at: expect.any(String),
+          conclusion: "success",
+          output: { title: "PASS", summary: "PASS: Tests passed." },
+        },
+      ],
+    ]);
+  });
+
   it("maps check, comment, and pull request calls onto the REST client", async () => {
     const calls: unknown[] = [];
     const pull = { number: 11, html_url: "https://github.com/example/sample-repo/pull/11" };

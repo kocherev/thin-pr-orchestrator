@@ -141,7 +141,7 @@ export async function runIssue(deps: RunDeps & {
     async gated({ decision, outputs, record, postRules, finish }) {
       const message = `Apply thin-pr/#${event.issue.number}`;
       const head = await deps.workspace.commitAndPush({ branch, message, token: deps.pushToken });
-      await postRules(head);
+      const note = await postRules(head);
       if (decision === "needs_approval") {
         const waiting = record("awaiting_approval");
         const stored = toStoredRun({
@@ -152,7 +152,7 @@ export async function runIssue(deps: RunDeps & {
           review: reviewerOutput.safeParse(outputs.review).data ?? null,
         });
         const report = formatRunReport({ record: waiting, outputs, branch, error: null });
-        await finish(`${report}\n\n${storedRunMarker(stored)}`);
+        await finish(`${report}${note}\n\n${storedRunMarker(stored)}`);
         // A draft from an earlier run already shows the pushed branch, so its body must stop saying the gate passed.
         const [open] = await github.listPullsForHead({ ...target, branch });
         if (open) {
@@ -161,9 +161,9 @@ export async function runIssue(deps: RunDeps & {
         return { status: "awaiting_approval", record: waiting, stored };
       }
       const body = formatRunReport({ record: record("opened"), outputs, branch, error: null });
-      const pullRequest = await publishDraft(github, event, branch, outputs, body);
+      const pullRequest = await publishDraft(github, event, branch, outputs, `${body}${note}`);
       const opened = record("opened", pullRequest);
-      await finish(formatRunReport({ record: opened, outputs, branch, error: null }));
+      await finish(`${formatRunReport({ record: opened, outputs, branch, error: null })}${note}`);
       return { status: "opened", record: opened };
     },
   });
@@ -194,8 +194,11 @@ export type GatedContext = {
   readonly decision: "pass" | "needs_approval";
   readonly outputs: Outputs;
   readonly record: (status: RunRecord["status"], pullRequest?: RunRecord["pullRequest"]) => RunRecord;
-  /** Posts one check per gate rule on `sha`. */
-  readonly postRules: (sha: string) => Promise<void>;
+  /**
+   * Posts one check per gate rule on `sha`. The branch is already pushed by then, so a failure here must not stop
+   * the run: it returns a note for the report instead, or "" when every check posted.
+   */
+  readonly postRules: (sha: string) => Promise<string>;
   /** Ends the progress comment with `body`. */
   readonly finish: (body: string) => Promise<void>;
 };
@@ -303,7 +306,15 @@ export async function gatedRun<R>(
       decision,
       outputs,
       record,
-      postRules: (sha) => checkRuns.postRules(gate, sha),
+      postRules: async (sha) => {
+        try {
+          await checkRuns.postRules(gate, sha);
+          return "";
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "unknown error";
+          return `\n\n> The gate checks could not be posted on the pushed commit: ${reason}. The gate table above is the result.`;
+        }
+      },
       finish,
     });
   } catch (error) {

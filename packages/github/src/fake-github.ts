@@ -51,6 +51,9 @@ export function memoryGitHub(options?: {
     async finishCheck(input) {
       calls.push({ op: "finishCheck", ...input });
     },
+    async postCheck(input) {
+      calls.push({ op: "postCheck", ...input });
+    },
     async createComment(input) {
       calls.push({ op: "createComment", ...input });
       const comment: StoredComment = { id: 1000 + id(), issue: input.issue, author: self, authorType: "Bot", body: input.body };
