@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { statSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 
 const LOG_TAIL_CHARS = 4096;
@@ -57,7 +57,7 @@ export function runShell(
   const [file, args] =
     user === undefined
       ? ["/bin/sh", ["-c", command]]
-      : ["sudo", ["-n", "-H", "-u", user, "--", "env", ...SUDO_VARS.flatMap((name) => ["-u", name]), ...checkUserEnv(env), "/bin/sh", "-c", command]];
+      : ["sudo", ["-n", "-H", "-u", user, "--", "env", ...SUDO_VARS.flatMap((name) => ["-u", name]), ...checkUserEnv(env, options.cwd), "/bin/sh", "-c", command]];
   return new Promise((resolve, reject) => {
     const started = performance.now();
     const child = spawn(file, args, { cwd: options.cwd, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
@@ -107,11 +107,15 @@ export function runShell(
   });
 }
 
-/** The check's variables as `NAME=value` arguments for `env`, since sudo resets the environment. */
-function checkUserEnv(env: NodeJS.ProcessEnv): string[] {
-  return Object.entries(env)
-    .filter(([name, value]) => value !== undefined && !USER_VARS.test(name))
+/**
+ * The check's variables as `NAME=value` arguments for `env`, since sudo resets the environment. Git refuses a repo
+ * another user owns, so the checkout is marked safe. The check user cannot write `.git`, so its config is the run's.
+ */
+function checkUserEnv(env: NodeJS.ProcessEnv, checkout: string): string[] {
+  const vars = Object.entries(env)
+    .filter(([name, value]) => value !== undefined && !USER_VARS.test(name) && !name.startsWith("GIT_CONFIG_"))
     .map(([name, value]) => `${name}=${value}`);
+  return [...vars, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=safe.directory", `GIT_CONFIG_VALUE_0=${realpathSync(checkout)}`];
 }
 
 /** Kills every process of `user`. `kill -1` skips the shell that sends it, and the run's user cannot signal them. */

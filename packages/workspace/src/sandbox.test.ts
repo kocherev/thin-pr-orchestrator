@@ -27,6 +27,8 @@ describe.runIf(process.platform === "linux" && user)("checks as THIN_PR_CHECK_US
       "echo x 2>/dev/null >> .git/config || echo config-denied",
       "setsid sleep 600 > /dev/null 2>&1 < /dev/null & echo $! > src/leftover.pid",
       "echo built > src/out.txt",
+      // A check may use git, such as a drift check on generated files.
+      "git diff --quiet HEAD -- src/a.ts && echo git-works",
       "true",
     ].join("; ");
     const config = { ...loadRepoConfig(repo.dir), checks: { typecheck: attack, test: "true" } };
@@ -36,7 +38,7 @@ describe.runIf(process.platform === "linux" && user)("checks as THIN_PR_CHECK_US
 
     expect(exitCode).toBe(0);
     expect(logTail).not.toContain(canary);
-    expect(logTail.split("\n").filter(Boolean)).toEqual(["0", "hooks-denied", "config-denied"]);
+    expect(logTail.split("\n").filter(Boolean)).toEqual(["0", "hooks-denied", "config-denied", "git-works"]);
     const pid = Number(readFileSync(join(repo.dir, "src/leftover.pid"), "utf8"));
     expect(() => process.kill(pid, 0)).toThrow(/ESRCH/);
     // The run can still edit and diff what the check wrote.
