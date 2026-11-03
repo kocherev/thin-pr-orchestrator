@@ -4,7 +4,14 @@ import type { GitHubSurface, Issue, Review } from "./surface.js";
 /** One recorded surface call: the method name and its input. */
 export type Call = { readonly op: string } & Readonly<Record<string, unknown>>;
 
-export type StoredComment = { readonly id: number; readonly issue: number; readonly author: string; body: string };
+/** A comment as the fake keeps it. `authorType` is `user.type`: "User" or "Bot". */
+export type StoredComment = {
+  readonly id: number;
+  readonly issue: number;
+  readonly author: string;
+  readonly authorType: "User" | "Bot";
+  body: string;
+};
 
 /**
  * An in-memory GitHub for tests. It records every call, keeps comments so a later command can read them back, and
@@ -13,7 +20,7 @@ export type StoredComment = { readonly id: number; readonly issue: number; reado
 export function memoryGitHub(options?: {
   readonly openPull?: { readonly number: number; readonly url: string };
   readonly remote?: string;
-  /** The token's own login: the author of every comment the surface creates. */
+  /** The app's bot login: the author of every comment the surface creates. */
   readonly self?: string;
   readonly comments?: readonly StoredComment[];
   readonly issues?: Readonly<Record<number, Issue>>;
@@ -46,7 +53,7 @@ export function memoryGitHub(options?: {
     },
     async createComment(input) {
       calls.push({ op: "createComment", ...input });
-      const comment = { id: 1000 + id(), issue: input.issue, author: self, body: input.body };
+      const comment: StoredComment = { id: 1000 + id(), issue: input.issue, author: self, authorType: "Bot", body: input.body };
       comments.push(comment);
       return comment.id;
     },
@@ -60,11 +67,10 @@ export function memoryGitHub(options?: {
     },
     async listComments(input) {
       calls.push({ op: "listComments", ...input });
-      return comments.filter((comment) => comment.issue === input.issue).map(({ id, author, body }) => ({ id, author, body }));
+      return comments.filter((comment) => comment.issue === input.issue).map(({ id, author, authorType, body }) => ({ id, author, authorType, body }));
     },
     async react(input) {
       calls.push({ op: "react", ...input });
-      return self;
     },
     async getIssue(input) {
       calls.push({ op: "getIssue", ...input });

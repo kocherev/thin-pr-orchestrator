@@ -72,7 +72,7 @@ describe("/thin-pr approve", () => {
     const { repo, result, comments } = await awaitingRun();
     const memory = memoryGitHub({ self: SELF, remote: repo.remote, comments });
 
-    const outcome = await runCommand(command("approve"), { github: memory.github, retry: noRetry });
+    const outcome = await runCommand(command("approve"), { github: memory.github, retry: noRetry, botLogin: SELF });
 
     expect(outcome).toEqual({ status: "approved", detail: "https://github.com/example/sample-repo/pull/11" });
     expect(memory.calls.find((call) => call.op === "openDraft")).toMatchObject({ head: "thin-pr/7", base: "main", draft: true });
@@ -88,25 +88,43 @@ describe("/thin-pr approve", () => {
     expect(result.stored.branch.head).toBe(git(repo.remote, "rev-parse", "thin-pr/7"));
 
     const again = memoryGitHub({ self: SELF, remote: repo.remote, comments: memory.comments });
-    expect(await runCommand(command("approve"), { github: again.github, retry: noRetry })).toEqual({
+    expect(await runCommand(command("approve"), { github: again.github, retry: noRetry, botLogin: SELF })).toEqual({
       status: "refused",
       reason: "No run on #7 waits for approval.",
     });
     expect(again.calls.some((call) => call.op === "openDraft")).toBe(false);
   });
 
-  it("never reads a stored run from a comment someone else wrote", async () => {
+  it("never reads a stored run from a user's comment or another bot's comment", async () => {
     const { repo, comments } = await awaitingRun();
-    // The same marker, pasted by a user: it names the real branch and head, so only the author check stops it.
-    const forged: StoredComment[] = comments.map((comment) => ({ ...comment, id: comment.id + 1, author: "mallory" }));
-    const memory = memoryGitHub({ self: SELF, remote: repo.remote, comments: forged });
+    // The same marker, pasted elsewhere: it names the real branch and head, so only the author check stops it.
+    const forgeries: Pick<StoredComment, "author" | "authorType">[] = [
+      { author: "mallory", authorType: "User" },
+      { author: "other-app[bot]", authorType: "Bot" },
+      // GitHub logins cannot hold brackets, but the type check does not rely on that.
+      { author: SELF, authorType: "User" },
+    ];
+    for (const forgery of forgeries) {
+      const forged: StoredComment[] = comments.map((comment) => ({ ...comment, ...forgery, id: comment.id + 1 }));
+      const memory = memoryGitHub({ self: SELF, remote: repo.remote, comments: forged });
 
-    const outcome = await runCommand(command("approve"), { github: memory.github, retry: noRetry });
+      const outcome = await runCommand(command("approve"), { github: memory.github, retry: noRetry, botLogin: SELF });
 
-    expect(outcome).toEqual({ status: "refused", reason: "No run on #7 waits for approval." });
-    expect(memory.calls.some((call) => call.op === "openDraft" || call.op === "updatePull")).toBe(false);
-    expect(reactions(memory.calls)).toEqual(["eyes", "confused"]);
-    expect(memory.calls.find((call) => call.op === "createComment")).toMatchObject({ issue: 7, body: "No run on #7 waits for approval." });
+      expect(outcome).toEqual({ status: "refused", reason: "No run on #7 waits for approval." });
+      expect(memory.calls.some((call) => call.op === "openDraft" || call.op === "updatePull")).toBe(false);
+      expect(reactions(memory.calls)).toEqual(["eyes", "confused"]);
+      expect(memory.calls.find((call) => call.op === "createComment")).toMatchObject({ issue: 7, body: "No run on #7 waits for approval." });
+    }
+  });
+
+  it("reads the stored run only under the bot login the entry point passes", async () => {
+    const { repo, comments } = await awaitingRun();
+    const memory = memoryGitHub({ self: SELF, remote: repo.remote, comments });
+
+    const outcome = await runCommand(command("approve"), { github: memory.github, retry: noRetry, botLogin: "github-actions[bot]" });
+
+    expect(outcome.status).toBe("refused");
+    expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
   });
 
   it("refuses with the reason when the branch moved after the gate measured it", async () => {
@@ -114,7 +132,7 @@ describe("/thin-pr approve", () => {
     const moved = pushOther(repo.remote);
     const memory = memoryGitHub({ self: SELF, remote: repo.remote, comments });
 
-    const outcome = await runCommand(command("approve"), { github: memory.github, retry: noRetry });
+    const outcome = await runCommand(command("approve"), { github: memory.github, retry: noRetry, botLogin: SELF });
 
     expect(outcome.status).toBe("refused");
     expect(outcome.status === "refused" && outcome.reason).toMatch(new RegExp(`^\`thin-pr/7\` now points at ${moved.slice(0, 7)}`));
@@ -126,13 +144,13 @@ describe("/thin-pr approve", () => {
     const { repo, comments } = await awaitingRun();
     const memory = memoryGitHub({ self: SELF, remote: repo.remote, comments, pulls: { 12: { branch: "thin-pr/7" } } });
 
-    const outcome = await runCommand(command("approve", { number: 12, pull: true }), { github: memory.github, retry: noRetry });
+    const outcome = await runCommand(command("approve", { number: 12, pull: true }), { github: memory.github, retry: noRetry, botLogin: SELF });
 
     expect(outcome.status).toBe("approved");
     expect(memory.calls.find((call) => call.op === "listComments")).toMatchObject({ issue: 7 });
 
     const other = memoryGitHub({ self: SELF, pulls: { 13: { branch: "feature/flag" } } });
-    const refused = await runCommand(command("approve", { number: 13, pull: true }), { github: other.github, retry: noRetry });
+    const refused = await runCommand(command("approve", { number: 13, pull: true }), { github: other.github, retry: noRetry, botLogin: SELF });
     expect(refused).toEqual({ status: "refused", reason: "This pull request is not a thin-pr draft, so there is no run to act on." });
   });
 });
@@ -142,7 +160,7 @@ describe("/thin-pr cancel", () => {
     const { repo, comments } = await awaitingRun();
     const memory = memoryGitHub({ self: SELF, remote: repo.remote, comments });
 
-    const outcome = await runCommand(command("cancel"), { github: memory.github, retry: noRetry });
+    const outcome = await runCommand(command("cancel"), { github: memory.github, retry: noRetry, botLogin: SELF });
 
     expect(outcome).toEqual({ status: "cancelled", detail: "thin-pr/7" });
     expect(git(repo.remote, "branch", "--list", "thin-pr/7")).toBe("");
@@ -151,7 +169,7 @@ describe("/thin-pr cancel", () => {
     expect(runComment?.body.split("\n")[0]).toBe(
       "**Cancelled.** octocat cancelled the run before approval. `thin-pr/7` is deleted, and no draft is open.",
     );
-    const approve = await runCommand(command("approve"), { github: memoryGitHub({ self: SELF, comments: memory.comments }).github, retry: noRetry });
+    const approve = await runCommand(command("approve"), { github: memoryGitHub({ self: SELF, comments: memory.comments }).github, retry: noRetry, botLogin: SELF });
     expect(approve.status).toBe("refused");
   });
 
@@ -160,7 +178,7 @@ describe("/thin-pr cancel", () => {
     const moved = pushOther(repo.remote);
     const memory = memoryGitHub({ self: SELF, remote: repo.remote, comments });
 
-    const outcome = await runCommand(command("cancel"), { github: memory.github, retry: noRetry });
+    const outcome = await runCommand(command("cancel"), { github: memory.github, retry: noRetry, botLogin: SELF });
 
     expect(outcome.status).toBe("refused");
     expect(git(repo.remote, "rev-parse", "thin-pr/7")).toBe(moved);
@@ -169,7 +187,7 @@ describe("/thin-pr cancel", () => {
 
   it("refuses when nothing waits for approval", async () => {
     const memory = memoryGitHub({ self: SELF });
-    expect(await runCommand(command("cancel"), { github: memory.github, retry: noRetry })).toEqual({
+    expect(await runCommand(command("cancel"), { github: memory.github, retry: noRetry, botLogin: SELF })).toEqual({
       status: "refused",
       reason: "No run on #7 waits for approval.",
     });
@@ -185,13 +203,13 @@ describe("/thin-pr retry", () => {
       return { status: "ignored" };
     };
 
-    const ignored = await runCommand(command("retry", { labels: ["bug", "thin-pr:nope"] }), { github: memory.github, retry });
+    const ignored = await runCommand(command("retry", { labels: ["bug", "thin-pr:nope"] }), { github: memory.github, retry, botLogin: SELF });
     expect(ignored).toEqual({ status: "refused", reason: "No template has the label `thin-pr:nope`." });
     expect(started.map((event) => [event.label, event.issue.number, event.issueText])).toEqual([
       ["thin-pr:nope", 7, "#7 Sample thin pull request"],
     ]);
 
-    const unlabeled = await runCommand(command("retry", { labels: ["bug"] }), { github: memory.github, retry });
+    const unlabeled = await runCommand(command("retry", { labels: ["bug"] }), { github: memory.github, retry, botLogin: SELF });
     expect(unlabeled.status).toBe("refused");
     expect(started).toHaveLength(1);
   });
@@ -206,6 +224,7 @@ describe("/thin-pr retry", () => {
     const started: LabelEvent[] = [];
     const outcome = await runCommand(command("retry", { number: 12, pull: true, labels: [] }), {
       github: memory.github,
+      botLogin: SELF,
       retry: async (event) => {
         started.push(event);
         return opened;
@@ -223,7 +242,7 @@ describe("/thin-pr retry", () => {
 describe("unknown commands", () => {
   it("answers with the help text", async () => {
     const memory = memoryGitHub({ self: SELF });
-    expect(await runCommand(command("help"), { github: memory.github, retry: noRetry })).toEqual({ status: "helped", detail: "help" });
+    expect(await runCommand(command("help"), { github: memory.github, retry: noRetry, botLogin: SELF })).toEqual({ status: "helped", detail: "help" });
     expect(memory.calls.find((call) => call.op === "createComment")).toMatchObject({ issue: 7, body: HELP });
     expect(reactions(memory.calls)).toEqual(["eyes"]);
   });

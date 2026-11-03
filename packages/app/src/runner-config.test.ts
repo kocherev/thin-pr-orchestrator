@@ -3,7 +3,7 @@ import { runnerAllowedHosts, runnerEnvVars } from "./runner-config.js";
 
 const BASE = ["github.com", "api.github.com", "api.anthropic.com", "registry.npmjs.org"];
 
-const SETTINGS = { ANTHROPIC_API_KEY: "sk-test", THIN_PR_MODEL: "live", THIN_PR_SPEND_LIMIT_USD: "25" };
+const SETTINGS = { ANTHROPIC_API_KEY: "sk-test", THIN_PR_MODEL: "live", THIN_PR_SPEND_LIMIT_USD: "25", GITHUB_APP_SLUG: "thin-pr" };
 
 describe("runnerAllowedHosts", () => {
   it("keeps the base allowlist when no collector is configured", () => {
@@ -29,7 +29,14 @@ describe("runnerEnvVars", () => {
       ANTHROPIC_API_KEY: "sk-test",
       THIN_PR_MODEL: "live",
       THIN_PR_SPEND_LIMIT_USD: "25",
+      GITHUB_APP_SLUG: "thin-pr",
     });
+  });
+
+  it("refuses to start a runner without the App's slug", () => {
+    for (const slug of ["", "thin-pr[bot]", "Thin PR"]) {
+      expect(() => runnerEnvVars({ ...SETTINGS, GITHUB_APP_SLUG: slug }, "t")).toThrow("GITHUB_APP_SLUG must be the GitHub App's slug");
+    }
   });
 
   it("carries the OTLP endpoint and headers when they are set", () => {

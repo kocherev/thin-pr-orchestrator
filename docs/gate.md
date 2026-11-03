@@ -59,7 +59,7 @@ The template budgets are placeholders: `feature` 12 files and 600 lines, `bugfix
 
 ### Approving a run
 
-The `awaiting_approval` comment ends with a hidden marker that stores the run: the RunRecord without the patch, the pushed branch, the commit the gate measured, the base branch, the draft title, and the plan and review outputs. `readStoredRun(body)` in `packages/github/src/approval.ts` reads it back. Anyone can write a marker, so `/thin-pr approve` reads only the newest run comment that the token itself wrote.
+The `awaiting_approval` comment ends with a hidden marker that stores the run: the RunRecord without the patch, the pushed branch, the commit the gate measured, the base branch, the draft title, and the plan and review outputs. `readStoredRun(body)` in `packages/github/src/approval.ts` reads it back. Anyone can write a marker, so `/thin-pr approve` reads only the newest run comment that the app's own bot account wrote. `docs/security.md` says how a run knows that account.
 
 `openApprovedDraft(stored, { github, approvedBy })` opens the draft. It re-checks three things first, and refuses with a reason when one fails.
 

@@ -52,6 +52,11 @@ export async function runTrigger(input: {
   readonly runId: string;
   /** Markdown that links to where the run executes, for the progress comment. */
   readonly runLink: string | null;
+  /**
+   * The login the token comments as: `github-actions[bot]` for the Action, `<app slug>[bot]` for the App. A stored
+   * run or a revise reply counts only in a bot comment by this login.
+   */
+  readonly botLogin: string;
   readonly env: Readonly<Record<string, string | undefined>>;
 }): Promise<TriggerRun> {
   const env: Readonly<Record<string, string | undefined>> = {
@@ -89,10 +94,10 @@ export async function runTrigger(input: {
       outcome = { kind: "label", result: await label(labelEvent(trigger)) };
       break;
     case "command":
-      outcome = { kind: "command", result: await runCommand(trigger, { github, retry: label }) };
+      outcome = { kind: "command", result: await runCommand(trigger, { github, retry: label, botLogin: input.botLogin }) };
       break;
     case "revise":
-      outcome = { kind: "revise", result: await runRevise({ ...run, trigger }) };
+      outcome = { kind: "revise", result: await runRevise({ ...run, trigger, botLogin: input.botLogin }) };
       break;
   }
   const session = sessions[0];

@@ -31,7 +31,7 @@ The Action and the App answer the same events through the same router. The App d
 
 ## Events
 
-`routeEvent(name, payload)` in `packages/github/src/router.ts` parses each webhook with Zod and returns a trigger, or the reason it ignores the event. It imports only Zod, so the Worker bundles it too. `runTrigger` in `packages/github/src/trigger.ts` runs a trigger against a checkout. The Action calls both with `github.context`. The Worker calls `routeEvent` on the delivery and queues the trigger, and the container calls `runTrigger`.
+`routeEvent(name, payload)` in `packages/github/src/router.ts` parses each webhook with Zod and returns a trigger, or the reason it ignores the event. It imports only Zod, so the Worker bundles it too. `runTrigger` in `packages/github/src/trigger.ts` runs a trigger against a checkout. The Action calls both with `github.context`. The Worker calls `routeEvent` on the delivery and queues the trigger, and the container calls `runTrigger`. Each entry point passes the login the app comments as, `github-actions[bot]` for the Action and `<GITHUB_APP_SLUG>[bot]` for the App.
 
 | Event | Router reads | Action |
 | --- | --- | --- |
@@ -44,7 +44,7 @@ The router ignores every event a bot sends, every command and review from a user
 
 Commands:
 
-- `/thin-pr approve` reads the stored run from the newest run comment the token wrote on the issue and calls `openApprovedDraft`, which re-checks it. On success the run comment becomes the approved report and keeps no stored run.
+- `/thin-pr approve` reads the stored run from the newest run comment the app's bot account wrote on the issue and calls `openApprovedDraft`, which re-checks it. On success the run comment becomes the approved report and keeps no stored run.
 - `/thin-pr retry` starts a fresh label run with the first `thin-pr` label on the issue.
 - `/thin-pr cancel` deletes the branch of the run that waits for approval and ends its comment with status `cancelled`. It keeps a branch that moved after the run.
 - Any other word gets a reply that lists the three commands.

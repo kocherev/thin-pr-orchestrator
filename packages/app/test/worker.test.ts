@@ -108,6 +108,7 @@ describe("webhook intake", () => {
           ANTHROPIC_API_KEY: "test-anthropic-key",
           THIN_PR_MODEL: "live",
           THIN_PR_SPEND_LIMIT_USD: "25",
+          GITHUB_APP_SLUG: "thin-pr-test",
         },
       },
     ]);

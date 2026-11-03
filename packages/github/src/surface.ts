@@ -71,13 +71,7 @@ export type GitHubRest = {
       readonly repo: string;
       readonly comment_id: number;
       readonly content: Reaction;
-    }): Promise<{ data: { user: { login: string } | null } }>;
-    createForIssue(params: {
-      readonly owner: string;
-      readonly repo: string;
-      readonly issue_number: number;
-      readonly content: Reaction;
-    }): Promise<{ data: { user: { login: string } | null } }>;
+    }): Promise<unknown>;
   };
   issues: {
     createComment(params: {
@@ -98,7 +92,7 @@ export type GitHubRest = {
       readonly issue_number: number;
       readonly per_page: number;
       readonly page: number;
-    }): Promise<{ data: readonly { id: number; body?: string; user: { login: string } | null }[] }>;
+    }): Promise<{ data: readonly { id: number; body?: string; user: { login: string; type: string } | null }[] }>;
     get(params: { readonly owner: string; readonly repo: string; readonly issue_number: number }): Promise<{
       data: { number: number; title: string; body?: string | null; labels: readonly (string | { name?: string })[] };
     }>;
@@ -110,7 +104,22 @@ type PullRequest = { readonly number: number; readonly url: string };
 /** The reactions a run leaves on a command: seen, done, and refused. */
 export type Reaction = "eyes" | "+1" | "confused";
 
-export type IssueComment = { readonly id: number; readonly author: string | null; readonly body: string };
+/** `author` and `authorType` are the comment's `user.login` and `user.type`, or null for a deleted account. */
+export type IssueComment = {
+  readonly id: number;
+  readonly author: string | null;
+  readonly authorType: string | null;
+  readonly body: string;
+};
+
+/**
+ * True when the app wrote the comment: its author is `botLogin` and GitHub says that account is a bot. A marker
+ * counts only in such a comment, since anyone can type one. `botLogin` is `github-actions[bot]` for the Action and
+ * `<app slug>[bot]` for the App.
+ */
+export function writtenBy(comment: IssueComment, botLogin: string): boolean {
+  return comment.authorType === "Bot" && comment.author === botLogin;
+}
 
 export type Issue = { readonly number: number; readonly title: string; readonly body: string; readonly labels: readonly string[] };
 
@@ -158,17 +167,8 @@ export type GitHubSurface = {
   }): Promise<void>;
   /** Every comment on an issue or pull request, oldest first. */
   listComments(input: { readonly owner: string; readonly repo: string; readonly issue: number }): Promise<IssueComment[]>;
-  /**
-   * Reacts to an issue comment, or to an issue or pull request, and returns the login that reacted: the token's own
-   * account. An installation token cannot read `GET /user`, and commands and reviews get a reaction anyway, so
-   * this is how a run learns who it is.
-   */
-  react(input: {
-    readonly owner: string;
-    readonly repo: string;
-    readonly on: { readonly comment: number } | { readonly issue: number };
-    readonly content: Reaction;
-  }): Promise<string>;
+  /** Reacts to an issue comment, so the person who wrote a command sees it was read and how it ended. */
+  react(input: { readonly owner: string; readonly repo: string; readonly commentId: number; readonly content: Reaction }): Promise<void>;
   getReview(input: { readonly owner: string; readonly repo: string; readonly pull: number; readonly reviewId: number }): Promise<Review>;
   getIssue(input: { readonly owner: string; readonly repo: string; readonly issue: number }): Promise<Issue>;
   /** The head branch of a pull request, and whether it lives in the same repository. */
@@ -254,22 +254,26 @@ export function createGitHubSurface(octokit: GitHubRest): GitHubSurface {
           per_page: COMMENTS_PER_PAGE,
           page,
         });
-        comments.push(...data.map((comment) => ({ id: comment.id, author: comment.user?.login ?? null, body: comment.body ?? "" })));
+        comments.push(
+          ...data.map((comment) => ({
+            id: comment.id,
+            author: comment.user?.login ?? null,
+            authorType: comment.user?.type ?? null,
+            body: comment.body ?? "",
+          })),
+        );
         if (data.length < COMMENTS_PER_PAGE) {
           return comments;
         }
       }
     },
     async react(input) {
-      const { owner, repo, on, content } = input;
-      const { data } =
-        "comment" in on
-          ? await octokit.reactions.createForIssueComment({ owner, repo, comment_id: on.comment, content })
-          : await octokit.reactions.createForIssue({ owner, repo, issue_number: on.issue, content });
-      if (!data.user) {
-        throw new Error("GitHub returned a reaction without a user");
-      }
-      return data.user.login;
+      await octokit.reactions.createForIssueComment({
+        owner: input.owner,
+        repo: input.repo,
+        comment_id: input.commentId,
+        content: input.content,
+      });
     },
     async getReview(input) {
       const params = { owner: input.owner, repo: input.repo, pull_number: input.pull, review_id: input.reviewId };

@@ -27,7 +27,7 @@ printf '<form action="https://github.com/settings/apps/new" method="post"><input
 open /tmp/thin-pr-app.html
 ```
 
-Click the button. GitHub shows the app name. Change it if `thin-pr` is taken, then create the app.
+Click the button. GitHub shows the app name. Change it if `thin-pr` is taken, then create the app. The slug GitHub derives from the name is the `GITHUB_APP_SLUG` you set in step 3.
 
 GitHub redirects to the repository with `?code=` in the address bar. Exchange that code within one hour. The response holds the private key, the webhook secret, and the client ID. Keep the file outside the repository.
 
@@ -68,6 +68,14 @@ pnpm exec wrangler secret put ANTHROPIC_API_KEY
 ```
 
 The last command prompts for the key. `THIN_PR_MODEL` and `THIN_PR_SPEND_LIMIT_USD` are plain variables in `wrangler.jsonc`.
+
+`GITHUB_APP_SLUG` is a plain variable too, and it is required. Set it in `vars` in `wrangler.jsonc` to the slug GitHub gave the app:
+
+```bash
+jq -r .slug ~/thin-pr-app.json
+```
+
+The app comments as `<slug>[bot]`, and a run trusts a stored run or a revise reply only in a bot comment by that login. With the variable empty or malformed, the queue consumer refuses each job, and the job ends in `pr-jobs-dlq`. For `wrangler dev`, `.dev.vars.example` lists it with the secrets.
 
 ## 4. Deploy
 

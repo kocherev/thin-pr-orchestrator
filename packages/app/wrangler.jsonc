@@ -49,6 +49,9 @@
   "vars": {
     "THIN_PR_MODEL": "live",
     "THIN_PR_SPEND_LIMIT_USD": "25",
+    // Required. The slug GitHub gave the app, from its settings URL. The app comments as <slug>[bot], and a run
+    // trusts a stored run or a reply only from that bot. Jobs fail until it is set. See docs/deploy.md.
+    "GITHUB_APP_SLUG": "",
     // Optional. An OTLP endpoint on port 443 turns on traces for App runs. See docs/deploy.md.
     "OTEL_EXPORTER_OTLP_ENDPOINT": ""
   },

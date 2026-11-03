@@ -4,7 +4,7 @@ import { isRunComment } from "./progress.js";
 import { formatRunReport } from "./report.js";
 import { TRIGGER_LABEL, type CommandTrigger } from "./router.js";
 import type { LabelRunResult } from "./run.js";
-import type { GitHubSurface } from "./surface.js";
+import { writtenBy, type GitHubSurface } from "./surface.js";
 
 export const HELP = [
   "thin-pr reads these commands from users with write access:",
@@ -32,18 +32,21 @@ export async function runCommand(
     readonly github: GitHubSurface;
     /** Starts a fresh run of the template `event.label` names. */
     readonly retry: (event: LabelEvent) => Promise<LabelRunResult>;
+    /** The app's own login. Only its comments can hold a stored run. */
+    readonly botLogin: string;
   },
 ): Promise<CommandResult> {
   const { github } = deps;
   const target = { owner: trigger.repo.owner, repo: trigger.repo.name };
-  const self = await github.react({ ...target, on: { comment: trigger.comment.id }, content: "eyes" });
-  const result = await execute(trigger, { ...deps, target, self });
+  const commentId = trigger.comment.id;
+  await github.react({ ...target, commentId, content: "eyes" });
+  const result = await execute(trigger, { ...deps, target });
   const reply = result.status === "refused" ? result.reason : result.status === "helped" ? HELP : null;
   if (reply) {
     await github.createComment({ ...target, issue: trigger.issue.number, body: reply });
   }
   if (result.status !== "helped") {
-    await github.react({ ...target, on: { comment: trigger.comment.id }, content: result.status === "refused" ? "confused" : "+1" });
+    await github.react({ ...target, commentId, content: result.status === "refused" ? "confused" : "+1" });
   }
   return result;
 }
@@ -54,8 +57,7 @@ async function execute(
     readonly github: GitHubSurface;
     readonly retry: (event: LabelEvent) => Promise<LabelRunResult>;
     readonly target: Target;
-    /** The token's own login. Only its comments can hold a stored run. */
-    readonly self: string;
+    readonly botLogin: string;
   },
 ): Promise<CommandResult> {
   const { github, target } = deps;
@@ -81,7 +83,7 @@ async function execute(
     return { status: "retried", run };
   }
 
-  const waiting = await latestRun(github, target, issueNumber, deps.self);
+  const waiting = await latestRun(github, target, issueNumber, deps.botLogin);
   if (!waiting?.stored) {
     return { status: "refused", reason: `No run on #${issueNumber} waits for approval.` };
   }
@@ -113,16 +115,17 @@ async function execute(
 }
 
 /**
- * The newest run comment on the issue that the token itself wrote, and the run it stores. Comments by anyone else
- * are skipped even when they carry the markers, since anyone can type them.
+ * The newest run comment on the issue that the app wrote, and the run it stores. Comments by anyone else, users
+ * and other bots, are skipped even when they carry the markers, since anyone can type them.
  */
 async function latestRun(
   github: GitHubSurface,
   target: Target,
   issue: number,
-  self: string,
+  botLogin: string,
 ): Promise<{ readonly commentId: number; readonly stored: StoredRun | null } | null> {
-  const ours = (await github.listComments({ ...target, issue })).filter((comment) => comment.author === self && isRunComment(comment.body));
+  const comments = await github.listComments({ ...target, issue });
+  const ours = comments.filter((comment) => writtenBy(comment, botLogin) && isRunComment(comment.body));
   const last = ours.at(-1);
   return last ? { commentId: last.id, stored: readStoredRun(last.body) } : null;
 }

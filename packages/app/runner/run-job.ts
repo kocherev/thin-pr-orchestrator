@@ -21,6 +21,11 @@ export async function runJob(
   if (!token) {
     throw new Error("GITHUB_TOKEN is missing");
   }
+  // The App comments as `<slug>[bot]`. Without the slug no stored run or reply could be trusted.
+  const slug = env.GITHUB_APP_SLUG;
+  if (!slug) {
+    throw new Error("GITHUB_APP_SLUG is missing");
+  }
   const parent = await mkdtemp(join(tmpdir(), `thin-pr-${job.deliveryId}-`));
   const checkout = join(parent, "checkout");
   // The container keeps no files, so a trace is worth starting only when a collector will receive it.
@@ -39,6 +44,7 @@ export async function runJob(
       token,
       runId: `app-${job.deliveryId}`,
       runLink: `App delivery \`${job.deliveryId}\``,
+      botLogin: `${slug}[bot]`,
       env,
     });
     const result = outcome.kind === "revise" ? outcome.result : runResultOf(outcome);

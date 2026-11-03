@@ -7,7 +7,7 @@ import { cell, formatRunReport, reportDetails } from "./report.js";
 import { REVISE_LABEL, type ReviseTrigger } from "./router.js";
 import { gatedRun } from "./run.js";
 import { createRunHandlers } from "./steps.js";
-import type { GitHubSurface, Review } from "./surface.js";
+import { writtenBy, type GitHubSurface, type Review } from "./surface.js";
 
 export type ReviseResult =
   | { readonly status: "ignored"; readonly reason: string }
@@ -36,15 +36,16 @@ export async function runRevise(input: {
   readonly model: () => ModelSession;
   readonly pushToken?: string;
   readonly runLink?: string | null;
+  /** The app's own login. Only its reply marks a review as answered. */
+  readonly botLogin: string;
 }): Promise<ReviseResult> {
   const { trigger, github } = input;
   const target = { owner: trigger.repo.owner, repo: trigger.repo.name };
   const { number: pull, branch } = trigger.pull;
   const marker = reviseMarker(trigger.reviewId);
 
-  const self = await github.react({ ...target, on: { issue: pull }, content: "eyes" });
   const comments = await github.listComments({ ...target, issue: pull });
-  if (comments.some((comment) => comment.author === self && comment.body.includes(marker))) {
+  if (comments.some((comment) => writtenBy(comment, input.botLogin) && comment.body.includes(marker))) {
     return { status: "ignored", reason: `review ${trigger.reviewId} already has a reply` };
   }
   const review = await github.getReview({ ...target, pull, reviewId: trigger.reviewId });

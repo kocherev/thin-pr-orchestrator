@@ -85,6 +85,7 @@ async function sampleRepo() {
   const github = await fakeGitHub();
   const env = {
     GITHUB_TOKEN: "ghs_test",
+    GITHUB_APP_SLUG: "thin-pr-test",
     GITHUB_API_URL: github.url,
     THIN_PR_MODEL: "replay",
     THIN_PR_CASSETTE: join(root, "fixtures", "gate-pass.jsonl"),
@@ -152,5 +153,11 @@ describe("runJob", () => {
 
   it("refuses to start without an installation token", async () => {
     await expect(runJob(JOB, { ...process.env, GITHUB_TOKEN: "" })).rejects.toThrow("GITHUB_TOKEN is missing");
+  });
+
+  it("refuses to start without the App's slug, which names its own comments", async () => {
+    await expect(runJob(JOB, { ...process.env, GITHUB_TOKEN: "ghs_test", GITHUB_APP_SLUG: "" })).rejects.toThrow(
+      "GITHUB_APP_SLUG is missing",
+    );
   });
 });

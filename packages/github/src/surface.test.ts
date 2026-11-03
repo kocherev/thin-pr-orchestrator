@@ -99,7 +99,11 @@ describe("Octokit surface", () => {
   it("maps the calls commands make, and pages through comments", async () => {
     const calls: unknown[] = [];
     const page = (from: number, size: number) =>
-      Array.from({ length: size }, (_, index) => ({ id: from + index, body: `comment ${from + index}`, user: { login: "octocat" } }));
+      Array.from({ length: size }, (_, index) => ({
+        id: from + index,
+        body: `comment ${from + index}`,
+        user: { login: "octocat", type: "User" },
+      }));
     const octokit = restWith(calls, {
       issues: {
         async listComments(params) {
@@ -117,9 +121,9 @@ describe("Octokit surface", () => {
 
     const comments = await github.listComments({ ...target, issue: 7 });
     expect(comments).toHaveLength(101);
-    expect(comments.at(-1)).toEqual({ id: 101, author: null, body: "" });
-    await expect(github.react({ ...target, on: { comment: 5 }, content: "eyes" })).resolves.toBe("thin-pr[bot]");
-    await expect(github.react({ ...target, on: { issue: 11 }, content: "eyes" })).resolves.toBe("thin-pr[bot]");
+    expect(comments[0]).toEqual({ id: 1, author: "octocat", authorType: "User", body: "comment 1" });
+    expect(comments.at(-1)).toEqual({ id: 101, author: null, authorType: null, body: "" });
+    await github.react({ ...target, commentId: 5, content: "eyes" });
     await expect(github.getReview({ ...target, pull: 11, reviewId: 3 })).resolves.toEqual({
       body: "Two things.",
       comments: [
@@ -146,7 +150,6 @@ describe("Octokit surface", () => {
       ["issues.listComments", { ...target, issue_number: 7, per_page: 100, page: 1 }],
       ["issues.listComments", { ...target, issue_number: 7, per_page: 100, page: 2 }],
       ["reactions.createForIssueComment", { ...target, comment_id: 5, content: "eyes" }],
-      ["reactions.createForIssue", { ...target, issue_number: 11, content: "eyes" }],
       ["pulls.getReview", { ...target, pull_number: 11, review_id: 3 }],
       ["pulls.listCommentsForReview", { ...target, pull_number: 11, review_id: 3, per_page: 100 }],
       ["issues.get", { ...target, issue_number: 7 }],
@@ -202,11 +205,6 @@ function restWith(calls: unknown[], overrides: { readonly issues?: Partial<GitHu
     reactions: {
       async createForIssueComment(params) {
         calls.push(["reactions.createForIssueComment", params]);
-        return { data: { user: { login: "thin-pr[bot]" } } };
-      },
-      async createForIssue(params) {
-        calls.push(["reactions.createForIssue", params]);
-        return { data: { user: { login: "thin-pr[bot]" } } };
       },
     },
     issues: { createComment: unused, updateComment: unused, listComments: unused, get: unused, ...overrides.issues },

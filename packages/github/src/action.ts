@@ -8,6 +8,9 @@ import { routeEvent, type Trigger } from "./router.js";
 import { spanNames, startTrace } from "./trace.js";
 import { runResultOf, runTrigger } from "./trigger.js";
 
+/** The account GitHub posts as for a workflow's `GITHUB_TOKEN`. */
+const ACTIONS_BOT = "github-actions[bot]";
+
 async function main(): Promise<void> {
   const token = process.env.GITHUB_TOKEN;
   if (!token) {
@@ -69,6 +72,7 @@ async function handle(trigger: Trigger, token: string): Promise<string> {
     token,
     runId,
     runLink: actionsRunLink(process.env),
+    botLogin: ACTIONS_BOT,
     env: process.env,
   });
   if (outcome.kind === "command") {
