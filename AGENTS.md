@@ -56,9 +56,9 @@ pnpm exec vitest run packages/specialists/src/client.test.ts
 pnpm exec vitest run scripts/eval.test.ts
 ```
 
-`packages/core/src/run.test.ts` writes a SQLite log for a run that loops once, reopens it, and expects `replay` to rebuild the same outputs, loops, and usage. `packages/github/src/run.test.ts` runs `fixtures/sample-issue-labeled.json` against a scratch git checkout with an in-memory GitHub client. `packages/specialists/src/client.test.ts` records and replays model calls against a fake API and checks request drift, pricing, the spend limit, and refusals. `packages/workspace/src/git.test.ts` edits, diffs, checks, and pushes a scratch checkout. `scripts/eval.test.ts` runs the eval, expects 26/26, and checks that the committed report matches the run. `scripts/record.test.ts` records a case through the scripted upstream and checks the spend limit. `scripts/judge.test.ts` checks the human labels and records and replays a judge batch through the scripted upstream. `scripts/trace.test.ts` expects 16 spans in one trace, with the GenAI attributes, the parent links, request costs that match the pricing, and no prompt or file text. It also sends the spans to a local OTLP receiver.
+`packages/core/src/run.test.ts` writes a SQLite log for a run that loops once, reopens it, and expects `replay` to rebuild the same outputs, loops, and usage. `packages/github/src/run.test.ts` runs `fixtures/sample-issue-labeled.json` against a scratch git checkout with an in-memory GitHub client. `packages/specialists/src/client.test.ts` records and replays model calls against a fake API and checks request drift, pricing, the spend limit, and refusals. `packages/workspace/src/git.test.ts` edits, diffs, checks, and pushes a scratch checkout. `scripts/eval.test.ts` checks the scores, the report format, the stale-report check, the python3 check, and that CI and `pnpm verify` run `pnpm eval`. It does not run the eval. `pnpm eval` runs it once and fails when the committed report is stale. `scripts/record.test.ts` records a case through the scripted upstream and checks the spend limit. `scripts/judge.test.ts` checks the human labels and records and replays a judge batch through the scripted upstream. `scripts/trace.test.ts` expects 16 spans in one trace, with the GenAI attributes, the parent links, request costs that match the pricing, and no prompt or file text. It also sends the spans to a local OTLP receiver.
 
-`scripts/eval.test.ts`, `scripts/record.test.ts`, and the replay test in `packages/mcp/src/server.test.ts` run `tsc` and `vitest` in scratch repos for several cases. They set longer timeouts of their own.
+`scripts/record.test.ts` and the replay test in `packages/mcp/src/server.test.ts` run `tsc` and `vitest` in scratch repos for several cases. They set longer timeouts of their own.
 
 ### pnpm eval
 
@@ -77,7 +77,7 @@ p50 step latency: 3180 ms
 
 The command then prints the totals by model, the baseline, the gate rules some case fails, and one line per case: id, `opened`, `awaiting_approval`, or `blocked`, `ok` or `MISMATCH`, file count, line count, and the failed rules, the rule that needs approval, or the step error. Each case runs on a scratch git copy of the sample repo its issue names, `evals/sample-repo` or `evals/sample-python`, with this repo's `node_modules/.bin` on `PATH` for `tsc` and `vitest`. The Python cases need `python3` 3.10 or later on `PATH` and nothing else. The eval stops with a message that says so when it is missing. Exit 0 means the verdict accuracy is at least `evals/baseline.json` and `evals/report.json` and `evals/runs/` match the run.
 
-When you change a case, a cassette, or anything a run records, run `pnpm eval -- --write` and commit `evals/report.json` and `evals/runs/` in the same change. Do not lower `evals/baseline.json`, and do not edit `scripts/eval.test.ts`, to turn a red eval green. Update the case table in `evals/README.md` when a case changes, and the results table in `README.md` when the printed numbers change.
+When you change a case, a cassette, or anything a run records, run `pnpm eval -- --write` and commit `evals/report.json` and `evals/runs/` in the same change. Do not lower `evals/baseline.json`, and do not edit a case's `expected.json`, to turn a red eval green. Update the case table in `evals/README.md` when a case changes, and the results table in `README.md` when the printed numbers change.
 
 ### pnpm eval:record
 
@@ -95,7 +95,7 @@ The command replays `evals/judge-cassette.jsonl` over the replayed eval and comp
 
 Runs `node --disable-warning=ExperimentalWarning --import tsx scripts/trace.ts`.
 
-The command replays run `run-7` on a scratch checkout and exports OTLP JSON. Set `THIN_PR_TRACE_PATH` to write a file. With the variable empty, the JSON goes to stdout. With `OTEL_EXPORTER_OTLP_ENDPOINT` set, the spans go to that endpoint and no file is written. `docs/telemetry.md` has the backends and the attributes. `docs/demo/trace.json` is one file from this command. `@opentelemetry/sdk-node` 0.300.0 requires Node.js 22.15 or later.
+The command replays run `run-7` on a scratch checkout and exports OTLP JSON. Set `THIN_PR_TRACE_PATH` to write a file. With the variable empty, the JSON goes to stdout. `pnpm verify` sets it to a temp file, so it prints only the span names and the file path. With `OTEL_EXPORTER_OTLP_ENDPOINT` set, the spans go to that endpoint and no file is written. `docs/telemetry.md` has the backends and the attributes. `docs/demo/trace.json` is one file from this command. `@opentelemetry/sdk-node` 0.300.0 requires Node.js 22.15 or later.
 
 ## Layout
 
