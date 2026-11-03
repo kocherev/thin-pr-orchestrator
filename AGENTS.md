@@ -88,7 +88,7 @@ Runs `node --disable-warning=ExperimentalWarning --import tsx scripts/record.ts`
 
 Runs `node --disable-warning=ExperimentalWarning --import tsx scripts/judge.ts`.
 
-The command replays `evals/judge-cassette.jsonl` over the replayed eval and compares each grade with `evals/cases/<id>/judge.json`. Exit 0 means the agreement is at least `evals/judge-baseline.json`. The cassette is not recorded yet, so on the committed cases the command prints `judge cassette: not recorded.` and exits 0. `pnpm eval:judge -- --record` grades the runs in one Message Batches request and needs `ANTHROPIC_API_KEY`.
+The command replays `evals/judge-cassette.jsonl` over the replayed eval and compares each grade with `evals/cases/<id>/judge.json`. Exit 0 means the agreement is at least `evals/judge-baseline.json`. The cassette is not recorded yet, so on the committed cases the command prints `judge cassette: not recorded.` and exits 0. `pnpm eval:judge -- --record` grades the runs in one message batch, with one request per case, and needs `ANTHROPIC_API_KEY`.
 
 ### pnpm trace
 

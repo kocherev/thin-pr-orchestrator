@@ -165,7 +165,7 @@ The labeled-issue workflow sets `THIN_PR_TRACE_PATH` to `artifacts/trace.json` a
 
 ## Judge
 
-The judge grades what the gate's rules cannot see: plan relevance, a minimal diff, the adequacy of any added tests, and review quality. Each criterion is `pass` or `fail` with a reason. The judge is `claude-sonnet-5-5` at medium effort with a structured output. `pnpm eval:judge -- --record` sends every case in one Message Batches request at half price and writes `evals/judge-cassette.jsonl`. `pnpm eval:judge` replays that cassette offline.
+The judge grades what the gate's rules cannot see: plan relevance, a minimal diff, the adequacy of any added tests, and review quality. Each criterion is `pass` or `fail` with a reason. The judge is `claude-sonnet-5-5` at medium effort with a structured output. `pnpm eval:judge -- --record` sends one message batch with one request per case, at half price, and writes `evals/judge-cassette.jsonl`. `pnpm eval:judge` replays that cassette offline.
 
 Each case has a human label per criterion in `evals/cases/<id>/judge.json`. The report prints the judge's agreement with those labels. The floor in `evals/judge-baseline.json` is 90%. A judge that passes everything would agree on 61 of 72 labels, 84.7%.
 

@@ -111,7 +111,7 @@ pnpm eval:judge -- --record
 pnpm eval:judge
 ```
 
-`--record` sends every case to the Message Batches API as one batch, at half the standard price. It polls every 30 seconds until the batch ends, then writes `evals/judge-cassette.jsonl`. Each line holds one batch result and the SHA-256 of the request that produced it. Without `--record`, the command replays that cassette offline. A request that changed since the recording makes the cassette stale, and the command fails.
+`--record` sends one batch to the Message Batches API, with one request per case, at half the standard price. Before it sends, it prices the largest reply every request allows and refuses the whole batch when that total would pass `THIN_PR_SPEND_LIMIT_USD`. It polls every 30 seconds until the batch ends, then writes `evals/judge-cassette.jsonl`. Each line holds one batch result and the SHA-256 of the request that produced it. Without `--record`, the command replays that cassette offline. A request that changed since the recording makes the cassette stale, and the command fails.
 
 The report compares each grade with `judge.json` and prints the agreement, the agreement per criterion, the fail labels the judge caught, and the judge cost. A case the judge could not grade, such as a refusal or an expired request, is listed and agrees on nothing. The floor in `evals/judge-baseline.json` is 90%. A judge that passes everything would agree on 61 of the 72 labels, 84.7%, and catch none of the 11 fail labels.
 
