@@ -31,7 +31,17 @@ flowchart LR
   gate -->|any fail| comment["Comment the run report"]
 ```
 
-The draft body and the failure comment lead with the outcome and a table of the nine rules, failing rules first. Collapsible sections follow for the plan, each check's log tail, the review notes, and every step attempt with its cost.
+The draft body and the run report lead with the outcome and a table of the nine rules, failing rules first. Collapsible sections follow for the plan, each check's log tail, the review notes, and every step attempt with its cost.
+
+## Working with it
+
+1. Label the issue. `thin-pr` runs the feature template. `thin-pr:bugfix` and `thin-pr:docs` run the other two.
+2. Watch the progress comment. The run posts one comment on the issue and edits it at each step, with the status, attempt, loop, and cost so far, and a link to the Actions run or the App delivery. When the run ends, the comment is the run report.
+3. Approve a big change. A change over the budget is pushed to `thin-pr/<issue>`, and the report asks for approval. Comment `/thin-pr approve` on the issue to open the draft.
+4. Retry or cancel. `/thin-pr retry` starts a fresh run with the issue's label. `/thin-pr cancel` stops a run that waits for approval and deletes its branch.
+5. Review the draft. Request changes or leave comments on the draft, as you would for a teammate. A revise run answers the review with one commit on the branch and one reply that says what changed for each comment, or why nothing was pushed.
+
+Only owners, members, and collaborators can give a command or start a revise run. thin-pr ignores everyone else, and every event a bot sends. A command comment gets an eyes reaction when the run reads it, then +1 when it is done, or confused and a short reply with the reason when it is refused. Any other word after `/thin-pr` gets the list of commands.
 
 ## Quickstart
 
@@ -76,7 +86,7 @@ The cassettes and the judge batch have no live recording yet, so the costs are t
 
 ## Model routing
 
-`templates/feature.yaml` routes the `thin-pr` label. Its budget is 12 files and 600 changed lines, and one run may spend 5 USD. A bigger diff that passes every other rule pushes the branch and waits for `/thin-pr approve`. A model call that could pass the spend limit is not sent, and the run fails with a report. These limits are placeholders until the real-repo eval measures what lands reliably. `.thin-pr.yml` can override them. `templates/README.md` lists the other two templates.
+`templates/feature.yaml` routes the `thin-pr` label. Its budget is 12 files and 600 changed lines, and one run may spend 5 USD. A bigger diff that passes every other rule pushes the branch and waits for `/thin-pr approve`. A model call that could pass the spend limit is not sent, and the run fails with a report. These limits are placeholders until the real-repo eval measures what lands reliably. `.thin-pr.yml` can override them. `templates/README.md` lists the other three templates, including `revise`, which answers reviews.
 
 | Step | Model | Effort | Why |
 | --- | --- | --- | --- |
@@ -91,7 +101,7 @@ The cassettes and the judge batch have no live recording yet, so the costs are t
 
 - `docs/architecture.md`: packages, the step model, and the data flow.
 - `docs/gate.md`: each rule, what it reads, and the eval case that trips it.
-- `docs/security.md`: untrusted issue text, tool confinement, tokens, egress, and the spend cap.
+- `docs/security.md`: untrusted issue text, who can give a command, tool confinement, tokens, egress, and the spend cap.
 - `docs/telemetry.md`: spans, attributes, and backends.
 - `docs/deploy.md`: the GitHub App on Cloudflare.
 - `docs/mcp.md`: the local command and the MCP server.
