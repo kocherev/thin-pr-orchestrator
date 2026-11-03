@@ -229,12 +229,12 @@ describe("run trace", () => {
     expectRunTrace(JSON.parse(readFileSync(join(root, "docs/demo/trace.json"), "utf8")) as unknown);
   });
 
-  it("uploads the trace from CI and from the labeled-issue workflow", () => {
+  it("uploads the trace from CI and from the Action", () => {
     const ci = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
-    const labeled = readFileSync(join(root, ".github/workflows/thin-pr.yml"), "utf8");
+    const action = readFileSync(join(root, "action.yml"), "utf8");
     expect(ci).toContain("run: pnpm trace");
     expect(ci).toContain("actions/upload-artifact@v7");
-    expect(labeled).toContain("THIN_PR_TRACE_PATH: artifacts/trace.json");
-    expect(labeled).toContain("actions/upload-artifact@v7");
+    expect(action).toContain("THIN_PR_TRACE_PATH: ${{ runner.temp }}/thin-pr/trace.json");
+    expect(action).toContain("actions/upload-artifact@v7");
   });
 });

@@ -1,6 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
 import * as core from "@actions/core";
 import * as github from "@actions/github";
 import { exportRunRecord } from "./record.js";
@@ -123,17 +122,8 @@ function actionsRunLink(env: NodeJS.ProcessEnv): string | null {
   return server && repository && runId ? `[Actions run ${runId}](${server}/${repository}/actions/runs/${runId})` : null;
 }
 
-function isDirectRun(): boolean {
-  const entry = process.argv[1];
-  if (!entry) {
-    return false;
-  }
-  return resolve(entry) === fileURLToPath(import.meta.url);
-}
-
-if (isDirectRun()) {
-  main().catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : "run failed";
-    core.setFailed(message);
-  });
-}
+// The entry is packages/github/bin/action.js, which action.yml runs.
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : "run failed";
+  core.setFailed(message);
+});

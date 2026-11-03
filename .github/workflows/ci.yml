@@ -55,7 +55,8 @@ jobs:
           THIN_PR_CANARY_KEY: canary-ci
           THIN_PR_CHECK_USER: thin-pr-check
         run: |
-          sudo useradd --create-home thin-pr-check
+          sudo useradd --no-create-home --home-dir /home/thin-pr-check thin-pr-check
+          sudo install -d -o thin-pr-check -g thin-pr-check -m 700 /home/thin-pr-check
           pnpm test:sandbox
 
       - name: Eval
@@ -86,6 +87,31 @@ jobs:
           path: artifacts/trace.json
           if-no-files-found: error
           retention-days: 14
+
+  # Runs action.yml the way another repo does: from its own folder with a fresh install, in a checkout that is not
+  # thin-pr. A pull request event starts no run, so it proves setup, install, the check user and the entry only.
+  action:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          path: thin-pr
+          persist-credentials: false
+
+      - name: Run the Action
+        uses: ./thin-pr
+        with:
+          anthropic-api-key: unused
+          trace-artifact: thin-pr-trace-action
+
+      - name: Check the run
+        run: |
+          id -u thin-pr-check
+          test -s "$RUNNER_TEMP/thin-pr/trace.json"
 
   console:
     runs-on: ubuntu-latest
