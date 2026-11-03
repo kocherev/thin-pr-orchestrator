@@ -82,6 +82,20 @@ describe("implement", () => {
     expect(await workspace.readFile("src/reset.ts")).toBe("export const reset = 0;\n");
   });
 
+  it("shows the planner the repository's files so its steps name real paths", async () => {
+    const fetch = scriptedUpstream(script);
+    const bodies: string[] = [];
+    const captured: typeof globalThis.fetch = (url, init) => {
+      bodies.push(String(init?.body));
+      return fetch(url, init);
+    };
+    const session = createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: captured });
+    await createRunHandlers(session, counterWorkspace()).plan(context("plan", 0));
+
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toContain("Repository files:\\nsrc/counter.ts");
+  });
+
   it("stops a model that keeps asking for tools at the turn cap", async () => {
     const endless = { ...script, implementer: { turns: Array(5).fill([{ name: "list_files", input: {} }]), summary: "Never." } };
     const fetch = scriptedUpstream(endless);
