@@ -21,6 +21,8 @@ export type RunEvidence = {
   /** The workspace diff against the base, or null when it was not measured. */
   readonly diff: Diff | null;
   readonly checks: readonly CheckResult[];
+  /** The template's budget with the `.thin-pr.yml` overrides applied. */
+  readonly budget: { readonly max_files: number; readonly max_lines: number };
   readonly config: RepoConfig;
 };
 
@@ -80,13 +82,13 @@ function diffRule({ diff }: RunEvidence): GateRuleResult {
   return pass("diff", `Diff is present (${countNoun(diff.files.length, "file")}, ${countNoun(changedLines(diff), "line")}).`);
 }
 
-function budgetRule({ diff, config }: RunEvidence): GateRuleResult {
+function budgetRule({ diff, budget }: RunEvidence): GateRuleResult {
   if (!diff) {
     return fail("budget", "Budget was not measured.");
   }
   const files = diff.files.length;
   const lines = changedLines(diff);
-  const { max_files: maxFiles, max_lines: maxLines } = config.budget;
+  const { max_files: maxFiles, max_lines: maxLines } = budget;
   const detail = `${countNoun(files, "file")}, ${countNoun(lines, "line")}; limit ${countNoun(maxFiles, "file")}, ${countNoun(maxLines, "line")}`;
   if (files > maxFiles || lines > maxLines) {
     return fail("budget", `Diff exceeds the budget (${detail}).`);

@@ -61,20 +61,20 @@ To run on GitHub, add the `ANTHROPIC_API_KEY` repository secret, allow GitHub Ac
 
 ## Results
 
-`pnpm eval` replays 23 labeled issues and runs each repo's checks for real: 18 against the TypeScript package in `evals/sample-repo` with `tsc` and `vitest`, and 5 against the Python package in `evals/sample-python` with `python3`. Some cases add hidden tests the implementer never sees. Eleven cases should open a draft. Twelve should not: one per gate rule from `diff` to `review`, a second budget case, an empty plan that fails before the gate, and three Python cases that fail `tests`, `paths`, and `secrets`.
+`pnpm eval` replays 23 labeled issues and runs each repo's checks for real: 18 against the TypeScript package in `evals/sample-repo` with `tsc` and `vitest`, and 5 against the Python package in `evals/sample-python` with `python3`. Some cases add hidden tests the implementer never sees. Thirteen cases should open a draft. Ten should not: one per gate rule from `diff` to `review` except `budget`, an empty plan that fails before the gate, and three Python cases that fail `tests`, `paths`, and `secrets`.
 
 | Metric | Value |
 | --- | --- |
 | Verdict accuracy | 23/23 (100.0%) |
-| Resolve rate | 11/11 (100.0%) |
-| Cost per resolved case | 0.031228 USD |
+| Resolve rate | 13/13 (100.0%) |
+| Cost per resolved case | 0.031117 USD |
 | Judge agreement | pending live recording |
 
 The cassettes and the judge batch have no live recording yet, so the costs are token estimates and the judge has no score. `evals/README.md` has every case and the commands that record them.
 
 ## Model routing
 
-`templates/small-feature.yaml` routes the `thin-pr` label. `templates/README.md` lists the other two templates.
+`templates/feature.yaml` routes the `thin-pr` label. `templates/README.md` lists the other two templates.
 
 | Step | Model | Effort | Why |
 | --- | --- | --- | --- |

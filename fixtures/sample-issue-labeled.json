@@ -6,7 +6,7 @@
   "issue": {
     "number": 7,
     "title": "Sample thin pull request",
-    "body": "Run the small-feature template on this issue."
+    "body": "Run the feature template on this issue."
   },
   "repository": {
     "name": "sample-repo",

@@ -83,7 +83,7 @@ Set the repository variable `OTEL_EXPORTER_OTLP_ENDPOINT` and the repository sec
 | Attribute | Value |
 |---|---|
 | `thin_pr.run_id` | The run id, such as `run-7` or `gha-<GITHUB_RUN_ID>` |
-| `thin_pr.template_id` | The template, such as `small-feature` |
+| `thin_pr.template_id` | The template, such as `feature` |
 | `thin_pr.usage.*` | The run totals. The five names are listed under the step spans |
 
 ### `thin-pr.<step>`

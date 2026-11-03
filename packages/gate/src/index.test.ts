@@ -127,6 +127,7 @@ function evidence(overrides: Partial<RunEvidence>): RunEvidence {
     contracts: ["plan", "implement", "verify", "review", "write"].map((step) => ({ step, valid: true })),
     diff: twoLines,
     checks: [check("typecheck", 0), check("test", 0)],
+    budget: { max_files: 2, max_lines: 16 },
     config,
     ...overrides,
   };

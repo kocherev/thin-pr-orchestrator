@@ -7,7 +7,7 @@
     "title": "Show minutes in durations",
     "url": "https://github.com/example/sample-python/issues/2"
   },
-  "template": "small-feature",
+  "template": "feature",
   "status": "opened",
   "steps": [
     {
@@ -140,7 +140,7 @@
     {
       "rule": "budget",
       "verdict": "PASS",
-      "reason": "Diff is within the budget (2 files, 9 lines; limit 2 files, 16 lines)."
+      "reason": "Diff is within the budget (2 files, 9 lines; limit 12 files, 600 lines)."
     },
     {
       "rule": "paths",

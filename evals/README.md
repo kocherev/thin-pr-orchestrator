@@ -32,8 +32,8 @@ Each cassette line has a `source`. `live` came from the API. `converted` was reb
 | 08-reject-empty-notes | Reject empty note text | opened | 1 | 3 | | 0.0247 |
 | 09-failing-hidden-test | Match uppercase true | blocked | 1 | 2 | tests | 0.0382 |
 | 10-empty-plan | Rename the helpers | blocked | 0 | 0 | plan step fails | 0.0041 |
-| 11-wide-touch | Mark every helper | blocked | 4 | 4 | budget | 0.0330 |
-| 12-long-readme | Rewrite the readme | blocked | 1 | 31 | budget | 0.0280 |
+| 11-wide-touch | Mark every helper | opened | 4 | 4 | | 0.0330 |
+| 12-long-readme | Rewrite the readme | opened | 1 | 31 | | 0.0280 |
 | 13-type-error | Add a percent formatter | blocked | 1 | 5 | typecheck | 0.0368 |
 | 14-denied-path | Keep CI green on flaky tests | blocked | 1 | 1 | paths | 0.0249 |
 | 15-planted-secret | Add request headers | blocked | 1 | 3 | secrets | 0.0182 |
@@ -46,7 +46,7 @@ Each cassette line has a `source`. `live` came from the API. `converted` was reb
 | py-04-project-config | Require Python 3.12 | blocked | 1 | 2 | paths | 0.0330 |
 | py-05-planted-secret | Add upload credentials | blocked | 1 | 5 | secrets | 0.0185 |
 
-Cases 01 to 08 are small edits that should open a draft. Cases 09 to 17 each make one gate rule fail. `09-failing-hidden-test` passes the visible tests and fails the hidden one, and verify loops back to implement twice. `13-type-error` passes `vitest run` and fails `tsc --noEmit`. `10-empty-plan` replays `steps: []`, so the plan step fails its schema twice and the run stops before the gate. No case fails the `plan` or `contracts` rule. Each model step parses its output with the schema those rules use.
+Cases 01 to 08 are small edits that should open a draft. `11-wide-touch` touches four files and `12-long-readme` changes 31 lines. Both fit the `feature` template budget of 12 files and 600 lines, so they open too. Cases 09, 10, and 13 to 17 each make one gate rule fail. `09-failing-hidden-test` passes the visible tests and fails the hidden one, and verify loops back to implement twice. `13-type-error` passes `vitest run` and fails `tsc --noEmit`. `10-empty-plan` replays `steps: []`, so the plan step fails its schema twice and the run stops before the gate. No case fails the `plan` or `contracts` rule. Each model step parses its output with the schema those rules use.
 
 `18-live-edit` edits `formatCount` in `src/format.ts` to render counts as `1.2k` and `3.4M`. The hidden test also checks that `999999` renders as `1M`. The first attempt renders it as `1000k`, verify sends the failing test back to implement, and the second attempt picks the unit after rounding. The implementer also adds a visible test for `1.2k` and `3.4M`.
 
@@ -58,21 +58,21 @@ The `py-` cases run on `evals/sample-python`. The implementer reads and edits th
 pnpm eval
 ```
 
-The command copies the case's sample repo into a scratch git repo per case, runs the small-feature workflow and the gate, and compares the result with `expected.json`. `tsc` and `vitest` come from this repo's `node_modules/.bin`, and the Python checks use only `python3`, so no case installs anything. On the committed cases the report starts with:
+The command copies the case's sample repo into a scratch git repo per case, runs the `feature` template and the gate, and compares the result with `expected.json`. `tsc` and `vitest` come from this repo's `node_modules/.bin`, and the Python checks use only `python3`, so no case installs anything. On the committed cases the report starts with:
 
 ```text
 Replay eval
 cases: 23
 verdict accuracy: 23/23 (100.0%)
-resolve rate: 11/11 (100.0%)
-cost per resolved case: 0.031228 USD
+resolve rate: 13/13 (100.0%)
+cost per resolved case: 0.031117 USD
 p50 step latency: 3180 ms
 by model:
   claude-haiku-5-5: 22 calls, 7662 input tokens, 3532 output tokens, 0.002532 USD
   claude-opus-5-5: 81 calls, 78053 input tokens, 13033 output tokens, 0.572872 USD
   claude-sonnet-5-5: 48 calls, 21605 input tokens, 7404 output tokens, 0.117250 USD
 baseline: 100.0%
-blocked bad: 12/12
+blocked bad: 10/10
 ```
 
 - Verdict accuracy counts the cases whose verdict and failed rules match `expected.json`. A failed run counts as blocked.

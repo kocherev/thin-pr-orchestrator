@@ -7,7 +7,7 @@ const record: RunRecord = {
   runId: "run-7",
   repo: "example/sample-repo",
   issue: { number: 7, title: "Fix the stub", url: "https://github.com/example/sample-repo/issues/7" },
-  template: "small-feature",
+  template: "feature",
   status: "blocked",
   steps: [],
   gate: [

@@ -16,10 +16,18 @@ const stepSchema = z
   })
   .strict();
 
+const limit = z.number().int().positive();
+
+/** The review size a run may reach before a person has to approve it. Lines count added plus removed. */
+const budgetSchema = z.object({ max_files: limit, max_lines: limit }).strict();
+
 const templateSchema = z
   .object({
     id: z.string().min(1),
     label: z.string().min(1),
+    budget: budgetSchema,
+    /** The most one run may spend on model calls, in USD. */
+    spend_usd: z.number().positive(),
     steps: z.array(stepSchema).min(1),
   })
   .strict()
@@ -43,6 +51,7 @@ const templateSchema = z
     });
   });
 
+export type Budget = z.infer<typeof budgetSchema>;
 export type TemplateStep = z.infer<typeof stepSchema>;
 export type Template = z.infer<typeof templateSchema>;
 

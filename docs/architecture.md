@@ -47,8 +47,10 @@ A loop that keeps calling a model until it decides it is done hides three decisi
 A template is YAML data under `templates/`. Its `label` selects it, and each step names its id, an optional model and effort, a retry count, and an optional loop. `templates/README.md` lists the three templates.
 
 ```yaml
-id: small-feature
+id: feature
 label: thin-pr
+budget: { max_files: 12, max_lines: 600 }
+spend_usd: 5
 steps:
   - { id: plan,      model: claude-sonnet-5-5, effort: medium, retries: 1 }
   - { id: implement, model: claude-opus-5-5,   effort: high,   retries: 1 }

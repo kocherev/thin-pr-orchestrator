@@ -7,7 +7,7 @@
     "title": "Add decrementBy",
     "url": "https://github.com/example/sample-repo/issues/17"
   },
-  "template": "small-feature",
+  "template": "feature",
   "status": "blocked",
   "steps": [
     {
@@ -228,7 +228,7 @@
     {
       "rule": "budget",
       "verdict": "PASS",
-      "reason": "Diff is within the budget (1 file, 4 lines; limit 2 files, 16 lines)."
+      "reason": "Diff is within the budget (1 file, 4 lines; limit 12 files, 600 lines)."
     },
     {
       "rule": "paths",

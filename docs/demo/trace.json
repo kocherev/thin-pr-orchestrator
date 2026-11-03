@@ -1415,7 +1415,7 @@
                 {
                   "key": "thin_pr.template_id",
                   "value": {
-                    "stringValue": "small-feature"
+                    "stringValue": "feature"
                   }
                 },
                 {

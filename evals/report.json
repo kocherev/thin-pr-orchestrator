@@ -145,11 +145,9 @@
     {
       "caseId": "11-wide-touch",
       "title": "Mark every helper",
-      "expected": "blocked",
-      "actual": "blocked",
-      "failedRules": [
-        "budget"
-      ],
+      "expected": "opened",
+      "actual": "opened",
+      "failedRules": [],
       "costUsd": 0.033016,
       "durationMs": 23085,
       "models": [
@@ -161,11 +159,9 @@
     {
       "caseId": "12-long-readme",
       "title": "Rewrite the readme",
-      "expected": "blocked",
-      "actual": "blocked",
-      "failedRules": [
-        "budget"
-      ],
+      "expected": "opened",
+      "actual": "opened",
+      "failedRules": [],
       "costUsd": 0.027994,
       "durationMs": 20955,
       "models": [

@@ -23,14 +23,14 @@ When `decide` returns `fail`, `runIssue` posts a failed check per rule on the ba
 | `plan` | the plan output | The plan is missing or does not match the planner schema. | None. See below. |
 | `contracts` | the contract flags | No step output was checked, or one is missing or invalid. | None. See below. |
 | `diff` | the diff | The diff was not measured, it is empty, or only whitespace changed. | `16-whitespace-only` |
-| `budget` | the diff and `budget` | The file count or the added plus removed lines pass `max_files` or `max_lines`. | `11-wide-touch`, `12-long-readme` |
+| `budget` | the diff and the run budget | The file count or the added plus removed lines pass `max_files` or `max_lines`. | None. See below. |
 | `paths` | the diff and `paths` | A changed path matches `paths.deny`, or matches no `paths.allow` glob. Deny wins. | `14-denied-path`, `py-04-project-config` |
 | `secrets` | the diff patch | An added line looks like a credential. | `15-planted-secret`, `py-05-planted-secret` |
 | `typecheck` | the checks | The typecheck command did not run or exited non-zero. | `13-type-error` |
 | `tests` | the checks | The test command did not run or exited non-zero. | `09-failing-hidden-test`, `py-03-failing-hidden-test` |
 | `review` | the review output | The review is missing, does not match the reviewer schema, or requests changes. | `17-review-notes` |
 
-The default `.thin-pr.yml` sets `budget` to 2 files and 16 lines. It allows `src/**`, `test/**`, `examples/**`, `README.md`, and `docs/**`, and denies `.github/**`, `**/.env*`, `pnpm-lock.yaml`, and `package-lock.json`.
+The budget comes from the template, and `.thin-pr.yml` can override each field. The default `.thin-pr.yml` allows `src/**`, `test/**`, `examples/**`, `README.md`, and `docs/**`, and denies `.github/**`, `**/.env*`, `pnpm-lock.yaml`, and `package-lock.json`.
 
 ### `diff`
 
@@ -38,7 +38,7 @@ The default `.thin-pr.yml` sets `budget` to 2 files and 16 lines. It allows `src
 
 ### `budget`
 
-`11-wide-touch` adds one line to each of four files. The reason is `Diff exceeds the budget (4 files, 4 lines; limit 2 files, 16 lines).` `12-long-readme` changes 31 lines in one file and fails on lines.
+`11-wide-touch` adds one line to each of four files, and `12-long-readme` changes 31 lines in one file. Both fit the `feature` budget of 12 files and 600 lines and open a draft. `packages/gate/src/index.test.ts` covers the failure.
 
 ### `paths`
 

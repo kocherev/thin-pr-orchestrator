@@ -7,8 +7,8 @@
     "title": "Rewrite the readme",
     "url": "https://github.com/example/sample-repo/issues/12"
   },
-  "template": "small-feature",
-  "status": "blocked",
+  "template": "feature",
+  "status": "opened",
   "steps": [
     {
       "id": "plan",
@@ -131,8 +131,8 @@
     },
     {
       "rule": "budget",
-      "verdict": "FAIL",
-      "reason": "Diff exceeds the budget (1 file, 31 lines; limit 2 files, 16 lines)."
+      "verdict": "PASS",
+      "reason": "Diff is within the budget (1 file, 31 lines; limit 12 files, 600 lines)."
     },
     {
       "rule": "paths",
@@ -187,7 +187,10 @@
       "logTail": "\n RUN  v5.0.5 .\n\n\n Test Files  4 passed (4)\n      Tests  4 passed (4)\n\n"
     }
   ],
-  "pullRequest": null,
+  "pullRequest": {
+    "number": 1,
+    "url": "https://example.test/example/sample-repo/pull/1"
+  },
   "totals": {
     "costUsd": 0.0279945,
     "durationMs": 20955,

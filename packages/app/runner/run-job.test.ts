@@ -30,7 +30,7 @@ const JOB: Job = {
   defaultBranch: "main",
   issueNumber: 7,
   issueTitle: "Sample thin pull request",
-  issueBody: "Run the small-feature template on this issue.",
+  issueBody: "Run the feature template on this issue.",
   label: "thin-pr",
 };
 

@@ -6,8 +6,8 @@ A template is data. `label` is the issue label that selects it. `steps` lists `p
 
 | File | Label | Shape |
 | --- | --- | --- |
-| `small-feature.yaml` | `thin-pr` | One retry per model step. Verify and review each loop back to implement at most twice. |
+| `feature.yaml` | `thin-pr` | One retry per model step. Verify and review each loop back to implement at most twice. |
 | `bugfix.yaml` | `thin-pr:bugfix` | Two implement retries. Verify loops back to implement at most three times. |
-| `docs-update.yaml` | `thin-pr:docs` | Smaller models. Verify does not loop. Review loops back to implement at most once. |
+| `docs.yaml` | `thin-pr:docs` | Smaller models. Verify does not loop. Review loops back to implement at most once. |
 
 The gate is not a step. `packages/github` evaluates it after `write`.

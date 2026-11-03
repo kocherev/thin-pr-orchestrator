@@ -26,7 +26,7 @@ const stepOf: Record<string, string> = { planner: "plan", implementer: "implemen
 // Prompt, issue, file, and reply text from the replayed run. None of it may reach a span.
 const content = [
   "Sample thin pull request",
-  "Run the small-feature template",
+  "Run the feature template",
   "Plan the change.",
   "Plan the stub change",
   "export function stub",

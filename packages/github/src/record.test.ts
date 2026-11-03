@@ -41,7 +41,7 @@ describe("toRunRecord", () => {
     const record = toRunRecord({
       runId: "run-7",
       event,
-      template: "small-feature",
+      template: "feature",
       status: "blocked",
       timeline,
       gate: [{ rule: "tests", verdict: "FAIL", reason: "Tests did not pass." }],
@@ -55,7 +55,7 @@ describe("toRunRecord", () => {
       runId: "run-7",
       repo: "example/sample-repo",
       issue: { number: 7, title: "Clamp decrement at zero", url: "https://github.com/example/sample-repo/issues/7" },
-      template: "small-feature",
+      template: "feature",
       status: "blocked",
       diff: { files: [{ path: "src/counter.ts", added: 1, removed: 1 }], meaningful: true },
       checks: [{ name: "test", exitCode: 1, logTail: "1 failed" }],
@@ -77,7 +77,7 @@ describe("toRunRecord", () => {
     const record = toRunRecord({
       runId: "run-7",
       event,
-      template: "small-feature",
+      template: "feature",
       status: "failed",
       timeline: [],
       gate: [],
@@ -99,7 +99,7 @@ function timed(events: (Partial<RunEvent> & Pick<RunEvent, "step" | "kind">)[]):
     event: {
       seq: index + 1,
       runId: "run-7",
-      templateId: "small-feature",
+      templateId: "feature",
       attempt: 0,
       output: null,
       feedback: null,

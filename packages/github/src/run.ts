@@ -32,6 +32,22 @@ export type LabelRunResult =
   | { readonly status: "opened"; readonly record: RunRecord }
   | { readonly status: "blocked" | "failed"; readonly record: RunRecord; readonly error: string };
 
+/** What one run may change and spend: the template's limits with the `.thin-pr.yml` overrides applied field by field. */
+export type RunLimits = {
+  readonly budget: { readonly max_files: number; readonly max_lines: number };
+  readonly spendUsd: number;
+};
+
+export function runLimits(template: Template, config: RepoConfig): RunLimits {
+  return {
+    budget: {
+      max_files: config.budget.max_files ?? template.budget.max_files,
+      max_lines: config.budget.max_lines ?? template.budget.max_lines,
+    },
+    spendUsd: config.spend_usd ?? template.spend_usd,
+  };
+}
+
 const CONTRACTS: Record<StepId, { safeParse(value: unknown): { success: boolean } }> = {
   plan: plannerOutput,
   implement: implementerOutput,
@@ -151,6 +167,7 @@ export async function runIssue(deps: {
       contracts: deps.template.steps.map(({ id }) => ({ step: id, valid: CONTRACTS[id].safeParse(state.outputs[id]).success })),
       diff,
       checks,
+      budget: runLimits(deps.template, deps.config).budget,
       config: deps.config,
     };
     gate = evaluate(evidence);

@@ -7,7 +7,7 @@
     "title": "Rename the helpers",
     "url": "https://github.com/example/sample-repo/issues/10"
   },
-  "template": "small-feature",
+  "template": "feature",
   "status": "failed",
   "steps": [
     {

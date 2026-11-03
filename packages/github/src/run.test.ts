@@ -4,9 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import { templateForLabel } from "@thin-pr/core";
 import { createAnthropicClient, scriptedUpstream, type ModelSession, type Script } from "@thin-pr/specialists";
-import { createScratchRepo } from "@thin-pr/workspace";
-import { runAction, type LabelRunResult } from "./run.js";
+import { createScratchRepo, loadRepoConfig } from "@thin-pr/workspace";
+import { runAction, runLimits, type LabelRunResult } from "./run.js";
 import type { GitHubSurface } from "./surface.js";
 
 const root = fileURLToPath(new URL("../../..", import.meta.url));
@@ -373,6 +374,21 @@ describe("issue label", () => {
     const surface = readFileSync(fileURLToPath(new URL("./surface.ts", import.meta.url)), "utf8");
     expect(surface).toContain("pulls");
     expect(surface).toContain("draft: true");
+  });
+});
+
+describe("runLimits", () => {
+  it("takes each budget field and the spend from .thin-pr.yml when it sets one, and the rest from the template", () => {
+    const feature = templateForLabel(join(root, "templates"), "thin-pr");
+    if (!feature) throw new Error("no feature template");
+    expect(runLimits(feature, loadRepoConfig(scratch(PASSING_CHECKS).dir))).toEqual({
+      budget: { max_files: 12, max_lines: 600 },
+      spendUsd: 5,
+    });
+    expect(runLimits(feature, loadRepoConfig(scratch("budget:\n  max_lines: 40\nspend_usd: 0.5\n").dir))).toEqual({
+      budget: { max_files: 12, max_lines: 40 },
+      spendUsd: 0.5,
+    });
   });
 });
 

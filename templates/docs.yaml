@@ -1,5 +1,8 @@
-id: docs-update
+id: docs
 label: thin-pr:docs
+# Placeholder limits until the real-repo eval measures what lands reliably. .thin-pr.yml can override them.
+budget: { max_files: 8, max_lines: 400 }
+spend_usd: 1
 steps:
   - { id: plan,      model: claude-haiku-5-5,  effort: low,    retries: 1 }
   - { id: implement, model: claude-sonnet-5-5, effort: medium, retries: 1 }

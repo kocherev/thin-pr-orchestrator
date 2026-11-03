@@ -28,8 +28,8 @@ describe("replay eval", () => {
       correct: 23,
       accuracy: 1,
       minVerdictAccuracy: 1,
-      resolved: { count: 11, total: 11 },
-      blocked: { count: 12, total: 12 },
+      resolved: { count: 13, total: 13 },
+      blocked: { count: 10, total: 10 },
       meetsBaseline: true,
     });
     expect(Object.fromEntries(report.cases.map((item) => [item.id, item.failedRules.join(", ") || item.actual]))).toEqual({
@@ -43,8 +43,8 @@ describe("replay eval", () => {
       "08-reject-empty-notes": "opened",
       "09-failing-hidden-test": "tests",
       "10-empty-plan": "failed",
-      "11-wide-touch": "budget",
-      "12-long-readme": "budget",
+      "11-wide-touch": "opened",
+      "12-long-readme": "opened",
       "13-type-error": "typecheck",
       "14-denied-path": "paths",
       "15-planted-secret": "secrets",
@@ -99,13 +99,13 @@ describe("replay eval", () => {
     );
 
     expect(text).toContain("verdict accuracy: 23/23 (100.0%)");
-    expect(text).toContain("resolve rate: 11/11 (100.0%)");
-    expect(text).toContain("cost per resolved case: 0.031228 USD");
+    expect(text).toContain("resolve rate: 13/13 (100.0%)");
+    expect(text).toContain("cost per resolved case: 0.031117 USD");
     expect(text).toContain("p50 step latency: 3180 ms");
     expect(text).toContain("  claude-opus-5-5: 81 calls, 78053 input tokens, 13033 output tokens, 0.572872 USD");
-    expect(text).toContain("blocked bad: 12/12");
-    expect(text).toContain("rules failed by a case: diff, budget, paths, secrets, typecheck, tests, review");
-    expect(text).toContain("rules no case fails: plan, contracts");
+    expect(text).toContain("blocked bad: 10/10");
+    expect(text).toContain("rules failed by a case: diff, paths, secrets, typecheck, tests, review");
+    expect(text).toContain("rules no case fails: plan, contracts, budget");
     expect(text).toContain("01-clamp-decrement opened ok files 1 lines 2");
     expect(text).toContain("15-planted-secret blocked ok files 1 lines 3 failed rules: secrets");
     expect(text).toContain("py-05-planted-secret blocked ok files 1 lines 5 failed rules: secrets");
@@ -225,7 +225,7 @@ function scored(expected: "opened" | "blocked", verdict: "opened" | "blocked", s
     runId: "eval",
     repo: "example/sample-repo",
     issue: { number: 1, title: "Case", url: "https://example.test/1" },
-    template: "small-feature",
+    template: "feature",
     status: verdict,
     steps,
     gate: [],

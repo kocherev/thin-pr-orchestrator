@@ -1,6 +1,6 @@
 export { openEventLog, type EventLog } from "./log.js";
 export { replay, runWorkflow, StepError } from "./machine.js";
-export { templateForLabel, TemplateError, type Template, type TemplateStep } from "./template.js";
+export { templateForLabel, TemplateError, type Budget, type Template, type TemplateStep } from "./template.js";
 export type {
   Json,
   RunEvent,

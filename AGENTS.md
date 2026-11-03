@@ -70,8 +70,8 @@ Stdout on the committed cases starts with:
 Replay eval
 cases: 23
 verdict accuracy: 23/23 (100.0%)
-resolve rate: 11/11 (100.0%)
-cost per resolved case: 0.031228 USD
+resolve rate: 13/13 (100.0%)
+cost per resolved case: 0.031117 USD
 p50 step latency: 3180 ms
 ```
 
