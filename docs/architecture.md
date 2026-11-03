@@ -38,6 +38,7 @@ The Action and the App answer the same label. The App defers to an enabled thin-
 | `packages/github` | The only GitHub client. It parses the webhook payload, runs `verify`, posts check runs, builds the RunRecord, writes the draft body and the run report, pushes, and opens the draft. It also holds the Action entry, `runLocal`, and the CLI. | Live inside `packages/core`. |
 | `packages/app` | A Cloudflare Worker that verifies the webhook, queues the job, mints an installation token, and starts a container that calls `runLabeledIssue`. | Run the workflow itself. |
 | `packages/mcp` | A stdio MCP server with `list_runs`, `get_run`, `replay_case`, and `start_run`. | Push or call GitHub. |
+| `apps/console` | A static Next.js export of the RunRecords in `evals/runs/` and the report in `evals/report.json`. | Call an API at runtime. |
 
 ## Step model
 
