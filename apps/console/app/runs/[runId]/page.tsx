@@ -34,8 +34,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 const externalLink = "inline-flex items-center gap-1 underline-offset-2 hover:text-foreground hover:underline";
 
-function PullRequest({ pullRequest, replay }: { pullRequest: NonNullable<RunRecord["pullRequest"]>; replay: boolean }) {
-  if (replay) return <span className="text-xs text-muted-foreground">Draft opened in the replay</span>;
+/** Only live runs get the link. A replay's pull request number never existed on GitHub. */
+function PullRequest({ pullRequest }: { pullRequest: NonNullable<RunRecord["pullRequest"]> }) {
   return (
     <a href={pullRequest.url} className={buttonVariants({ variant: "outline", size: "sm" })}>
       Draft PR #{pullRequest.number}
@@ -98,7 +98,7 @@ export default async function RunPage({ params }: Props) {
             {replay ? <p className="mt-2 text-xs">{REPLAY_NOTE}</p> : null}
           </>
         }
-        actions={run.pullRequest ? <PullRequest pullRequest={run.pullRequest} replay={replay} /> : undefined}
+        actions={run.pullRequest && !replay ? <PullRequest pullRequest={run.pullRequest} /> : undefined}
       />
 
       <RunOutcome run={run} />
