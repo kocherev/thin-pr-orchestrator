@@ -2,10 +2,12 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { Middleware, MiddlewareContext } from "@anthropic-ai/sdk";
 import { trace } from "@opentelemetry/api";
 import type { Usage } from "@thin-pr/core";
+import { createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
 import { costOf, pricedModel, type BilledUsage, type PricedModel } from "./pricing.js";
+import { stableText } from "./stable.js";
 
 /** Names the specialist behind a request. The transport reads it and strips it before anything is sent. */
 export const SPECIALIST_HEADER = "x-thin-pr-specialist";
@@ -15,7 +17,13 @@ const ATTR_COST_USD = "thin_pr.cost_usd";
 
 export type TransportOptions =
   | { readonly mode: "live"; readonly spendLimitUsd: number }
-  | { readonly mode: "record" | "replay"; readonly cassettePath: string; readonly spendLimitUsd: number };
+  | {
+      readonly mode: "record" | "replay";
+      readonly cassettePath: string;
+      readonly spendLimitUsd: number;
+      /** Replay only. False serves the recorded replies in order without comparing request hashes. */
+      readonly checkRequests?: boolean;
+    };
 
 const cassetteEntry = z
   .object({
@@ -28,6 +36,8 @@ const cassetteEntry = z
     durationMs: z.number().nonnegative(),
     // The conversation sent. System prompts and tool schemas live in the code.
     request: z.object({ messages: z.json() }).strict(),
+    // `requestHash` of the whole request. Replay fails when the request it gets hashes differently.
+    requestHash: z.string().regex(/^[0-9a-f]{64}$/),
     // A JSON body is stored parsed. A streamed body is stored as the raw event stream text.
     response: z.object({ contentType: z.string(), body: z.json() }).strict(),
   })
@@ -36,6 +46,31 @@ const cassetteEntry = z
 export type CassetteEntry = z.infer<typeof cassetteEntry>;
 
 const messageRequest = z.looseObject({ model: z.string(), max_tokens: z.number(), messages: z.json() });
+
+/** What a request asks the model. Headers, betas, limits and fallbacks change how it is served, not what it asks. */
+const HASHED_FIELDS = ["model", "system", "messages", "tools", "output_config"] as const;
+
+/**
+ * SHA-256 of a request's model, system prompt, messages, tools and output config. Keys are sorted, and every string
+ * goes through `stableText`, because tool results carry check logs with scratch paths and timings.
+ */
+export function requestHash(body: Readonly<Record<string, unknown>>): string {
+  const asked = Object.fromEntries(HASHED_FIELDS.map((field) => [field, body[field] ?? null]));  return createHash("sha256").update(canonical(asked)).digest("hex");
+}
+
+function canonical(value: unknown): string {
+  if (typeof value === "string") {
+    return JSON.stringify(stableText(value));
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonical).join(",")}]`;
+  }
+  if (typeof value === "object" && value !== null) {
+    const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
 
 export class CassetteError extends Error {
   constructor(message: string) {
@@ -124,7 +159,7 @@ export class SpendMeter {
  */
 export function createTransport(options: TransportOptions): { middleware: Middleware; meter: SpendMeter } {
   const meter = new SpendMeter(options.spendLimitUsd);
-  const play = options.mode === "replay" ? player(options.cassettePath) : null;
+  const play = options.mode === "replay" ? player(options.cassettePath, options.checkRequests ?? true) : null;
   const write = options.mode === "record" ? recorder(options.cassettePath) : null;
 
   const middleware: Middleware = async (request, next, ctx) => {
@@ -139,6 +174,7 @@ export function createTransport(options: TransportOptions): { middleware: Middle
     }
     const sent = messageRequest.parse(JSON.parse(request.body));
     const model = pricedModel(sent.model);
+    const hash = requestHash(sent);
     // The SDK runs middleware inside its `anthropic.messages.create` span, which has the GenAI attributes.
     // This adds what only the transport knows.
     const span = trace.getActiveSpan();
@@ -149,7 +185,7 @@ export function createTransport(options: TransportOptions): { middleware: Middle
     };
 
     if (play) {
-      const entry = play(specialist, model);
+      const entry = play(specialist, model, hash);
       const { contentType, body: recorded } = entry.response;
       const text = typeof recorded === "string" ? recorded : JSON.stringify(recorded);
       const response = new Response(text, { status: 200, headers: { "content-type": contentType } });
@@ -172,7 +208,8 @@ export function createTransport(options: TransportOptions): { middleware: Middle
       const contentType = upstream.headers.get("content-type") ?? "application/json";
       const stored = contentType.includes("json") ? z.json().parse(JSON.parse(text)) : text;
       const recordedAt = new Date().toISOString();
-      const entry = { source: "live", recordedAt, specialist, model, durationMs, request: { messages: sent.messages } } as const;
+      const request = { messages: sent.messages };
+      const entry = { source: "live", recordedAt, specialist, model, durationMs, request, requestHash: hash } as const;
       write({ ...entry, response: { contentType, body: stored } });
     }
     return response;
@@ -206,8 +243,8 @@ async function billedUsage(response: Response, ctx: MiddlewareContext): Promise<
   return usage;
 }
 
-/** Hands out recorded calls in order, per specialist, and checks each one asks for the recorded model. */
-function player(path: string): (specialist: string, model: string) => CassetteEntry {
+/** Hands out recorded calls in order, per specialist, and checks each one is the request that was recorded. */
+function player(path: string, checkRequests: boolean): (specialist: string, model: string, hash: string) => CassetteEntry {
   const queues = new Map<string, CassetteEntry[]>();
   const lines = readFileSync(path, "utf8").split("\n");
   for (const [index, line] of lines.entries()) {
@@ -220,7 +257,7 @@ function player(path: string): (specialist: string, model: string) => CassetteEn
   }
   const played = new Map<string, number>();
 
-  return (specialist, model) => {
+  return (specialist, model, hash) => {
     const call = (played.get(specialist) ?? 0) + 1;
     played.set(specialist, call);
     const entry = queues.get(specialist)?.[call - 1];
@@ -231,6 +268,11 @@ function player(path: string): (specialist: string, model: string) => CassetteEn
     if (entry.model !== model) {
       throw new CassetteError(
         `cassette ${path}: ${specialist} call ${call} was recorded with ${entry.model}, the request asks for ${model}`,
+      );
+    }
+    if (checkRequests && entry.requestHash !== hash) {
+      throw new CassetteError(
+        `cassette ${path}: request drifted from the cassette at ${specialist} call ${call}; re-record with pnpm eval:record`,
       );
     }
     return entry;

@@ -32,6 +32,7 @@ export {
 export { runImplementer } from "./implementer.js";
 export { TurnLimitError } from "./tools.js";
 export { costOf, type PricedModel } from "./pricing.js";
+export { stableText } from "./stable.js";
 export { scriptedBatchUpstream, scriptedUpstream, type Script, type ScriptedTurn } from "./scripted.js";
 export {
   RefusalError,

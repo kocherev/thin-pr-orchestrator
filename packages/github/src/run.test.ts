@@ -354,7 +354,8 @@ describe("issue label", () => {
     // The default branch moves on. The next run starts from a fresh clone, as actions/checkout gives it.
     const clone = cloneAndCommit(repo.remote, "README.md", "# Sample\n");
     const second = memoryGitHub({ openPull: { number: 11, url: "https://github.com/example/sample-repo/pull/11" } });
-    const result = await run(clone, second.github, { model: cassette("gate-pass") });
+    // The new README changes the planner's file list, so the recording no longer matches. The script still edits the stub.
+    const result = await run(clone, second.github, { model: scripted(STUB_SCRIPT) });
 
     expect(result.status).toBe("opened");
     expect(git(repo.remote, "rev-parse", "thin-pr/7^")).toBe(clone.baseSha);

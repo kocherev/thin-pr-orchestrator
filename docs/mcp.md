@@ -20,7 +20,7 @@ pnpm thin-pr run --repo /path/to/checkout --issue issue.md
 
 The RunRecord goes to `<runId>.json` in `--out`, or in `.git/thin-pr/runs` of the checkout by default. That directory sits inside the git directory, so the record never shows up as a change and is never committed. The run id is `local-` plus the start time in milliseconds. A local run has no pull request and no issue page, so `pullRequest` is `null` and `issue.url` is empty.
 
-`THIN_PR_MODEL` picks the model mode, as in the Action. `replay` is the default and reads the cassette at `THIN_PR_CASSETTE`. `live` and `record` need `ANTHROPIC_API_KEY`. This command replays eval case 01 against a copy of `evals/sample-repo`:
+`THIN_PR_MODEL` picks the model mode, as in the Action. `replay` is the default and reads the cassette at `THIN_PR_CASSETTE`. `live` and `record` need `ANTHROPIC_API_KEY`. A local run's issue and files differ from the run that recorded an eval cassette, so a local replay serves the recorded replies in order and skips the request hash check that `pnpm eval` makes. This command replays eval case 01 against a copy of `evals/sample-repo`:
 
 ```bash
 THIN_PR_CASSETTE=evals/cases/01-clamp-decrement/cassette.jsonl \
@@ -61,7 +61,7 @@ The sample package checks with bare `tsc` and `vitest`. Put this repo's `node_mo
 | `replay_case` | `caseId`, a directory under `evals/cases` | `verdict`, `failedRules`, `expected`, `correct`, and the RunRecord. |
 | `start_run` | `repo`, an absolute path, and `issue`, the issue text | `status`, `branch`, `report`, `recordPath`, and the RunRecord, from the same `runLocal` as the command line. |
 
-`replay_case` copies the sample repo the case's issue names, `evals/sample-repo` or `evals/sample-python`, and the case's `hidden/` tests into a scratch repo, then calls `runLocal` with the case's cassette. Replay ignores what the tools return, so committing the hidden tests with the base gives the verdict `pnpm eval` gives. It calls no model API.
+`replay_case` copies the sample repo the case's issue names, `evals/sample-repo` or `evals/sample-python`, and the case's `hidden/` tests into a scratch repo, then calls `runLocal` with the case's cassette. The hidden tests and the local issue number make its requests differ from the recording, so it serves the recorded replies in order without the request hash check that `pnpm eval` makes. It reaches the verdict `pnpm eval` gives and calls no model API.
 
 A tool that fails answers with an MCP tool error, `isError: true` and the message as text. Examples are an unknown `runId`, an unknown `caseId`, a relative `repo`, or `THIN_PR_RUNS_DIR` unset. The server keeps running.
 

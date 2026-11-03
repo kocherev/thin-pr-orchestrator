@@ -46,7 +46,7 @@ async function main(argv: readonly string[]): Promise<number> {
     repo: values.repo,
     issue,
     runsDir: values.out,
-    model: () => createAnthropicClient(clientOptionsFromEnv()),
+    model: () => createAnthropicClient({ ...clientOptionsFromEnv(), checkRequests: false }),
   });
   const lines = [result.report, "", `Status: ${result.status}`];
   if (result.branch) {
