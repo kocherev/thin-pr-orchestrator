@@ -55,7 +55,8 @@ jobs:
           THIN_PR_CANARY_KEY: canary-ci
           THIN_PR_CHECK_USER: thin-pr-check
         run: |
-          sudo useradd --create-home thin-pr-check
+          sudo useradd --no-create-home --home-dir /home/thin-pr-check thin-pr-check
+          sudo install -d -o thin-pr-check -g thin-pr-check -m 700 /home/thin-pr-check
           pnpm test:sandbox
 
       - name: Eval
@@ -100,14 +101,6 @@ jobs:
         with:
           path: thin-pr
           persist-credentials: false
-
-      - name: Probe useradd
-        run: |
-          ls -la /usr/sbin/sss_cache || true
-          systemctl is-active sssd || true
-          time sudo useradd --create-home probe-a
-          time sudo sss_cache -E || true
-          time sudo useradd --no-create-home probe-b
 
       - name: Run the Action
         uses: ./thin-pr

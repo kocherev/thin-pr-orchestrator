@@ -43,9 +43,15 @@ runs:
         fi
 
     # Checks run as this second user, so code the model wrote cannot read the run's secrets. See docs/security.md.
+    # An empty home: --create-home copies the runner image's /etc/skel, which holds whole toolchains and takes
+    # 20 to 80 seconds.
     - name: Create the check user
       shell: bash
-      run: id -u thin-pr-check > /dev/null 2>&1 || sudo useradd --create-home thin-pr-check
+      run: |
+        if ! id -u thin-pr-check > /dev/null 2>&1; then
+          sudo useradd --no-create-home --home-dir /home/thin-pr-check thin-pr-check
+          sudo install -d -o thin-pr-check -g thin-pr-check -m 700 /home/thin-pr-check
+        fi
 
     - name: Run the event
       shell: bash
