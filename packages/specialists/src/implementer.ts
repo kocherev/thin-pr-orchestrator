@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { PricedModel } from "./pricing.js";
 import { implementerSystem, type Budget } from "./prompts.js";
 import { cachedSystem, fallbackFor, issueBlock, type Effort } from "./structured.js";
-import { runToolLoop, workspaceTools } from "./tools.js";
+import { CACHE_CONVERSATION, runToolLoop, workspaceTools } from "./tools.js";
 import { SPECIALIST_HEADER } from "./transport.js";
 import type { Workspace } from "./workspace.js";
 
@@ -56,6 +56,7 @@ export async function runImplementer(client: Anthropic, request: ImplementReques
       ...fallback,
       betas: [...(fallback.betas ?? []), CONTEXT_MANAGEMENT_BETA],
       context_management: CLEAR_OLD_TOOL_RESULTS,
+      cache_control: CACHE_CONVERSATION,
       model: request.model,
       max_tokens: MAX_TOKENS,
       thinking: { type: "adaptive" },

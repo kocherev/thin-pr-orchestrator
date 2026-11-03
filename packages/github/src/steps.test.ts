@@ -136,6 +136,29 @@ describe("implement", () => {
     });
   });
 
+  it("caches the conversation in the planner and implementer loops and meters the cache reads", async () => {
+    const fetch = scriptedUpstream({ ...script, plannerReads: [[{ name: "read_file", input: { path: "src/counter.ts" } }]] });
+    const bodies: Record<string, unknown>[] = [];
+    // Every turn after the first reads 800 tokens from the cache, as the API reports it.
+    const cached: typeof globalThis.fetch = async (url, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      const reply = (await (await fetch(url, init)).json()) as { usage: Record<string, number> };
+      const turn = (bodies.at(-1)?.messages as unknown[]).length;
+      return Response.json({ ...reply, usage: { ...reply.usage, cache_read_input_tokens: turn > 1 ? 800 : 0 } });
+    };
+    const session = createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: cached });
+    const handlers = createRunHandlers(session, counterWorkspace(), LIMITS);
+    const planned = await handlers.plan(context("plan", 0));
+    const implemented = await handlers.implement({ ...context("implement", 0), outputs: { plan } });
+
+    expect(bodies.length).toBeGreaterThan(3);
+    for (const body of bodies) {
+      expect(body).toMatchObject({ cache_control: { type: "ephemeral" }, system: [{ type: "text", cache_control: { type: "ephemeral" } }] });
+    }
+    expect(planned.usage?.map((call) => call.cacheReadTokens)).toEqual([0, 800]);
+    expect(implemented.usage?.map((call) => call.cacheReadTokens)).toEqual([0, 800, 800]);
+  });
+
   it("stops a model that keeps asking for tools at the turn cap", async () => {
     const endless = { ...script, implementer: { turns: Array(5).fill([{ name: "list_files", input: {} }]), summary: "Never." } };
     const fetch = scriptedUpstream(endless);

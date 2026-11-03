@@ -19,6 +19,13 @@ const READ_MAX_TOKENS = 16_000;
 const READ_MAX_TURNS = 8;
 
 /**
+ * Top-level automatic caching: the API puts a breakpoint on the last cacheable block and moves it forward each turn,
+ * so a tool loop reads the conversation so far from the cache. The system block keeps its own breakpoint. Both use
+ * the 5-minute TTL. See "Automatic vs explicit breakpoints" in the prompt caching docs.
+ */
+export const CACHE_CONVERSATION: Anthropic.Beta.Messages.BetaCacheControlEphemeral = { type: "ephemeral" };
+
+/**
  * A structured-output call that may first read the workspace with `read_file` and `search`. The API allows tools and
  * `output_config.format` in one request, and the reply that ends the loop follows the schema.
  */
@@ -29,6 +36,7 @@ export async function structuredWithReads<T>(
   const runner = client.beta.messages.toolRunner(
     {
       ...fallbackFor(request.model),
+      cache_control: CACHE_CONVERSATION,
       model: request.model,
       max_tokens: READ_MAX_TOKENS,
       thinking: { type: "adaptive" },

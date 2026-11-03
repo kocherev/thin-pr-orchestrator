@@ -116,7 +116,7 @@ The gate is not a step. `runIssue` evaluates it after `write` finishes. `runIssu
 
 ## Specialists
 
-Each model step takes its model and effort from the template step, or from the specialist default when the step names none. Every request sets `thinking` to adaptive and an explicit `output_config.effort`. It omits `temperature`, `top_p`, and `top_k`. Opus 5.5 and Sonnet 5.5 requests opt into the server-side fallback.
+Each model step takes its model and effort from the template step, or from the specialist default when the step names none. Every request sets `thinking` to adaptive and an explicit `output_config.effort`. It omits `temperature`, `top_p`, and `top_k`. Opus 5.5 and Sonnet 5.5 requests opt into the server-side fallback. Each system prompt is one block with a cache breakpoint. The planner and implementer tool loops also set top-level `cache_control`, so the API moves a second breakpoint to the end of the conversation on each turn and the next turn reads the history from the cache. Each call's `cache_read_input_tokens` goes into its usage as `cacheReadTokens`.
 
 The planner, reviewer, and pr-writer are structured-output calls built from their `.strict()` Zod schemas. The planner's call also carries `read_file` and `search`, so it can read the files it is about to name. Its tool loop stops after 8 turns. A reply that still fails the schema throws `SpecialistSchemaError` with the specialist, the phase, and the path of the first issue. A refusal fails the step with its category. A reviewer or pr-writer reply cut off at `max_tokens` is retried once with twice the room. A cut-off planner reply fails the attempt, and the step retries.
 
