@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
+import { RouteProgress } from "@/components/route-progress";
 import { SiteNav } from "@/components/site-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import "./globals.css";
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         >
           Skip to content
         </a>
+        <RouteProgress />
         <header className="border-b border-border bg-surface">
           <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4 sm:px-6">
             <Link href="/" className="shrink-0 font-mono text-sm font-semibold tracking-tight whitespace-nowrap">

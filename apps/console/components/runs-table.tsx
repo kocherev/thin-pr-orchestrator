@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useDeferredValue, useState } from "react";
 import { STATUS_LABEL } from "@/lib/labels";
 import { RUN_STATUSES, type RunStatus } from "@/lib/schema";
 import { cn } from "@/lib/utils";
@@ -41,7 +41,10 @@ function filterLabel(filter: Filter): string {
 export function RunsTable({ rows }: { rows: RunRow[] }) {
   const [filter, setFilter] = useState<Filter>("all");
   const [filtered, setFiltered] = useState(false);
-  const visible = filter === "all" ? rows : rows.filter((row) => row.status === filter);
+  // The pressed button updates at once; the table follows when React has time, and dims until it does.
+  const shown = useDeferredValue(filter);
+  const pending = shown !== filter;
+  const visible = shown === "all" ? rows : rows.filter((row) => row.status === shown);
 
   function choose(option: Filter) {
     setFilter(option);
@@ -75,10 +78,16 @@ export function RunsTable({ rows }: { rows: RunRow[] }) {
       </div>
 
       <p role="status" className="sr-only">
-        {filtered ? `${filterLabel(filter)}: showing ${visible.length} of ${rows.length} runs` : ""}
+        {filtered ? `${filterLabel(shown)}: showing ${visible.length} of ${rows.length} runs` : ""}
       </p>
 
-      <div className="overflow-hidden rounded-xl bg-surface shadow-border">
+      <div
+        aria-busy={pending}
+        className={cn(
+          "overflow-hidden rounded-xl bg-surface shadow-border transition-[opacity] duration-150 ease-out",
+          pending && "opacity-60",
+        )}
+      >
         <Table>
           <TableHeader>
             <TableRow>
@@ -122,10 +131,10 @@ export function RunsTable({ rows }: { rows: RunRow[] }) {
                 </TableCell>
               </TableRow>
             ))}
-            {filter !== "all" && visible.length === 0 ? (
+            {shown !== "all" && visible.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={COLUMNS} className="py-8 whitespace-normal">
-                  <p className="font-medium">{NO_MATCH[filter]}</p>
+                  <p className="font-medium">{NO_MATCH[shown]}</p>
                   <button
                     type="button"
                     onClick={() => choose("all")}

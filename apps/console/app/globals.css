@@ -71,3 +71,68 @@
     scroll-margin-block-start: 1.5rem;
   }
 }
+
+@keyframes pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.route-progress {
+  position: fixed;
+  inset-inline: 0;
+  top: 0;
+  z-index: 60;
+  height: 2px;
+  background-color: var(--primary);
+  transform-origin: left center;
+  pointer-events: none;
+  opacity: 0;
+}
+
+/* The 150ms delay keeps the bar hidden on navigations that finish from the prefetch cache. */
+.route-progress[data-state="loading"] {
+  opacity: 1;
+  transition: opacity 150ms ease-out 150ms;
+}
+
+.route-progress[data-state="done"] {
+  opacity: 0;
+  transition: opacity 200ms ease-out 150ms;
+}
+
+@starting-style {
+  .route-progress[data-state="loading"] {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton {
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+
+  .route-progress {
+    scale: 0 1;
+  }
+
+  .route-progress[data-state="loading"] {
+    scale: 0.85 1;
+    transition:
+      opacity 150ms ease-out 150ms,
+      scale 5s cubic-bezier(0.1, 0.6, 0.2, 1) 150ms;
+  }
+
+  .route-progress[data-state="done"] {
+    scale: 1 1;
+    transition:
+      opacity 200ms ease-out 150ms,
+      scale 200ms var(--ease-out-strong);
+  }
+
+  @starting-style {
+    .route-progress[data-state="loading"] {
+      scale: 0 1;
+    }
+  }
+}
