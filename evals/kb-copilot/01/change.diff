@@ -1,0 +1,140 @@
+diff --git a/.env.example b/.env.example
+index a2f6dea..3a660d0 100644
+--- a/.env.example
++++ b/.env.example
+@@ -26,8 +26,8 @@ BETTER_AUTH_SECRET=replace-me
+ # The browser-facing web URL. It is also the JWT issuer the API checks.
+ BETTER_AUTH_URL=http://localhost:3000
+ # Shared secret for service reads of GET /products/{id} (header X-Internal-Token).
+-# The API checks it and the agent sends it. Compose passes the same value to both.
+-# services/mcp does not read it, so its get_product tool gets a 401.
++# The API checks it, and the agent and services/mcp send it. Compose passes the same
++# value to the API and the agent. Set it for services/mcp yourself.
+ # replace-me turns the internal route off (HTTP 503). Generate: openssl rand -hex 32
+ INTERNAL_API_TOKEN=replace-me
+ # Session starts allowed per org per minute, and the LiveKit token lifetime.
+diff --git a/README.md b/README.md
+index 7886215..534784c 100644
+--- a/README.md
++++ b/README.md
+@@ -186,7 +186,7 @@ The other commands need a key. They need `uv sync --all-packages --group dev` fi
+ 
+ ## MCP
+ 
+-`services/mcp` speaks MCP over stdio. `search_kb` runs the same `kb_rag.search` as the agent, against the Qdrant that Compose publishes on `localhost:6333`. `get_product` reads `GET /products/{id}`. The client configuration, the arguments, and a known limit of `get_product` are in `services/mcp/README.md`.
++`services/mcp` speaks MCP over stdio. `search_kb` runs the same `kb_rag.search` as the agent, against the Qdrant that Compose publishes on `localhost:6333`. `get_product` reads `GET /products/{id}`. The client configuration and the arguments are in `services/mcp/README.md`.
+ 
+ ## Desktop helper
+ 
+diff --git a/services/mcp/README.md b/services/mcp/README.md
+index 788c1db..643cbcf 100644
+--- a/services/mcp/README.md
++++ b/services/mcp/README.md
+@@ -17,6 +17,7 @@ The process waits on stdin. It needs Python 3.12 and uv on the host. The first `
+ | `QDRANT_URL` | `http://localhost:6333` | `search_kb`. Change it when you changed `QDRANT_PORT` |
+ | `QDRANT_API_KEY` | none | `search_kb`, sent when set |
+ | `API_URL` | `http://localhost:8000` | `get_product`. Change it when you changed `API_PORT` |
++| `INTERNAL_API_TOKEN` | none | `get_product`, sent as `X-Internal-Token`. Must match the API's value |
+ 
+ ## Connect a client
+ 
+@@ -37,7 +38,8 @@ The client starts the process. Stdout is the protocol. Set the project directory
+       ],
+       "env": {
+         "QDRANT_URL": "http://localhost:6333",
+-        "API_URL": "http://localhost:8000"
++        "API_URL": "http://localhost:8000",
++        "INTERNAL_API_TOKEN": "<same value as the API>"
+       }
+     }
+   }
+@@ -47,7 +49,3 @@ The client starts the process. Stdout is the protocol. Set the project directory
+ ## Tools
+ 
+ `search_kb` takes `query` and `product_id`. It returns `chunks` (source, title, anchor, text, score), `sources`, and `abstained` for that product only. `abstained` is true and `chunks` is empty when no passage clears the abstain threshold. A malformed product id, or one with no indexed documents, is a tool error. `get_product` takes `product_id` and returns the stored name, description, tone, and refusal rules.
+-
+-## Known limit: `get_product` returns 401
+-
+-The API requires a sign-in for `GET /products/{id}`. A service may instead send the header `X-Internal-Token` with the API's `INTERNAL_API_TOKEN`, which the agent does. This server sends no credentials and does not read `INTERNAL_API_TOKEN`, so `get_product` returns the tool error `product config returned 401` on the current code. `search_kb` does not call the API and is not affected.
+diff --git a/services/mcp/src/kb_mcp/server.py b/services/mcp/src/kb_mcp/server.py
+index fd480ec..3f6321f 100644
+--- a/services/mcp/src/kb_mcp/server.py
++++ b/services/mcp/src/kb_mcp/server.py
+@@ -8,7 +8,7 @@ from functools import cache
+ from typing import Annotated
+ from urllib.error import HTTPError, URLError
+ from urllib.parse import quote
+-from urllib.request import urlopen
++from urllib.request import Request, urlopen
+ 
+ from kb_rag import (
+     DEFAULT_SETTINGS,
+@@ -57,8 +57,11 @@ class ProductConfig(BaseModel):
+ 
+ def fetch_product(api_url: str, product_id: str) -> ProductConfig:
+     request_url = f"{api_url.rstrip('/')}/products/{quote(product_id, safe='')}"
++    token = os.environ.get("INTERNAL_API_TOKEN", "")
++    headers = {"X-Internal-Token": token} if token else {}
++    request = Request(request_url, headers=headers)
+     try:
+-        with urlopen(request_url, timeout=10) as response:
++        with urlopen(request, timeout=10) as response:
+             body = json.loads(response.read().decode())
+     except HTTPError as exc:
+         raise ToolError(f"product config returned {exc.code}") from exc
+diff --git a/services/mcp/tests/test_server.py b/services/mcp/tests/test_server.py
+index 86d95bf..2ec407f 100644
+--- a/services/mcp/tests/test_server.py
++++ b/services/mcp/tests/test_server.py
+@@ -25,6 +25,13 @@ PRODUCT = {
+     "tone": "calm and brief",
+     "refusal_rules": "Do not invent a policy that is not in the docs.",
+ }
++TOKEN = "internal-secret"
++WRONG_TOKEN = "wrong-secret"
++
++
++@pytest.fixture(autouse=True)
++def internal_token(monkeypatch: pytest.MonkeyPatch) -> None:
++    monkeypatch.setenv("INTERNAL_API_TOKEN", TOKEN)
+ 
+ 
+ def _run(server: MCPServer, call):
+@@ -69,7 +76,10 @@ def api_url() -> Iterator[str]:
+         def do_GET(self) -> None:
+             product_id = unquote(urlparse(self.path).path.removeprefix("/products/"))
+             found = products.get(product_id)
+-            if found is None:
++            if self.headers.get("X-Internal-Token") != TOKEN:
++                payload = b'{"detail":"unauthorized"}'
++                status = 401
++            elif found is None:
+                 payload = b'{"detail":"product not found"}'
+                 status = 404
+             else:
+@@ -188,6 +198,25 @@ def test_get_product_returns_the_stored_config(server: MCPServer) -> None:
+     assert "Northstar Desk" in _text(result)
+ 
+ 
++def test_get_product_with_a_wrong_token_is_a_tool_error(
++    server: MCPServer, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    monkeypatch.setenv("INTERNAL_API_TOKEN", WRONG_TOKEN)
++
++    result = _run(
++        server,
++        lambda client: client.call_tool("get_product", {"product_id": "demo"}),
++    )
++
++    assert result.is_error is True
++    assert result.structured_content is None
++    text = _text(result)
++    assert "401" in text
++    assert WRONG_TOKEN not in text
++    assert TOKEN not in text
++    assert "Northstar Desk" not in text
++
++
+ def test_get_product_for_a_missing_id_does_not_return_another_product(
+     server: MCPServer,
+ ) -> None:

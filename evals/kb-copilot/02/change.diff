@@ -1,0 +1,154 @@
+diff --git a/apps/web/openapi.json b/apps/web/openapi.json
+index a442f61..7857ec9 100644
+--- a/apps/web/openapi.json
++++ b/apps/web/openapi.json
+@@ -1464,6 +1464,16 @@
+               }
+             }
+           },
++          "429": {
++            "description": "Too many handoffs proposed in this session",
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorBody"
++                }
++              }
++            }
++          },
+           "503": {
+             "description": "Linear is not configured",
+             "content": {
+diff --git a/apps/web/src/lib/api/schema.d.ts b/apps/web/src/lib/api/schema.d.ts
+index 19fe825..11dc256 100644
+--- a/apps/web/src/lib/api/schema.d.ts
++++ b/apps/web/src/lib/api/schema.d.ts
+@@ -1741,6 +1741,15 @@ export interface operations {
+                     "application/json": components["schemas"]["HTTPValidationError"];
+                 };
+             };
++            /** @description Too many handoffs proposed in this session */
++            429: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["ErrorBody"];
++                };
++            };
+             /** @description Linear is not configured */
+             503: {
+                 headers: {
+diff --git a/services/api/src/kb_api/escalations.py b/services/api/src/kb_api/escalations.py
+index 34b5a8a..2f1974e 100644
+--- a/services/api/src/kb_api/escalations.py
++++ b/services/api/src/kb_api/escalations.py
+@@ -6,7 +6,7 @@ from uuid import UUID
+ 
+ from fastapi import APIRouter, Depends, HTTPException
+ from pydantic import BaseModel, ConfigDict, StringConstraints
+-from sqlalchemy import select, update
++from sqlalchemy import func, select, update
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from kb_api import linear
+@@ -36,6 +36,7 @@ router = APIRouter(tags=["escalations"], responses=AUTH_ERRORS)
+ log = logging.getLogger(__name__)
+ 
+ TITLE_LIMIT = 120
++MAX_PROPOSALS_PER_SESSION = 3
+ AGENT = "agent"
+ 
+ NOT_CONNECTED: dict[int | str, dict[str, object]] = {
+@@ -104,6 +105,10 @@ async def owned_escalation(db: AsyncSession, org_id: str, id: UUID) -> Escalatio
+     responses={
+         404: {"model": ErrorBody, "description": "No such session"},
+         **NOT_CONNECTED,
++        429: {
++            "model": ErrorBody,
++            "description": "Too many handoffs proposed in this session",
++        },
+         **NOT_CONFIGURED,
+     },
+ )
+@@ -113,13 +118,21 @@ async def propose_escalation(
+     db: Db,
+     config: Config,
+ ) -> Escalation:
++    # The row lock serializes proposals for one room, so two cannot pass the cap.
+     session = await db.scalar(
+-        select(LiveSessionRow).where(LiveSessionRow.room == body.room)
++        select(LiveSessionRow).where(LiveSessionRow.room == body.room).with_for_update()
+     )
+     if session is None:
+         raise HTTPException(404, "session not found")
+     if await load_connection(db, session.org_id) is None:
+         raise HTTPException(409, "Linear is not connected")
++    proposed = await db.scalar(
++        select(func.count())
++        .select_from(EscalationRow)
++        .where(EscalationRow.room == session.room)
++    )
++    if (proposed or 0) >= MAX_PROPOSALS_PER_SESSION:
++        raise HTTPException(429, "too many handoffs proposed in this session")
+     product = await db.get(ProductRow, session.product_id)
+     assert product is not None  # the session row cascades with its product
+     row = EscalationRow(
+diff --git a/services/api/tests/test_linear.py b/services/api/tests/test_linear.py
+index aaaf83c..f805ac3 100644
+--- a/services/api/tests/test_linear.py
++++ b/services/api/tests/test_linear.py
+@@ -423,6 +423,53 @@ def test_a_long_summary_makes_a_short_title(
+     assert title.endswith("…")
+ 
+ 
++def test_a_session_proposes_at_most_three_handoffs(
++    http: TestClient, linear: FakeLinear, room: str, as_user: Headers, rows
++) -> None:
++    connect(http, as_user())
++
++    for _ in range(3):
++        assert propose(http, room).status_code == 201
++    fourth = propose(http, room)
++
++    assert fourth.status_code == 429
++    assert fourth.json() == {"detail": "too many handoffs proposed in this session"}
++    assert len(rows("escalations")) == 3
++    audit = [r for r in rows("audit_log") if r["action"] == "escalation.propose"]
++    assert len(audit) == 3
++
++
++def test_a_dismissed_handoff_keeps_its_slot_and_other_rooms_are_apart(
++    http: TestClient,
++    linear: FakeLinear,
++    room: str,
++    as_user: Headers,
++    sync_engine: Engine,
++    rows,
++) -> None:
++    connect(http, as_user())
++    first = propose(http, room).json()
++    http.post(f"/escalations/{first['id']}/dismiss", headers=as_user())
++    propose(http, room)
++    propose(http, room)
++
++    assert propose(http, room).status_code == 429
++    other = f"kb-{uuid4()}"
++    with Session(sync_engine) as db:
++        session = db.query(LiveSessionRow).filter_by(room=room).one()
++        db.add(
++            LiveSessionRow(
++                org_id="org-a",
++                product_id=session.product_id,
++                room=other,
++                user_id="user-a",
++            )
++        )
++        db.commit()
++    assert propose(http, other).status_code == 201
++    assert len(rows("escalations")) == 4
++
++
+ def test_approve_creates_the_issue_once(
+     http: TestClient, linear: FakeLinear, room: str, as_user: Headers, rows
+ ) -> None:

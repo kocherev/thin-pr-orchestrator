@@ -73,7 +73,19 @@ To run on GitHub, add the `ANTHROPIC_API_KEY` repository secret, allow GitHub Ac
 
 ## Results
 
-`pnpm eval` replays 26 labeled issues and runs each repo's checks for real: 21 against the TypeScript package in `evals/sample-repo` with `tsc` and `vitest`, and 5 against the Python package in `evals/sample-python` with `python3`. Some cases add hidden tests the implementer never sees. Fifteen cases should open a draft, two of them multi-file changes of 5 and 3 files. Ten should not: one per gate rule from `diff` to `review` except `budget`, an empty plan that fails before the gate, and three Python cases that fail `tests`, `paths`, and `secrets`. One case changes 13 files, one more than the feature budget, and must end waiting for approval.
+**On a real repo.** thin-pr ran ten issues on [kb-copilot](https://github.com/kocherev/kb-copilot), a Python and TypeScript monorepo it had never seen. The repo owner wrote the issues and a hidden acceptance test for each, then reviewed every diff.
+
+| Metric | Value |
+| --- | --- |
+| Owner verdict | 10/10 correct |
+| Hidden acceptance tests | 9/10 pass. The owner traced the miss to the test itself. |
+| Gate passed | 9/10. One correct fix was blocked by a false positive, now fixed. |
+| Cost | $2.49 for all ten, $0.20 median per issue |
+| Largest change | 6 files, 123 lines |
+
+`evals/kb-copilot/README.md` has each issue, its diff, and what the eval changed in thin-pr.
+
+**On the sample repos.** `pnpm eval` replays 26 labeled issues and runs each repo's checks for real: 21 against the TypeScript package in `evals/sample-repo` with `tsc` and `vitest`, and 5 against the Python package in `evals/sample-python` with `python3`. Some cases add hidden tests the implementer never sees. Fifteen cases should open a draft, two of them multi-file changes of 5 and 3 files. Ten should not: one per gate rule from `diff` to `review` except `budget`, an empty plan that fails before the gate, and three Python cases that fail `tests`, `paths`, and `secrets`. One case changes 13 files, one more than the feature budget, and must end waiting for approval.
 
 | Metric | Value |
 | --- | --- |
@@ -83,11 +95,11 @@ To run on GitHub, add the `ANTHROPIC_API_KEY` repository secret, allow GitHub Ac
 | Cost per resolved case | 0.034382 USD |
 | Judge agreement | pending live recording |
 
-The cassettes and the judge batch have no live recording yet, so the costs are token estimates and the judge has no score. `evals/README.md` has every case and the commands that record them.
+The sample-repo cassettes and the judge batch have no live recording yet, so those costs are token estimates and the judge has no score. The kb-copilot numbers above are live. `evals/README.md` has every case and the commands that record them.
 
 ## Model routing
 
-`templates/feature.yaml` routes the `thin-pr` label. Its budget is 12 files and 600 changed lines, and one run may spend 5 USD. A bigger diff that passes every other rule pushes the branch and waits for `/thin-pr approve`. A model call that could pass the spend limit is not sent, and the run fails with a report. These limits are placeholders until the real-repo eval measures what lands reliably. `.thin-pr.yml` can override them. `templates/README.md` lists the other three templates, including `revise`, which answers reviews.
+`templates/feature.yaml` routes the `thin-pr` label. Its budget is 12 files and 600 changed lines, and one run may spend 5 USD. A bigger diff that passes every other rule pushes the branch and waits for `/thin-pr approve`. A model call that could pass the spend limit is not sent, and the run fails with a report. On kb-copilot the largest change was 6 files and 123 lines, and the most expensive run cost $0.71, so the limits leave room. `.thin-pr.yml` can override them. `templates/README.md` lists the other three templates, including `revise`, which answers reviews.
 
 | Step | Model | Effort | Why |
 | --- | --- | --- | --- |
@@ -107,6 +119,7 @@ The cassettes and the judge batch have no live recording yet, so the costs are t
 - `docs/deploy.md`: the GitHub App on Cloudflare.
 - `docs/mcp.md`: the local command and the MCP server.
 - `evals/README.md`: the cases, the judge, and the nightly live run.
+- `evals/kb-copilot/README.md`: ten live runs on a real repo, graded by its owner.
 - `apps/console/README.md`: the static console. `pnpm console:build` writes it to `apps/console/out`.
 - `AGENTS.md`: commands and rules for changing the repo.
 

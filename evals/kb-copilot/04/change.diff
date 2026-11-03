@@ -1,0 +1,51 @@
+diff --git a/evals/src/kb_evals/answers.py b/evals/src/kb_evals/answers.py
+index feccdcf..b2a4155 100644
+--- a/evals/src/kb_evals/answers.py
++++ b/evals/src/kb_evals/answers.py
+@@ -99,6 +99,8 @@ def main() -> int:
+     parser.add_argument("--out", type=Path, required=True)
+     parser.add_argument("--limit", type=int)
+     args = parser.parse_args()
++    if args.limit is not None and args.limit < 1:
++        parser.error("--limit must be at least 1")
+     if not os.environ.get("GOOGLE_API_KEY"):
+         raise SystemExit("GOOGLE_API_KEY is required")
+     asyncio.run(_run(args.out, args.limit))
+diff --git a/evals/tests/test_answers.py b/evals/tests/test_answers.py
+index 0048f84..241f59d 100644
+--- a/evals/tests/test_answers.py
++++ b/evals/tests/test_answers.py
+@@ -2,7 +2,8 @@ import asyncio
+ import json
+ from pathlib import Path
+ 
+-from kb_evals.answers import SearchTool, write_answers
++import pytest
++from kb_evals.answers import SearchTool, main, write_answers
+ from kb_evals.dataset import EvalCase
+ from kb_evals.run import RagRetriever
+ from kb_rag import Source
+@@ -76,3 +77,23 @@ def test_a_refusal_cites_nothing(tmp_path: Path) -> None:
+     row = json.loads((tmp_path / "a.jsonl").read_text())
+     assert row["answer"] == "That is not in the docs."
+     assert row["cited_passage_ids"] == []
++
++
++@pytest.mark.parametrize("limit", ["0", "-5"])
++def test_a_limit_below_one_is_rejected_before_anything_runs(
++    limit: str,
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++    capsys: pytest.CaptureFixture[str],
++) -> None:
++    out = tmp_path / "a.jsonl"
++    monkeypatch.setattr(
++        "sys.argv", ["kb_evals.answers", "--out", str(out), "--limit", limit]
++    )
++
++    with pytest.raises(SystemExit) as exited:
++        main()
++
++    assert exited.value.code != 0
++    assert "must be at least 1" in capsys.readouterr().err
++    assert not out.exists()

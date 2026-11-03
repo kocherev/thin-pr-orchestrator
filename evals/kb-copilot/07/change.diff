@@ -1,0 +1,124 @@
+diff --git a/apps/web/src/app/api/integrations/linear/callback/route.test.ts b/apps/web/src/app/api/integrations/linear/callback/route.test.ts
+index aac8857..1218140 100644
+--- a/apps/web/src/app/api/integrations/linear/callback/route.test.ts
++++ b/apps/web/src/app/api/integrations/linear/callback/route.test.ts
+@@ -1,5 +1,5 @@
+ import { NextRequest } from "next/server";
+-import { beforeEach, expect, test, vi } from "vitest";
++import { afterEach, beforeEach, expect, test, vi } from "vitest";
+ 
+ import { GET } from "@/app/api/integrations/linear/callback/route";
+ 
+@@ -8,7 +8,12 @@ vi.mock("@/lib/api/server", () => ({ serverApi: async () => api }));
+ 
+ const callback = "http://localhost:3000/api/integrations/linear/callback";
+ 
+-beforeEach(() => api.POST.mockReset());
++beforeEach(() => {
++  api.POST.mockReset();
++  vi.stubEnv("BETTER_AUTH_URL", undefined);
++});
++
++afterEach(() => vi.unstubAllEnvs());
+ 
+ async function visit(query: string) {
+   const response = await GET(new NextRequest(`${callback}?${query}`));
+@@ -26,6 +31,13 @@ test("the code and state go to the API and the user lands on settings", async ()
+   });
+ });
+ 
++test("the redirect goes to BETTER_AUTH_URL when it is set", async () => {
++  vi.stubEnv("BETTER_AUTH_URL", "https://app.example.com");
++  api.POST.mockResolvedValue({ response: { ok: true } });
++
++  expect(await visit("code=c&state=s")).toBe("https://app.example.com/settings?linear=connected");
++});
++
+ test("a refusal by the API or a failed call is a failure notice", async () => {
+   api.POST.mockResolvedValueOnce({ response: { ok: false } });
+   expect(await visit("code=c&state=s")).toBe("http://localhost:3000/settings?linear=failed");
+diff --git a/apps/web/src/app/api/integrations/linear/callback/route.ts b/apps/web/src/app/api/integrations/linear/callback/route.ts
+index cf2ca32..3ecc967 100644
+--- a/apps/web/src/app/api/integrations/linear/callback/route.ts
++++ b/apps/web/src/app/api/integrations/linear/callback/route.ts
+@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
+ 
+ import { serverApi } from "@/lib/api/server";
+ import type { LinearNotice } from "@/lib/linear";
++import { publicUrl } from "@/lib/public-url";
+ 
+ // Linear sends the browser here after the user answers. The API checks the
+ // state against this signed-in user and org, then swaps the code for tokens.
+@@ -23,5 +24,5 @@ export async function GET(request: NextRequest) {
+       notice = "failed";
+     }
+   }
+-  return NextResponse.redirect(new URL(`/settings?linear=${notice}`, request.url));
++  return NextResponse.redirect(publicUrl(`/settings?linear=${notice}`, request));
+ }
+diff --git a/apps/web/src/lib/public-url.test.ts b/apps/web/src/lib/public-url.test.ts
+new file mode 100644
+index 0000000..3b74afc
+--- /dev/null
++++ b/apps/web/src/lib/public-url.test.ts
+@@ -0,0 +1,24 @@
++import { afterEach, expect, test, vi } from "vitest";
++
++import { publicUrl } from "@/lib/public-url";
++
++const request = { url: "http://0.0.0.0:3000/api/integrations/linear/callback" };
++
++afterEach(() => vi.unstubAllEnvs());
++
++test("BETTER_AUTH_URL is the base when it is set", () => {
++  vi.stubEnv("BETTER_AUTH_URL", "https://app.example.com");
++  expect(publicUrl("/sign-in", request).toString()).toBe("https://app.example.com/sign-in");
++});
++
++test("a trailing slash in BETTER_AUTH_URL does not break the path", () => {
++  vi.stubEnv("BETTER_AUTH_URL", "https://app.example.com/");
++  expect(publicUrl("/settings?linear=connected", request).toString()).toBe(
++    "https://app.example.com/settings?linear=connected",
++  );
++});
++
++test("without BETTER_AUTH_URL the request URL is the base", () => {
++  vi.stubEnv("BETTER_AUTH_URL", undefined);
++  expect(publicUrl("/sign-in", request).toString()).toBe("http://0.0.0.0:3000/sign-in");
++});
+diff --git a/apps/web/src/lib/public-url.ts b/apps/web/src/lib/public-url.ts
+new file mode 100644
+index 0000000..772c797
+--- /dev/null
++++ b/apps/web/src/lib/public-url.ts
+@@ -0,0 +1,10 @@
++// The server can see its own bind address (0.0.0.0 in the image) in
++// request.url. Redirects must point where users reach the app, which is
++// BETTER_AUTH_URL when it is set.
++export function publicUrl(path: string, request: { url: string }): URL {
++  const base = process.env.BETTER_AUTH_URL?.trim().replace(/\/+$/, "");
++  if (base) {
++    return new URL(base + path);
++  }
++  return new URL(path, request.url);
++}
+diff --git a/apps/web/src/proxy.ts b/apps/web/src/proxy.ts
+index c64f528..e2e9ea0 100644
+--- a/apps/web/src/proxy.ts
++++ b/apps/web/src/proxy.ts
+@@ -1,12 +1,14 @@
+ import { getSessionCookie } from "better-auth/cookies";
+ import { NextResponse, type NextRequest } from "next/server";
+ 
++import { publicUrl } from "@/lib/public-url";
++
+ // A cheap cookie check. Pages still verify the session on the server.
+ export function proxy(request: NextRequest) {
+   if (getSessionCookie(request)) {
+     return NextResponse.next();
+   }
+-  return NextResponse.redirect(new URL("/sign-in", request.url));
++  return NextResponse.redirect(publicUrl("/sign-in", request));
+ }
+ 
+ export const config = {

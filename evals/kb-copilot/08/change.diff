@@ -1,0 +1,121 @@
+diff --git a/apps/web/src/components/product-documents.test.tsx b/apps/web/src/components/product-documents.test.tsx
+index 56b849b..56739a6 100644
+--- a/apps/web/src/components/product-documents.test.tsx
++++ b/apps/web/src/components/product-documents.test.tsx
+@@ -24,6 +24,16 @@ function renderDocuments() {
+   render(<ProductDocuments apiUrl="http://localhost:8000" productId={PRODUCT} />);
+ }
+ 
++function sizedFile(name: string, size: number) {
++  const file = new File(["x"], name, { type: "text/plain" });
++  Object.defineProperty(file, "size", { value: size });
++  return file;
++}
++
++function manyFiles(count: number) {
++  return Array.from({ length: count }, (_, i) => new File(["x"], `note-${i}.md`));
++}
++
+ function listCalls(calls: ApiCall[]) {
+   return calls.filter((call) => call.method === "GET" && call.url === LIST);
+ }
+@@ -122,6 +132,62 @@ test("a rejected upload shows the API message", async () => {
+   expect((await screen.findByRole("alert")).textContent).toBe("unsupported file type: .exe");
+ });
+ 
++test("choosing more than 20 files shows an alert and keeps Upload disabled", async () => {
++  stubApi(() => ({ status: 200, body: [] }));
++  renderDocuments();
++  await screen.findByText("No documents yet.");
++
++  fireEvent.change(screen.getByLabelText("Files"), { target: { files: manyFiles(21) } });
++
++  expect(screen.getByRole("alert").textContent).toBe("Choose at most 20 files.");
++  const upload = screen.getByRole("button", { name: "Upload documents" });
++  expect(upload.hasAttribute("disabled")).toBe(true);
++});
++
++test("a file over 2 MB is refused by name and nothing is sent", async () => {
++  const calls = stubApi(() => ({ status: 200, body: [] }));
++  renderDocuments();
++  await screen.findByText("No documents yet.");
++
++  fireEvent.change(screen.getByLabelText("Files"), {
++    target: { files: [sizedFile("big.pdf", 2_000_001)] },
++  });
++
++  expect(screen.getByRole("alert").textContent).toBe("big.pdf is larger than 2 MB.");
++  const upload = screen.getByRole("button", { name: "Upload documents" });
++  expect(upload.hasAttribute("disabled")).toBe(true);
++  fireEvent.click(upload);
++  expect(calls.some((call) => call.method === "POST")).toBe(false);
++});
++
++test("exactly 20 files and a file of exactly 2,000,000 bytes are allowed", async () => {
++  stubApi(() => ({ status: 200, body: [] }));
++  renderDocuments();
++  await screen.findByText("No documents yet.");
++
++  const files = [...manyFiles(19), sizedFile("edge.pdf", 2_000_000)];
++  fireEvent.change(screen.getByLabelText("Files"), { target: { files } });
++
++  expect(screen.queryByRole("alert")).toBeNull();
++  const upload = screen.getByRole("button", { name: "Upload documents" });
++  expect(upload.hasAttribute("disabled")).toBe(false);
++});
++
++test("choosing a valid set after a refused one clears the alert", async () => {
++  stubApi(() => ({ status: 200, body: [] }));
++  renderDocuments();
++  await screen.findByText("No documents yet.");
++  const input = screen.getByLabelText("Files");
++
++  fireEvent.change(input, { target: { files: manyFiles(21) } });
++  expect(screen.getByRole("alert").textContent).toBe("Choose at most 20 files.");
++
++  fireEvent.change(input, { target: { files: manyFiles(2) } });
++  expect(screen.queryByRole("alert")).toBeNull();
++  const upload = screen.getByRole("button", { name: "Upload documents" });
++  expect(upload.hasAttribute("disabled")).toBe(false);
++});
++
+ test("deleting a document removes it from the list", async () => {
+   let deleted = false;
+   const calls = stubApi((call) => {
+diff --git a/apps/web/src/components/product-documents.tsx b/apps/web/src/components/product-documents.tsx
+index 18c30f4..85d05f1 100644
+--- a/apps/web/src/components/product-documents.tsx
++++ b/apps/web/src/components/product-documents.tsx
+@@ -24,6 +24,16 @@ import { indexedLabel } from "@/lib/product";
+ type ProductDocument = components["schemas"]["Document"];
+ 
+ const POLL_MS = 2000;
++const MAX_FILES = 20;
++const MAX_FILE_BYTES = 2_000_000;
++
++function uploadLimitError(files: File[]): string | null {
++  if (files.length > MAX_FILES) {
++    return `Choose at most ${MAX_FILES} files.`;
++  }
++  const oversized = files.find((file) => file.size > MAX_FILE_BYTES);
++  return oversized ? `${oversized.name} is larger than 2 MB.` : null;
++}
+ 
+ function isPending(document: ProductDocument): boolean {
+   return document.status === "queued" || document.status === "indexing";
+@@ -95,7 +105,14 @@ export function ProductDocuments({
+   }, [unsettled, refresh]);
+ 
+   function onFiles(event: ChangeEvent<HTMLInputElement>) {
+-    setFiles(event.target.files ? Array.from(event.target.files) : []);
++    const chosen = event.target.files ? Array.from(event.target.files) : [];
++    const limitError = uploadLimitError(chosen);
++    if (limitError) {
++      setFiles([]);
++      setError(limitError);
++      return;
++    }
++    setFiles(chosen);
+     setError(null);
+   }
+ 
