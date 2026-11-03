@@ -195,6 +195,17 @@ describe("GitWorkspace", () => {
     expect(env).not.toContain(secret);
   });
 
+  it("runs only the generators .thin-pr.yml lists, and counts what they write in the diff", async () => {
+    const repo = scratch();
+    const config = { ...loadRepoConfig(repo.dir), generate: ["mkdir -p src && echo 'export const generated = 1;' > src/generated.ts"] };
+    const workspace = await openWorkspace({ dir: repo.dir, baseSha: repo.baseSha, config });
+
+    expect(workspace.generators).toEqual(config.generate);
+    expect(await workspace.runGenerator(config.generate[0] ?? "")).toMatchObject({ exitCode: 0 });
+    expect((await workspace.diff()).files).toEqual([{ path: "src/generated.ts", added: 1, removed: 0 }]);
+    await expect(workspace.runGenerator("rm -rf .")).rejects.toThrow("rm -rf . is not a generator in .thin-pr.yml");
+  });
+
   it("refuses a checkout whose HEAD is not the base", async () => {
     const repo = scratch();
     const clone = cloneWithCommit(repo.remote, "README.md", "# Moved\n");

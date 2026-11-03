@@ -174,6 +174,37 @@ describe("implement", () => {
     expect(implemented.usage?.map((call) => call.cacheReadTokens)).toEqual([0, 800, 800]);
   });
 
+  it("lets the implementer run the repo's generators, and offers no such tool without them", async () => {
+    const generator = { ...script, implementer: { turns: [[{ name: "run_generator", input: { command: "pnpm openapi" } }]], summary: "Regenerated." } };
+    const tools = async (workspace: ReturnType<typeof counterWorkspace>) => {
+      const fetch = scriptedUpstream(generator);
+      const bodies: { tools?: { name: string; input_schema?: unknown }[] }[] = [];
+      const captured: typeof globalThis.fetch = (url, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as (typeof bodies)[number]);
+        return fetch(url, init);
+      };
+      const session = createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: captured });
+      await createRunHandlers(session, workspace, LIMITS).implement({ ...context("implement", 0), outputs: { plan } });
+      return bodies[0]?.tools ?? [];
+    };
+    const ran: string[] = [];
+    const withGenerator = {
+      ...counterWorkspace(),
+      generators: ["pnpm openapi"],
+      runGenerator: async (command: string) => {
+        ran.push(command);
+        return { command, exitCode: 0, durationMs: 1, logTail: "wrote openapi.json" };
+      },
+    };
+
+    const offered = await tools(withGenerator);
+    expect(offered.find((tool) => tool.name === "run_generator")?.input_schema).toMatchObject({
+      properties: { command: { enum: ["pnpm openapi"] } },
+    });
+    expect(ran).toEqual(["pnpm openapi"]);
+    expect((await tools(counterWorkspace())).map((tool) => tool.name)).not.toContain("run_generator");
+  });
+
   it("stops a model that keeps asking for tools at the turn cap", async () => {
     const endless = { ...script, implementer: { turns: Array(5).fill([{ name: "list_files", input: {} }]), summary: "Never." } };
     const fetch = scriptedUpstream(endless);

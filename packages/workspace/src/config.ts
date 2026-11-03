@@ -16,6 +16,8 @@ const repoConfigSchema = z
       .prefault({}),
     // Optional: a checkout that already has its dependencies needs no install.
     install: command.optional(),
+    // Commands the implementer may run, such as a code generator. It can pick one, never write its own.
+    generate: z.array(command).default([]),
     // Overrides for the template's budget and spend. A field left out keeps the template's value.
     budget: z.object({ max_files: limit.optional(), max_lines: limit.optional() }).strict().prefault({}),
     spend_usd: z.number().positive().optional(),

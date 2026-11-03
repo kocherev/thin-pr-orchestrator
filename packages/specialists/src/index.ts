@@ -9,7 +9,7 @@ export {
   summaryOf,
   verifyOutput,
 } from "./specialists.js";
-export type { CheckResult, Diff, Workspace } from "./workspace.js";
+export type { CheckResult, Diff, GeneratorResult, Workspace } from "./workspace.js";
 export {
   JUDGE_CRITERIA,
   JUDGE_EFFORT,

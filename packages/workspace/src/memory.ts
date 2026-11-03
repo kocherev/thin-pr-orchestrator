@@ -28,6 +28,10 @@ export function createMemoryWorkspace(
     async runCheck(name) {
       return { name, command: DEFAULT_CONFIG.checks[name], durationMs: 0, ...checks[name] };
     },
+    generators: [],
+    async runGenerator(command) {
+      throw new Error(`${command} is not a generator in .thin-pr.yml`);
+    },
     async diff(): Promise<Diff> {
       const changed: Diff["files"] = [];
       const patch: string[] = [];
