@@ -1,17 +1,17 @@
 import type { StepHandler, StepId } from "@thin-pr/core";
-import { createStepHandlers, type ModelSession, type Workspace } from "@thin-pr/specialists";
+import { createStepHandlers, type Budget, type ModelSession, type Workspace } from "@thin-pr/specialists";
 
 /**
  * The handlers a run uses: the model steps, which edit through the workspace tools, and verify. The session belongs
- * to this run, so its meter takes the run's `spendUsd` as a cap.
+ * to this run, so its meter takes the run's `spendUsd` as a cap, and the planner and implementer prompts state `budget`.
  */
 export function createRunHandlers(
   session: ModelSession,
   workspace: Workspace,
-  limits: { readonly spendUsd: number },
+  limits: { readonly spendUsd: number; readonly budget: Budget },
 ): Record<StepId, StepHandler> {
   session.meter.limitRun(limits.spendUsd);
-  return { ...createStepHandlers(session, workspace), verify: createVerifyHandler(workspace) };
+  return { ...createStepHandlers(session, workspace, limits.budget), verify: createVerifyHandler(workspace) };
 }
 
 /**

@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { PricedModel } from "./pricing.js";
-import { IMPLEMENTER_SYSTEM } from "./prompts.js";
+import { implementerSystem, type Budget } from "./prompts.js";
 import { cachedSystem, fallbackFor, issueBlock, type Effort } from "./structured.js";
 import { runToolLoop, workspaceTools } from "./tools.js";
 import { SPECIALIST_HEADER } from "./transport.js";
@@ -44,6 +44,7 @@ export type ImplementRequest = {
   /** The plan, and the loop feedback when there is any. */
   readonly input: string;
   readonly workspace: Workspace;
+  readonly budget: Budget;
   readonly maxTurns?: number;
 };
 
@@ -59,7 +60,7 @@ export async function runImplementer(client: Anthropic, request: ImplementReques
       max_tokens: MAX_TOKENS,
       thinking: { type: "adaptive" },
       output_config: { effort: request.effort },
-      system: cachedSystem(IMPLEMENTER_SYSTEM),
+      system: cachedSystem(implementerSystem(request.budget)),
       tools: workspaceTools(request.workspace),
       tool_choice: { type: "auto" },
       messages: [{ role: "user", content: [issueBlock(request.issue), { type: "text", text: request.input }] }],

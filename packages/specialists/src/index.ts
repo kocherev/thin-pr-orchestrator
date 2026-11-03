@@ -30,6 +30,7 @@ export {
   type ModelSession,
 } from "./client.js";
 export { runImplementer } from "./implementer.js";
+export type { Budget } from "./prompts.js";
 export { TurnLimitError } from "./tools.js";
 export { costOf, type PricedModel } from "./pricing.js";
 export { stableText } from "./stable.js";

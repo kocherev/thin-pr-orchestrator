@@ -7,7 +7,7 @@ import { createMemoryWorkspace } from "@thin-pr/workspace";
 import { afterEach, describe, expect, it } from "vitest";
 import { createRunHandlers, createVerifyHandler } from "./steps.js";
 
-const LIMITS = { spendUsd: 5 };
+const LIMITS = { spendUsd: 5, budget: { max_files: 12, max_lines: 600 } };
 const passing = { exitCode: 0, logTail: "" };
 const failingTest = { exitCode: 1, logTail: "FAIL test/counter.test.ts > clamps at zero" };
 
@@ -147,7 +147,7 @@ describe("implement", () => {
     const { client } = createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: counted });
     const request = { model: "claude-opus-5-5", effort: "high", issue: "Loop.", input: "Plan.", maxTurns: 3 } as const;
 
-    await expect(runImplementer(client, { ...request, workspace: counterWorkspace() })).rejects.toThrow(TurnLimitError);
+    await expect(runImplementer(client, { ...request, workspace: counterWorkspace(), budget: LIMITS.budget })).rejects.toThrow(TurnLimitError);
     expect(calls).toBe(3);
   });
 });

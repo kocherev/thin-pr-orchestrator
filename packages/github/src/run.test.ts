@@ -458,7 +458,8 @@ describe("approval", () => {
   async function awaitingRun() {
     const repo = scratch(OVER_BUDGET);
     const memory = memoryGitHub();
-    const result = await run(repo, memory.github, { model: cassette("gate-pass") });
+    // The prompts state the 1-line budget, so the gate-pass recording no longer matches.
+    const result = await run(repo, memory.github, { model: scripted(STUB_SCRIPT) });
     if (result.status !== "awaiting_approval") {
       throw new Error(`expected awaiting_approval, got ${result.status}`);
     }
