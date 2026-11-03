@@ -113,6 +113,21 @@ describe("implement", () => {
     expect(JSON.stringify(bodies[1]?.messages.at(-1)?.content)).toContain("export const count = 1;");
   });
 
+  it("makes the planner reply on its last turn instead of failing when it wants more reads", async () => {
+    const read = [{ name: "read_file", input: { path: "src/counter.ts" } }];
+    const fetch = scriptedUpstream({ ...script, plannerReads: Array(20).fill(read) });
+    const bodies: { tool_choice?: { type: string } }[] = [];
+    const captured: typeof globalThis.fetch = (url, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as (typeof bodies)[number]);
+      return fetch(url, init);
+    };
+    const session = createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: captured });
+    const result = await createRunHandlers(session, counterWorkspace(), LIMITS).plan(context("plan", 0));
+
+    expect(result).toMatchObject({ outcome: "done", output: plan });
+    expect(bodies.map((body) => body.tool_choice?.type)).toEqual([...Array(7).fill("auto"), "none"]);
+  });
+
   it("asks the API to clear old tool results in the implementer's loop", async () => {
     const fetch = scriptedUpstream(script);
     const sent: { headers: Headers; body: Record<string, unknown> }[] = [];
