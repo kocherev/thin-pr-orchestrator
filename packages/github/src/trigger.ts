@@ -7,7 +7,7 @@ import { runCommand, type CommandResult } from "./commands.js";
 import { labelEvent, type LabelEvent } from "./event.js";
 import { runRevise, type ReviseResult } from "./revise.js";
 import type { Trigger } from "./router.js";
-import { runLabel, type LabelRunResult } from "./run.js";
+import { draftBranch, runLabel, type LabelRunResult } from "./run.js";
 import { createGitHubSurface } from "./surface.js";
 
 export type TriggerOutcome =
@@ -31,6 +31,21 @@ export function runResultOf(outcome: TriggerOutcome): LabelRunResult | null {
     case "revise":
       return null;
   }
+}
+
+/**
+ * The branch a trigger pushed: `thin-pr/<issue>` for a run that opened a draft or waits for approval, the draft's
+ * branch for a revision, or null when nothing was pushed.
+ */
+export function pushedBranch(trigger: Trigger, outcome: TriggerOutcome): string | null {
+  if (outcome.kind === "revise") {
+    return outcome.result.status === "pushed" && trigger.kind === "revise" ? trigger.pull.branch : null;
+  }
+  const run = runResultOf(outcome);
+  if (run?.status === "awaiting_approval") {
+    return run.stored.branch.name;
+  }
+  return run?.status === "opened" ? draftBranch(run.record.issue.number) : null;
 }
 
 /** The branch a trigger's checkout must hold: the draft branch for a review, the default branch otherwise. */
