@@ -103,6 +103,8 @@ export class SpendMeter {
   private spent = 0;
   private readonly calls: Usage[] = [];
   private run: { readonly startUsd: number; readonly limitUsd: number } | null = null;
+  /** Per specialist, the input and output tokens of its last call. */
+  private readonly lastTurnTokens = new Map<string, number>();
 
   constructor(readonly limitUsd: number) {}
 
@@ -119,10 +121,14 @@ export class SpendMeter {
     this.run = { startUsd: this.spent, limitUsd };
   }
 
-  /** Input size is unknown before the call, so this prices the largest output the request allows. */
-  assertRoomFor(model: PricedModel, maxTokens: number): void {
+  /**
+   * Prices the largest output the request allows, plus an input estimate: the specialist's previous request and its
+   * reply, all at the uncached rate. A tool loop sends both again on the next turn, so a late turn's input counts.
+   * Tool results added since are not known yet. A specialist's first call counts no input.
+   */
+  assertRoomFor(model: PricedModel, maxTokens: number, specialist: string): void {
     const worstCase = costOf(model, {
-      input_tokens: 0,
+      input_tokens: this.lastTurnTokens.get(specialist) ?? 0,
       output_tokens: maxTokens,
       cache_read_input_tokens: null,
       cache_creation_input_tokens: null,
@@ -136,9 +142,11 @@ export class SpendMeter {
     }
   }
 
-  record(model: PricedModel, usage: BilledUsage, durationMs: number): Usage {
+  record(model: PricedModel, usage: BilledUsage, durationMs: number, specialist: string): Usage {
     const costUsd = costOf(model, usage);
     this.spent += costUsd;
+    const input = usage.input_tokens + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
+    this.lastTurnTokens.set(specialist, input + usage.output_tokens);
     const call = {
       model,
       // Usage has no cache-write field, so written tokens count as input.
@@ -180,7 +188,7 @@ export function createTransport(options: TransportOptions): { middleware: Middle
     const span = trace.getActiveSpan();
     span?.setAttribute(ATTR_SPECIALIST, specialist);
     const price = async (response: Response, durationMs: number) => {
-      const call = meter.record(model, await billedUsage(response, ctx), durationMs);
+      const call = meter.record(model, await billedUsage(response, ctx), durationMs, specialist);
       span?.setAttribute(ATTR_COST_USD, call.costUsd);
     };
 
@@ -193,7 +201,7 @@ export function createTransport(options: TransportOptions): { middleware: Middle
       return response;
     }
 
-    meter.assertRoomFor(model, sent.max_tokens);
+    meter.assertRoomFor(model, sent.max_tokens, specialist);
     const started = Date.now();
     const upstream = await next({ ...request, headers });
     if (!upstream.ok) {

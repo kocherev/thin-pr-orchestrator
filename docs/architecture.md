@@ -126,7 +126,7 @@ The planner reads the issue and the repository's tracked paths, up to 500 of the
 
 An attempt that fails after a model call throws `StepError` with that call's usage. Core keeps it on the `failed` event, so the run totals count refused and retried calls. A `StepError` with `retryable: false` stops the run without the remaining retries. The specialists throw one for a spend limit, since every retry would hit it too.
 
-Each run's session has two spend limits. `THIN_PR_SPEND_LIMIT_USD`, 25 USD by default, covers the whole client. The template's `spend_usd`, or the `.thin-pr.yml` override, covers one run: `createRunHandlers` passes it to the meter with `limitRun`. Before each live call the meter prices the largest reply the request allows. When that could pass either limit, the call is not sent, the run fails, and the report says which limit and how much was spent.
+Each run's session has two spend limits. `THIN_PR_SPEND_LIMIT_USD`, 25 USD by default, covers the whole client. The template's `spend_usd`, or the `.thin-pr.yml` override, covers one run: `createRunHandlers` passes it to the meter with `limitRun`. Before each live call the meter prices the largest reply the request allows, plus the same specialist's previous request and reply as uncached input, since a tool loop sends them again. When that could pass either limit, the call is not sent, the run fails, and the report says which limit and how much was spent.
 
 The reviewer reads the plan, the workspace patch, and the verify results. `changes_requested` loops back to implement with the notes as feedback while the template allows another loop.
 

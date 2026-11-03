@@ -108,7 +108,7 @@ pnpm eval:record --all
 
 `pnpm eval:record` runs the named cases against the live API, one at a time, and rewrites each case's cassette with `"source":"live"` lines. `--all` records every case expected to open or to wait for approval. The blocked cases replay scripted failures, such as an empty plan or a planted secret, so they keep their cassettes. The command prints each case's verdict and spend, then the total.
 
-The command refuses to start without `ANTHROPIC_API_KEY`. One limit, `THIN_PR_SPEND_LIMIT_USD` (25 by default), covers the whole recording. Before each request the client prices the largest reply the request allows. A case that would pass the limit stops, keeps its old cassette, and no later case runs.
+The command refuses to start without `ANTHROPIC_API_KEY`. One limit, `THIN_PR_SPEND_LIMIT_USD` (25 by default), covers the whole recording. Before each request the client prices the largest reply the request allows, plus the same specialist's previous request and reply as input. A case that would pass the limit stops, keeps its old cassette, and no later case runs.
 
 After a recording, run `pnpm eval -- --write`. A new recording changes the run, so read the case again, update its `judge.json`, and record the judge again.
 

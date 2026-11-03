@@ -214,14 +214,26 @@ describe("model client", () => {
     const { client, meter } = createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: fake.fetch }, {});
     await structured(client, planRequest("claude-sonnet-5-5"));
 
-    // 2 USD went to an earlier run. The next request could cost 0.16 USD, under 0.2 but over 0.1.
+    // 2 USD went to an earlier run. The reviewer's first request could cost 0.16 USD, under 0.2 but over 0.1.
     meter.limitRun(0.2);
-    expect(() => meter.assertRoomFor("claude-sonnet-5-5", 16_000)).not.toThrow();
+    expect(() => meter.assertRoomFor("claude-sonnet-5-5", 16_000, "reviewer")).not.toThrow();
     meter.limitRun(0.1);
-    const refused = structured(client, planRequest("claude-sonnet-5-5"));
+    const refused = structured(client, planRequest("claude-sonnet-5-5", "reviewer"));
     await expect(refused).rejects.toMatchObject({ name: "SpendLimitError", scope: "run", limitUsd: 0.1, spentUsd: 0 });
     await expect(refused).rejects.toThrow("the next model call could pass the run's spend_usd of 0.1 USD (0.000000 USD spent)");
     expect(fake.sent).toHaveLength(1);
+  });
+
+  it("counts a specialist's last request and reply as input before its next call", async () => {
+    const fake = upstream([{ text: planText("long"), inputTokens: 100_000, outputTokens: 1_000 }, { text: planText("fresh") }]);
+    const { client, meter } = createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: fake.fetch }, {});
+    await structured(client, planRequest("claude-sonnet-5-5"));
+
+    // Any first request could cost 0.16 USD. The planner's next one also resends about 101,000 tokens, 0.202 USD more.
+    meter.limitRun(0.3);
+    await expect(structured(client, planRequest("claude-sonnet-5-5", "reviewer"))).resolves.toMatchObject({ summary: "fresh" });
+    await expect(structured(client, planRequest("claude-sonnet-5-5"))).rejects.toMatchObject({ name: "SpendLimitError", scope: "run" });
+    expect(fake.sent).toHaveLength(2);
   });
 
   it("turns a refusal into a typed error with its category", async () => {
