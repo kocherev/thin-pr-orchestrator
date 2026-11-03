@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { availableParallelism, tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
@@ -21,8 +22,16 @@ const cassetteTime = z.looseObject({ recordedAt: z.iso.datetime().optional() });
 
 type File = { readonly path: string; readonly content: string };
 
+/** The sample repos under `evals/`. A case runs on the one its issue's repository names. */
+const SAMPLE_REPOS = ["sample-repo", "sample-python"];
+
+// sample-python uses `bool | None`, which Python 3.10 added.
+const MIN_PYTHON = [3, 10] as const;
+
 export type EvalCase = {
   readonly id: string;
+  /** The sample repo under `evals/` the case runs on. */
+  readonly repo: string;
   readonly payload: unknown;
   readonly issueTitle: string;
   readonly issueBody: string;
@@ -108,20 +117,22 @@ const RUNS_DIR = "evals/runs";
 
 export function loadCases(workspace = root): EvalCase[] {
   const casesDir = join(workspace, "evals", "cases");
-  const seen = new Set<number>();
+  const seen = new Set<string>();
   return readdirSync(casesDir)
     .sort()
     .map((id) => {
       const dir = join(casesDir, id);
       const payload = jsonFile(join(dir, "issue.json"));
       const event = readLabelEvent(payload);
-      if (event.repo !== "sample-repo" || seen.has(event.issue.number)) {
-        throw new Error(`${id}: the issue must be a unique number on sample-repo`);
+      const key = `${event.repo}#${event.issue.number}`;
+      if (!SAMPLE_REPOS.includes(event.repo) || seen.has(key)) {
+        throw new Error(`${id}: the issue must be a unique number on ${SAMPLE_REPOS.join(" or ")}`);
       }
-      seen.add(event.issue.number);
+      seen.add(key);
       const cassette = join(dir, "cassette.jsonl");
       return {
         id,
+        repo: event.repo,
         payload,
         issueTitle: event.issue.title,
         issueBody: event.issue.body,
@@ -134,8 +145,9 @@ export function loadCases(workspace = root): EvalCase[] {
 }
 
 /**
- * Runs every case through the labeled-issue path on a scratch copy of `evals/sample-repo`. The model calls replay
- * from each case's cassette. Typecheck and tests run for real, with this repo's `tsc` and `vitest` on PATH.
+ * Runs every case through the labeled-issue path on a scratch copy of its sample repo. The model calls replay from
+ * each case's cassette. Typecheck and tests run for real, with this repo's `tsc` and `vitest` on PATH and `python3`
+ * from the machine.
  */
 export async function runEval(workspace = root, sessionFor: SessionFor = replayCassette): Promise<EvalReport> {
   const { minVerdictAccuracy } = baselineSchema.parse(jsonFile(join(workspace, "evals", "baseline.json")));
@@ -152,7 +164,6 @@ export async function runCases(
   sessionFor: SessionFor,
   parallel: number,
 ): Promise<CaseResult[]> {
-  const sample = readTree(join(workspace, "evals", "sample-repo"));
   const logs = mkdtempSync(join(tmpdir(), "thin-pr-eval-"));
   const restore = pinEnv({
     PATH: [join(workspace, "node_modules", ".bin"), process.env.PATH].join(delimiter),
@@ -162,6 +173,9 @@ export async function runCases(
     FORCE_COLOR: undefined,
   });
   try {
+    if (items.some((item) => item.repo === "sample-python")) {
+      requirePython();
+    }
     const cases: CaseResult[] = [];
     let next = 0;
     const worker = async () => {
@@ -170,7 +184,7 @@ export async function runCases(
         next += 1;
         const item = items[index];
         if (item) {
-          cases[index] = await runCase(workspace, item, sample, logs, () => sessionFor(item));
+          cases[index] = await runCase(workspace, item, logs, () => sessionFor(item));
         }
       }
     };
@@ -179,6 +193,19 @@ export async function runCases(
   } finally {
     restore();
     rmSync(logs, { recursive: true, force: true });
+  }
+}
+
+/** Throws unless `python3` on PATH is Python 3.10 or later. */
+function requirePython(): void {
+  const probe = spawnSync("python3", ["-c", "import sys; print('%d.%d' % sys.version_info[:2])"], { encoding: "utf8" });
+  if (probe.error || probe.status !== 0) {
+    throw new Error(`evals/sample-python runs its checks with python3, and python3 is not on PATH. Install Python ${MIN_PYTHON.join(".")} or later.`);
+  }
+  const version = probe.stdout.trim();
+  const [major = 0, minor = 0] = version.split(".").map(Number);
+  if (major < MIN_PYTHON[0] || (major === MIN_PYTHON[0] && minor < MIN_PYTHON[1])) {
+    throw new Error(`evals/sample-python needs Python ${MIN_PYTHON.join(".")} or later, and python3 is ${version}.`);
   }
 }
 
@@ -355,10 +382,10 @@ export function replayGitHub(): GitHubSurface {
 async function runCase(
   workspace: string,
   item: EvalCase,
-  sample: readonly File[],
   logs: string,
   session: () => ModelSession,
 ): Promise<CaseResult> {
+  const sample = readTree(join(workspace, "evals", item.repo));
   const repo = createScratchRepo(Object.fromEntries(sample.map((file) => [file.path, file.content])));
   const log = openEventLog(join(logs, `${item.id}.sqlite`));
   try {
@@ -435,11 +462,46 @@ function stableRecord(record: RunRecord, dirs: readonly string[], startedAt: str
 
 function stableLog(text: string, dirs: readonly string[]): string {
   const relative = dirs.reduce((out, dir) => out.split(dir).join("."), text);
-  return relative
+  const lines = relative
     .split("\n")
     .filter((line) => !/^\s*(Start at|Duration)\s/.test(line))
-    .map((line) => line.replace(/ \d+(?:\.\d+)?m?s$/, ""))
-    .join("\n");
+    .map((line) => line.replace(/ \d+(?:\.\d+)?m?s$/, ""));
+  return unittestSignal(lines).join("\n");
+}
+
+/**
+ * Traceback frames, source lines and carets differ between Python versions, so a unittest report keeps only these
+ * lines: each `FAIL:` or `ERROR:` line with the test id in the Python 3.10 form `name (module.Class)`, the last line
+ * of each traceback (the exception and its message), `Ran N tests`, and `OK` or `FAILED (...)`. Lines before the
+ * report, such as a step summary's first line, stay. Text with no `Ran N tests` line is not a unittest report.
+ */
+function unittestSignal(lines: readonly string[]): string[] {
+  const start = lines.findIndex((line) => /^([.FEsxu]+|=+|-+|(FAIL|ERROR): .*|Ran \d+ tests?\b.*)$/.test(line));
+  if (start < 0 || !lines.some((line) => /^Ran \d+ tests?\b/.test(line))) {
+    return [...lines];
+  }
+  const kept = lines.slice(0, start);
+  let inTraceback = false;
+  for (const line of lines.slice(start)) {
+    const failure = /^((?:FAIL|ERROR): (\S+) \(.+?)(?:\.\2)?\)$/.exec(line);
+    const ran = /^Ran \d+ tests?\b/.exec(line);
+    if (line === "Traceback (most recent call last):") {
+      inTraceback = true;
+    } else if (inTraceback) {
+      // Frames and their source lines are indented. The first line that is not is the exception.
+      if (!line.startsWith(" ")) {
+        inTraceback = false;
+        kept.push(line);
+      }
+    } else if (failure) {
+      kept.push(`${failure[1]})`);
+    } else if (ran) {
+      kept.push(ran[0]);
+    } else if (/^(OK|FAILED)\b/.test(line)) {
+      kept.push(line);
+    }
+  }
+  return kept;
 }
 
 function withHiddenTests(verify: StepHandler, dir: string, hidden: readonly File[]): StepHandler {

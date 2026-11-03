@@ -106,7 +106,7 @@ The draft body and the issue comment come from one function, `formatRunReport` i
 
 ## Evals and the judge
 
-`pnpm eval` replays 18 labeled issues against `evals/sample-repo` with real `tsc` and `vitest`, and `pnpm eval:judge` grades the replayed runs against human labels. `evals/README.md` describes both, the cases, and the nightly live run. `docs/gate.md` lists the case that trips each rule.
+`pnpm eval` replays 23 labeled issues against `evals/sample-repo` with real `tsc` and `vitest` and against `evals/sample-python` with real `python3`, and `pnpm eval:judge` grades the replayed runs against human labels. `evals/README.md` describes both, the cases, and the nightly live run. `docs/gate.md` lists the case that trips each rule.
 
 ## Non-goals
 

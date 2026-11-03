@@ -38,6 +38,12 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
 
+      # The Python eval cases run python3 with the standard library only.
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
       - name: Install
         run: pnpm install --frozen-lockfile
 

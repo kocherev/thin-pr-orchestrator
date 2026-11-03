@@ -1,13 +1,13 @@
 import type { RunRecord, RunStep } from "./schema";
 
-/** The eval cases replay recorded model responses against this repo. Its issue and PR links do not exist. */
-const EVAL_SAMPLE_REPO = "example/sample-repo";
+/** The eval cases replay recorded model responses against these repos. Their issue and PR links do not exist. */
+const EVAL_SAMPLE_REPOS = new Set(["example/sample-repo", "example/sample-python"]);
 
 export const REPLAY_NOTE =
   "Replayed from recorded model responses. Costs and durations are recorded estimates until live recordings land.";
 
 export function isReplay(run: RunRecord): boolean {
-  return run.repo === EVAL_SAMPLE_REPO;
+  return EVAL_SAMPLE_REPOS.has(run.repo);
 }
 
 export function runStartedAt(run: RunRecord): string | null {

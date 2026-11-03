@@ -1,0 +1,18 @@
+{
+  "action": "labeled",
+  "label": {
+    "name": "thin-pr"
+  },
+  "issue": {
+    "number": 2,
+    "title": "Show minutes in durations",
+    "body": "format_seconds in src/duration.py should render 90 as 1m 30s and 120 as 2m. Durations under a minute stay in seconds, like 42s."
+  },
+  "repository": {
+    "name": "sample-python",
+    "default_branch": "main",
+    "owner": {
+      "login": "example"
+    }
+  }
+}

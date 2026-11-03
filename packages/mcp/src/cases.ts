@@ -13,8 +13,8 @@ const expectedSchema = z
   .strict();
 
 /**
- * Replays one eval case through the same local run as `start_run`, on a scratch copy of `evals/sample-repo`, and
- * compares the verdict with the case's `expected.json`.
+ * Replays one eval case through the same local run as `start_run`, on a scratch copy of the sample repo its issue
+ * names, such as `evals/sample-repo`, and compares the verdict with the case's `expected.json`.
  */
 export async function replayCase(caseId: string) {
   const ids = readdirSync(join(EVALS, "cases")).sort();
@@ -22,11 +22,11 @@ export async function replayCase(caseId: string) {
     throw new Error(`unknown case ${caseId}. Cases: ${ids.join(", ")}`);
   }
   const dir = join(EVALS, "cases", caseId);
-  const { issue } = readLabelEvent(readJson(join(dir, "issue.json")));
+  const { repo: sample, issue } = readLabelEvent(readJson(join(dir, "issue.json")));
   const expected = expectedSchema.parse(readJson(join(dir, "expected.json")));
   // Replay ignores what the tools return, so hidden tests committed with the base give the verdict pnpm eval gives
   // when it copies them in before verify.
-  const repo = createScratchRepo({ ...readTree(join(EVALS, "sample-repo"), ""), ...readTree(join(dir, "hidden"), "test/hidden/") });
+  const repo = createScratchRepo({ ...readTree(join(EVALS, sample), ""), ...readTree(join(dir, "hidden"), "test/hidden/") });
   try {
     const result = await runLocal({
       repo: repo.dir,

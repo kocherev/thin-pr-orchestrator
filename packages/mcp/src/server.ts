@@ -46,7 +46,7 @@ export function createServer(options: { readonly runsDir: string | undefined }):
     "replay_case",
     {
       description:
-        "Replay one eval case from evals/cases offline: a scratch copy of evals/sample-repo, the case's recorded " +
+        "Replay one eval case from evals/cases offline: a scratch copy of the sample repo its issue names, the recorded " +
         "model calls, real typecheck and test runs, and the gate. Returns the verdict, the failed gate rules, " +
         "whether they match expected.json, and the RunRecord. Calls no model API and writes nothing outside a temp dir.",
       inputSchema: z.object({
