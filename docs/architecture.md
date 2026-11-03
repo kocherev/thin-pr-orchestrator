@@ -110,7 +110,7 @@ The five steps:
 | `implement` | implementer | tool runner over the workspace | `summary`, and `files` from `workspace.diff()` |
 | `verify` | `createVerifyHandler` in `packages/github` | none | `summary` and the `typecheck` and `test` results |
 | `review` | reviewer | structured output | `verdict`, `approve` or `changes_requested`, and `notes` |
-| `write` | pr-writer | structured output | `title`, `body`, and `summary` |
+| `write` | pr-writer | structured output | `title` and `summary`. The draft body comes from `formatRunReport`. |
 
 The gate is not a step. `runIssue` evaluates it after `write` finishes. `runIssue` lives in `packages/github` because it posts checks and pushes. Moving it into `packages/core` would put a GitHub client there, which `pnpm lint` forbids.
 

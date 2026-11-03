@@ -62,7 +62,7 @@ describe("implement", () => {
       summary: "Set the count to 2 and add reset.",
     },
     reviewer: [{ summary: "Fine.", verdict: "approve", notes: [] }],
-    "pr-writer": [{ summary: "pass", title: "Change the count", body: "The count is 2." }],
+    "pr-writer": [{ summary: "pass", title: "Change the count" }],
   };
 
   it("edits through the tools on a replayed cassette and stops when the model does", async () => {

@@ -42,9 +42,8 @@ export const REVIEWER_SYSTEM = [
 ].join("\n");
 
 export const PR_WRITER_SYSTEM = [
-  "You write the draft pull request for a finished change.",
+  "You write the title of the draft pull request for a finished change. The code writes its body.",
   UNTRUSTED,
   "The title is one imperative sentence in sentence case, under 70 characters, with no prefix.",
-  "The body says what changed and why in short plain sentences. No headings and no marketing words.",
   "The summary is one line.",
 ].join("\n");

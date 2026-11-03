@@ -34,7 +34,7 @@ const STUB_SCRIPT: Script = {
     summary: "Apply the stub change.",
   },
   reviewer: [{ summary: "Stub review found nothing.", verdict: "approve", notes: [] }],
-  "pr-writer": [{ summary: "pass", title: "Fix the stub", body: "Stub draft." }],
+  "pr-writer": [{ summary: "pass", title: "Fix the stub" }],
 };
 
 describe("issue label", () => {

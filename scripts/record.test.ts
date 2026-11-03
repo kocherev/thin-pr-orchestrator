@@ -20,7 +20,7 @@ const script: Script = {
     summary: "decrement stops at zero.",
   },
   reviewer: [{ summary: "The clamp matches the issue.", verdict: "approve", notes: [] }],
-  "pr-writer": [{ summary: "Clamp decrement.", title: "Clamp decrement at zero", body: "decrement stops at zero." }],
+  "pr-writer": [{ summary: "Clamp decrement.", title: "Clamp decrement at zero" }],
 };
 
 const workspaces: string[] = [];

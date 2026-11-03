@@ -37,7 +37,8 @@ export const reviewerOutput = z
   .object({ summary: text, verdict: z.enum(["approve", "changes_requested"]), notes: z.array(z.string()) })
   .strict();
 
-export const prWriterOutput = z.object({ summary: text, title: text, body: text }).strict();
+/** The pull request body is built in code from the run, so the model writes only the title. */
+export const prWriterOutput = z.object({ summary: text, title: text }).strict();
 
 /** The steps a model answers. `verify` runs the repo's checks instead. */
 type ModelStepId = Exclude<StepId, "verify">;
