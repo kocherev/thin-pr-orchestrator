@@ -15,7 +15,7 @@ thin-pr runs as a GitHub Action from `action.yml` at the root of this repo. This
 
 ## The workflow
 
-Save it as `.github/workflows/thin-pr.yml`. Replace `<commit sha>` with a full commit SHA from this repo, so an update here never changes what runs on your repo until you move the pin. The job condition repeats the router's checks, so the runner doesn't start for other labels, plain comments, outsiders or bots. Keep it as it is.
+Save it as `.github/workflows/thin-pr.yml`. Replace `<commit sha>` with a full commit SHA from this repo, so an update here never changes what runs on your repo until you move the pin. The other Actions are pinned by commit too, because this job holds your API key and write access. A Dependabot `github-actions` update keeps the pins current. The job condition repeats the router's checks, so the runner doesn't start for other labels, plain comments, outsiders or bots. Keep it as it is.
 
 ```yaml
 name: Thin PR
@@ -70,7 +70,7 @@ jobs:
       # Full history, so a second label can force-push thin-pr/<issue> with a lease. No stored credentials:
       # the checks run repo code, and only the push gets the token. A review checks out the draft branch.
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
@@ -78,10 +78,10 @@ jobs:
 
       # Your repo's own toolchain, so the install and checks in .thin-pr.yml can run. This example is pnpm and uv.
       - name: Install pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v10
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
 
       - name: Run thin-pr
         uses: kocherev/thin-pr-orchestrator@<commit sha>

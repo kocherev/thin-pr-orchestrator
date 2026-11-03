@@ -233,8 +233,8 @@ describe("run trace", () => {
     const ci = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
     const action = readFileSync(join(root, "action.yml"), "utf8");
     expect(ci).toContain("run: pnpm trace");
-    expect(ci).toContain("actions/upload-artifact@v7");
+    expect(ci).toContain("uses: actions/upload-artifact@");
     expect(action).toContain("THIN_PR_TRACE_PATH: ${{ runner.temp }}/thin-pr/trace.json");
-    expect(action).toContain("actions/upload-artifact@v7");
+    expect(action).toContain("uses: actions/upload-artifact@");
   });
 });

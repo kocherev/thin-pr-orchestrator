@@ -1,0 +1,7 @@
+# Every Action is pinned to a commit. Dependabot opens a pull request when a newer release comes out.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
