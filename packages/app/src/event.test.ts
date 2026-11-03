@@ -7,12 +7,15 @@ function headers(event: string): Headers {
   return new Headers({ "x-github-event": event, "x-github-delivery": DELIVERY_ID });
 }
 
+const repository = { name: "sample-repo", default_branch: "main", owner: { login: "example" } };
+
 function labeled(label: string): Record<string, unknown> {
   return {
     action: "labeled",
     label: { name: label },
     issue: { number: 7, title: "Add a flag", body: null },
-    repository: { name: "sample-repo", default_branch: "main", owner: { login: "example" } },
+    repository,
+    sender: { login: "octocat", type: "User" },
     installation: { id: 42 },
   };
 }
@@ -23,31 +26,73 @@ describe("readDelivery", () => {
       kind: "job",
       job: {
         deliveryId: DELIVERY_ID,
+        key: DELIVERY_ID,
         installationId: 42,
-        owner: "example",
-        repo: "sample-repo",
-        defaultBranch: "main",
-        issueNumber: 7,
-        issueTitle: "Add a flag",
-        issueBody: "",
-        label: "thin-pr",
+        trigger: {
+          kind: "label",
+          repo: { owner: "example", name: "sample-repo", defaultBranch: "main" },
+          issue: { number: 7, title: "Add a flag", body: "" },
+          label: "thin-pr",
+        },
       },
     });
   });
 
   it("keeps the template named in the label", () => {
     const delivery = readDelivery(headers("issues"), JSON.stringify(labeled("thin-pr:bug-fix")));
-    expect(delivery.kind === "job" && delivery.job.label).toBe("thin-pr:bug-fix");
+    expect(delivery.kind === "job" && delivery.job.trigger.kind === "label" && delivery.job.trigger.label).toBe("thin-pr:bug-fix");
+  });
+
+  it("turns a command from a collaborator into a job, through the same router as the Action", () => {
+    const payload = {
+      action: "created",
+      issue: { number: 7, title: "Add a flag", body: null, labels: [{ name: "thin-pr" }] },
+      comment: { id: 55, body: "/thin-pr retry", user: { login: "octocat", type: "User" }, author_association: "COLLABORATOR" },
+      repository,
+      sender: { login: "octocat", type: "User" },
+      installation: { id: 42 },
+    };
+    const delivery = readDelivery(headers("issue_comment"), JSON.stringify(payload));
+    expect(delivery.kind === "job" && delivery.job.trigger).toMatchObject({ kind: "command", command: "retry", comment: { id: 55 } });
+  });
+
+  it("keys a review and its inline comments to one run", () => {
+    const pull_request = {
+      number: 12,
+      state: "open",
+      head: { ref: "thin-pr/7", repo: { full_name: "example/sample-repo" } },
+      base: { repo: { full_name: "example/sample-repo" } },
+    };
+    const user = { login: "octocat", type: "User" };
+    const review = {
+      action: "submitted",
+      review: { id: 501, state: "commented", body: null, user, author_association: "OWNER" },
+      pull_request,
+      repository,
+      sender: user,
+      installation: { id: 42 },
+    };
+    const comment = {
+      action: "created",
+      comment: { id: 9, pull_request_review_id: 501, user, author_association: "OWNER" },
+      pull_request,
+      repository,
+      sender: user,
+      installation: { id: 42 },
+    };
+    const keys = [
+      readDelivery(headers("pull_request_review"), JSON.stringify(review)),
+      readDelivery(headers("pull_request_review_comment"), JSON.stringify(comment)),
+    ].map((delivery) => (delivery.kind === "job" ? delivery.job.key : delivery.kind));
+    expect(keys).toEqual(["review-501", "review-501"]);
   });
 
   it("ignores other events, actions, and labels", () => {
     const body = JSON.stringify(labeled("thin-pr"));
-    expect(readDelivery(headers("ping"), body)).toEqual({ kind: "ignored" });
-    expect(readDelivery(headers("issues"), JSON.stringify({ ...labeled("thin-pr"), action: "unlabeled" }))).toEqual({
-      kind: "ignored",
-    });
+    expect(readDelivery(headers("ping"), body).kind).toBe("ignored");
+    expect(readDelivery(headers("issues"), JSON.stringify({ ...labeled("thin-pr"), action: "unlabeled" })).kind).toBe("ignored");
     for (const label of ["bug", "thin-pr-later", "thin-pr:", "thin-pr:Bug Fix"]) {
-      expect(readDelivery(headers("issues"), JSON.stringify(labeled(label)))).toEqual({ kind: "ignored" });
+      expect(readDelivery(headers("issues"), JSON.stringify(labeled(label))).kind).toBe("ignored");
     }
   });
 
@@ -56,7 +101,7 @@ describe("readDelivery", () => {
     delete payload.installation;
     expect(readDelivery(headers("issues"), JSON.stringify(payload))).toEqual({
       kind: "invalid",
-      reason: "installation: Invalid input: expected object, received undefined",
+      reason: "installationId: Invalid input: expected number, received null",
     });
   });
 

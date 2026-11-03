@@ -59,7 +59,7 @@ The template budgets are placeholders: `feature` 12 files and 600 lines, `bugfix
 
 ### Approving a run
 
-The `awaiting_approval` comment ends with a hidden marker that stores the run: the RunRecord without the patch, the pushed branch, the commit the gate measured, the base branch, the draft title, and the plan and review outputs. `readStoredRun(body)` in `packages/github/src/approval.ts` reads it back. Anyone can write a marker, so the caller reads only comments the thin-pr app or workflow posted.
+The `awaiting_approval` comment ends with a hidden marker that stores the run: the RunRecord without the patch, the pushed branch, the commit the gate measured, the base branch, the draft title, and the plan and review outputs. `readStoredRun(body)` in `packages/github/src/approval.ts` reads it back. Anyone can write a marker, so `/thin-pr approve` reads only the newest run comment that the app's own bot account wrote. `docs/security.md` says how a run knows that account.
 
 `openApprovedDraft(stored, { github, approvedBy })` opens the draft. It re-checks three things first, and refuses with a reason when one fails.
 
@@ -67,7 +67,7 @@ The `awaiting_approval` comment ends with a hidden marker that stores the run: t
 2. `decideResults` over the stored gate results is still `needs_approval`.
 3. The branch still points at the commit the gate measured. A push after the run adds commits nobody gated.
 
-The draft body is the run report with `Gate passed with approval.` and the approver's login. An open pull request for the branch gets the new body instead of a second draft. The function comments nothing. The command that calls it, `/thin-pr approve` from a user with write access, is not built yet.
+The draft body is the run report with `Gate passed with approval.` and the approver's login. An open pull request for the branch gets the new body instead of a second draft. The function comments nothing. `/thin-pr approve` from a user with write access calls it, then edits the run comment to the approved report, which stores no run, so a second approve finds nothing to open.
 
 ### `paths`
 

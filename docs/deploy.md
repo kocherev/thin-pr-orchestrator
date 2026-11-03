@@ -1,12 +1,23 @@
 # Deploy the GitHub App on Cloudflare
 
-`packages/app` is a Cloudflare Worker. It receives the `issues` webhook, checks the signature, and puts one job on the `pr-jobs` queue. The queue consumer mints an installation token and starts one container per delivery. The container clones the default branch and runs the issue through `runLabeledIssue`, the same function the Action calls. It prints the run record as one JSON line when the run ends.
+`packages/app` is a Cloudflare Worker. It receives the webhook, checks the signature, routes the event with `routeEvent`, the router the Action uses, and puts one job on the `pr-jobs` queue. The queue consumer mints an installation token and starts one container per job key: the delivery id, or `review-<id>` for a review and its inline comments. The container clones the default branch, or the draft branch for a review, and runs the trigger through `runTrigger`, the same function the Action calls. It prints the run record, or the command's outcome, as one JSON line when the run ends.
+
+The Worker answers these events. Any other event, and any event the router ignores, gets `204`.
+
+| Event | Starts |
+| --- | --- |
+| `issues` with action `labeled` | A label run, for `thin-pr` or `thin-pr:<template>`. |
+| `issue_comment` with action `created` | A `/thin-pr` command from an owner, member, or collaborator. |
+| `pull_request_review` with action `submitted` | A revise run, for a review that requests changes or comments on a `thin-pr/<issue>` draft. |
+| `pull_request_review_comment` with action `created` | The revise run of the review the comment belongs to. |
 
 You need a Cloudflare account with Workers Paid (Containers require it), Docker running locally, `gh` logged in as the repository owner, `jq`, and `openssl`. Run every command from the repo root unless a step says otherwise.
 
 ## 1. Create the GitHub App
 
-The manifest is `packages/app/github-app-manifest.json`. It asks for checks, contents, issues, and pull requests with write access, actions and metadata with read access, and the `issues` event. Actions read lets the Worker see whether the thin-pr workflow is enabled. The webhook starts inactive because the Worker URL does not exist yet.
+The manifest is `packages/app/github-app-manifest.json`. It asks for checks, contents, issues, and pull requests with write access, actions and metadata with read access, and the four events in the table above. Actions read lets the Worker see whether the thin-pr workflow is enabled. The webhook starts inactive because the Worker URL does not exist yet.
+
+GitHub reads the manifest only when it creates the app. For an app you created before the manifest listed the comment and review events, open the app settings, choose Permissions & events, and check **Issue comment**, **Pull request review**, and **Pull request review comment**.
 
 Write a form that posts the manifest to GitHub, then open it:
 
@@ -16,7 +27,7 @@ printf '<form action="https://github.com/settings/apps/new" method="post"><input
 open /tmp/thin-pr-app.html
 ```
 
-Click the button. GitHub shows the app name. Change it if `thin-pr` is taken, then create the app.
+Click the button. GitHub shows the app name. Change it if `thin-pr` is taken, then create the app. The slug GitHub derives from the name is the `GITHUB_APP_SLUG` you set in step 3.
 
 GitHub redirects to the repository with `?code=` in the address bar. Exchange that code within one hour. The response holds the private key, the webhook secret, and the client ID. Keep the file outside the repository.
 
@@ -58,6 +69,14 @@ pnpm exec wrangler secret put ANTHROPIC_API_KEY
 
 The last command prompts for the key. `THIN_PR_MODEL` and `THIN_PR_SPEND_LIMIT_USD` are plain variables in `wrangler.jsonc`.
 
+`GITHUB_APP_SLUG` is a plain variable too, and it is required. Set it in `vars` in `wrangler.jsonc` to the slug GitHub gave the app:
+
+```bash
+jq -r .slug ~/thin-pr-app.json
+```
+
+The app comments as `<slug>[bot]`, and a run trusts a stored run or a revise reply only in a bot comment by that login. With the variable empty or malformed, the queue consumer refuses each job, and the job ends in `pr-jobs-dlq`. For `wrangler dev`, `.dev.vars.example` lists it with the secrets.
+
 ## 4. Deploy
 
 ```bash
@@ -70,7 +89,7 @@ Wrangler builds `runner/Dockerfile` with the repo root as context, pushes the im
 
 Open the app settings. Set Webhook URL to the Worker URL. Check Active. Save.
 
-GitHub sends a `ping`. Recent Deliveries shows `204` for it. Label an issue `thin-pr`. That delivery shows `202`. `pnpm exec wrangler tail` shows the queue consumer's line for the delivery. The container's logs in the Cloudflare dashboard end with the run record.
+GitHub sends a `ping`. Recent Deliveries shows `204` for it. Label an issue `thin-pr`. That delivery shows `202`. `pnpm exec wrangler tail` shows the queue consumer's line for the delivery. The container's logs in the Cloudflare dashboard end with the run record. A comment such as `/thin-pr help` from you also shows `202`, and the same comment from the app's bot account shows `204`.
 
 ## 6. Send traces (optional)
 
@@ -85,7 +104,7 @@ The container sends the trace when the run ends. `docs/telemetry.md` lists the s
 
 ## Action or App
 
-The Action and the App answer the same `thin-pr` label. One rule decides which one runs: the App defers to an enabled thin-pr workflow.
+The Action and the App answer the same four events. One rule decides which one runs: the App defers to an enabled thin-pr workflow.
 
 - The workflow `.github/workflows/thin-pr.yml` is enabled: the Action runs. The App acks the job and does nothing.
 - The workflow is disabled or absent: the App runs.

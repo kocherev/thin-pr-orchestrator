@@ -9,6 +9,7 @@ export const STATUS_STYLE: Record<RunStatus, { tone: BadgeTone; text: string; Ic
   awaiting_approval: { tone: "primary", text: "text-primary", Icon: WaitIcon },
   blocked: { tone: "warning", text: "text-warning", Icon: BlockedIcon },
   failed: { tone: "danger", text: "text-danger", Icon: FailIcon },
+  cancelled: { tone: "neutral", text: "text-muted-foreground", Icon: BlockedIcon },
 };
 
 export function StatusPill({ status }: { status: RunStatus }) {

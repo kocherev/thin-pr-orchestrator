@@ -6,6 +6,7 @@ export const STATUS_LABEL: Record<RunStatus, string> = {
   awaiting_approval: "Needs approval",
   blocked: "Blocked",
   failed: "Failed",
+  cancelled: "Cancelled",
 };
 
 export const VERDICT_LABEL: Record<GateRuleResult["verdict"], string> = {

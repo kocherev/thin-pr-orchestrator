@@ -11,7 +11,8 @@ export type RunRecord = {
   readonly repo: string;
   readonly issue: { readonly number: number; readonly title: string; readonly url: string };
   readonly template: string;
-  readonly status: "opened" | "awaiting_approval" | "blocked" | "failed";
+  /** `cancelled` comes only from `/thin-pr cancel` on a run that waited for approval. */
+  readonly status: "opened" | "awaiting_approval" | "blocked" | "failed" | "cancelled";
   readonly steps: readonly {
     readonly id: StepId;
     readonly attempt: number;
@@ -112,9 +113,9 @@ export function exportRunRecord(record: RunRecord, path: string | undefined): vo
   writeFileSync(path, `${JSON.stringify(record, null, 2)}\n`);
 }
 
-/** The verdict the evals score. A run that failed before the gate counts as blocked. */
+/** The verdict the evals score. A run that failed before the gate, or was cancelled, counts as blocked. */
 export type Verdict = "opened" | "awaiting_approval" | "blocked";
 
 export function verdictOf(status: RunRecord["status"]): Verdict {
-  return status === "failed" ? "blocked" : status;
+  return status === "failed" || status === "cancelled" ? "blocked" : status;
 }

@@ -34,20 +34,30 @@ export function readLabelEvent(payload: unknown): LabelEvent {
     throw new Error(`event payload invalid at ${issue?.path.join(".") || "(root)"}: ${issue?.message ?? "invalid"}`);
   }
   const { action, label, issue, repository } = parsed.data;
-  const body = issue.body ?? "";
+  const repo = { owner: repository.owner.login, name: repository.name, defaultBranch: repository.default_branch };
+  return { ...labelEvent({ repo, issue: { ...issue, body: issue.body ?? "" }, label: label.name }), action };
+}
+
+/** The labeled-issue event for an issue a router trigger names, such as the issue a retry or a review is about. */
+export function labelEvent(input: {
+  readonly repo: { readonly owner: string; readonly name: string; readonly defaultBranch: string };
+  readonly issue: { readonly number: number; readonly title: string; readonly body: string };
+  readonly label: string;
+}): LabelEvent {
+  const { repo, issue } = input;
   const heading = `#${issue.number} ${issue.title}`;
   return {
-    action,
-    label: label.name,
-    owner: repository.owner.login,
-    repo: repository.name,
-    defaultBranch: repository.default_branch,
+    action: "labeled",
+    label: input.label,
+    owner: repo.owner,
+    repo: repo.name,
+    defaultBranch: repo.defaultBranch,
     issue: {
       number: issue.number,
       title: issue.title,
-      body,
-      url: `https://github.com/${repository.owner.login}/${repository.name}/issues/${issue.number}`,
+      body: issue.body,
+      url: `https://github.com/${repo.owner}/${repo.name}/issues/${issue.number}`,
     },
-    issueText: body.length === 0 ? heading : `${heading}\n\n${body}`,
+    issueText: issue.body.length === 0 ? heading : `${heading}\n\n${issue.body}`,
   };
 }

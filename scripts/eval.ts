@@ -7,6 +7,7 @@ import { openEventLog, replay, templateForLabel, type RunState, type StepHandler
 import { GATE_RULES } from "@thin-pr/gate";
 import {
   createRunHandlers,
+  noReadBack,
   readLabelEvent,
   runIssue,
   verdictOf,
@@ -58,7 +59,8 @@ export type CaseResult = {
   readonly title: string;
   readonly expected: EvalCase["expected"];
   /** The run status. A failed run counts as blocked for the verdict. */
-  readonly actual: RunRecord["status"];
+  /** A replayed case never reaches a command, so it is never cancelled. */
+  readonly actual: Exclude<RunRecord["status"], "cancelled">;
   readonly verdict: Verdict;
   readonly failedRules: readonly string[];
   /** The step error when the run failed before the gate. */
@@ -113,7 +115,8 @@ export type ReportFile = {
     readonly caseId: string;
     readonly title: string;
     readonly expected: Verdict;
-    readonly actual: RunRecord["status"];
+    /** A replayed case never reaches a command, so it is never cancelled. */
+  readonly actual: Exclude<RunRecord["status"], "cancelled">;
     readonly failedRules: readonly string[];
     readonly costUsd: number;
     readonly durationMs: number;
@@ -383,7 +386,11 @@ export function replayGitHub(): GitHubSurface {
       return nextId - 1;
     },
     async finishCheck() {},
-    async comment() {},
+    async createComment() {
+      nextId += 1;
+      return nextId - 1;
+    },
+    async editComment() {},
     async branchHead() {
       return null;
     },
@@ -396,6 +403,8 @@ export function replayGitHub(): GitHubSurface {
     async openDraft(input) {
       return { number: 1, url: `https://example.test/${input.owner}/${input.repo}/pull/1` };
     },
+    // A replayed run starts from a label, never from a command or a review, so it reads nothing back.
+    ...noReadBack("a replayed run"),
   };
 }
 

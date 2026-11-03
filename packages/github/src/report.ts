@@ -18,13 +18,21 @@ export function formatRunReport(run: {
   readonly outputs: Readonly<Partial<Record<StepId, Json>>>;
   readonly branch: string;
   readonly error: string | null;
-  /** The login that approved a run over the budget, for the draft that approval opens. */
-  readonly approvedBy?: string;
+  /** The login that approved a run over the budget, or cancelled it. */
+  readonly by?: string;
+}): string {
+  return [outcome(run.record, run.error, run.branch, run.by), reportDetails(run)].join("\n\n");
+}
+
+/** The report without its outcome line, for a reply that states the outcome its own way. */
+export function reportDetails(run: {
+  readonly record: RunRecord;
+  readonly outputs: Readonly<Partial<Record<StepId, Json>>>;
+  readonly branch: string;
 }): string {
   const { record } = run;
   const overBudget = record.gate.some((rule) => rule.verdict === "NEEDS_APPROVAL");
   return [
-    outcome(record, run.error, run.branch, run.approvedBy),
     gateTable(record.gate),
     usage(record),
     ...(overBudget ? [diffSection(record)] : []),
@@ -35,20 +43,25 @@ export function formatRunReport(run: {
   ].join("\n\n");
 }
 
-function outcome(record: RunRecord, error: string | null, branch: string, approvedBy: string | undefined): string {
+function outcome(record: RunRecord, error: string | null, branch: string, by: string | undefined): string {
   const failed = record.gate.filter((rule) => rule.verdict === "FAIL").map((rule) => `\`${rule.rule}\``);
   const budget = record.gate.find((rule) => rule.verdict === "NEEDS_APPROVAL");
   const others = `The other ${record.gate.length - 1} rules passed`;
   switch (record.status) {
-    case "opened":
+    case "opened": {
+      // The draft body is written before the draft exists. The issue comment links to it.
+      const draft = record.pullRequest?.url ? ` Draft: ${record.pullRequest.url}` : "";
       return budget
-        ? `**Gate passed with approval.** ${budget.reason} ${approvedBy ?? "A user with write access"} approved it. ${others} for #${record.issue.number}.`
-        : `**Gate passed.** All ${record.gate.length} rules passed for #${record.issue.number}.`;
+        ? `**Gate passed with approval.** ${budget.reason} ${by ?? "A user with write access"} approved it. ${others} for #${record.issue.number}.${draft}`
+        : `**Gate passed.** All ${record.gate.length} rules passed for #${record.issue.number}.${draft}`;
+    }
     case "awaiting_approval":
       return [
         `**Waiting for approval.** ${budget?.reason ?? "The diff is over the budget."} ${others}. \`${branch}\` is pushed, and no draft is open.`,
         `To open the draft, a user with write access comments \`${APPROVE_COMMAND}\` on this issue. The budget keeps a draft small enough to review in one sitting, so approve when this change should land as one pull request. To keep drafts small instead, split the issue and label each part.`,
       ].join("\n\n");
+    case "cancelled":
+      return `**Cancelled.** ${by ?? "A user with write access"} cancelled the run before approval. \`${branch}\` is deleted, and no draft is open.`;
     case "blocked":
       return `**Gate failed.** ${failed.length} of ${record.gate.length} rules failed: ${failed.join(", ")}. Nothing was pushed.`;
     case "failed": {
@@ -156,7 +169,7 @@ function fenced(text: string): string {
 }
 
 // A table cell is one short line, and a pipe would end it.
-function cell(text: string): string {
+export function cell(text: string): string {
   const line = text.replace(/\s+/g, " ").trim();
   const short = line.length > CELL_CHARS ? `${line.slice(0, CELL_CHARS - 3)}...` : line;
   return short.replaceAll("|", "\\|");
@@ -170,7 +183,7 @@ function count(n: number, noun: string, plural = `${noun}s`): string {
   return `${n} ${n === 1 ? noun : plural}`;
 }
 
-function usd(value: number): string {
+export function usd(value: number): string {
   return `${value.toFixed(6)} USD`;
 }
 

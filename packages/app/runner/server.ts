@@ -7,7 +7,8 @@ import { firstIssue, jobSchema, type Job } from "../src/event.js";
  * still going, so the Worker keeps the container alive until it ends.
  */
 export function createRunnerServer(run: (job: Job) => Promise<void>): Server {
-  // A queue retry can deliver a job this instance already accepted. It must not start twice.
+  // A queue retry, or another event for the same review, can bring a key this instance already accepted. It must
+  // not start twice.
   const accepted = new Set<string>();
   let running = 0;
 
@@ -32,12 +33,12 @@ export function createRunnerServer(run: (job: Job) => Promise<void>): Server {
       response.writeHead(400).end(firstIssue(job.error));
       return;
     }
-    const deliveryId = job.data.deliveryId;
+    const { deliveryId, key } = job.data;
     response.writeHead(202, { "content-type": "application/json" }).end(JSON.stringify({ deliveryId }));
-    if (accepted.has(deliveryId)) {
+    if (accepted.has(key)) {
       return;
     }
-    accepted.add(deliveryId);
+    accepted.add(key);
     running += 1;
     console.log(`accepted delivery ${deliveryId}`);
     run(job.data)

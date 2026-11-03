@@ -24,7 +24,9 @@ import { storedRunMarker, toStoredRun, type StoredRun } from "./approval.js";
 import { createCheckRuns } from "./checks.js";
 import { readLabelEvent, type LabelEvent } from "./event.js";
 import { toRunRecord, type RunRecord, type TimedEvent } from "./record.js";
+import { startProgress, type Progress } from "./progress.js";
 import { formatRunReport } from "./report.js";
+import { REVISE_LABEL } from "./router.js";
 import { createRunHandlers } from "./steps.js";
 import type { GitHubSurface } from "./surface.js";
 
@@ -59,12 +61,7 @@ const CONTRACTS: Record<StepId, { safeParse(value: unknown): { success: boolean 
   write: prWriterOutput,
 };
 
-/**
- * Runs a labeled-issue payload against the checkout at `checkout`, whose HEAD is `baseSha`. `templates` is the
- * directory of workflow templates. Labels without a template are ignored.
- */
-export async function runAction(input: {
-  readonly payload: unknown;
+type LabelRunInput = {
   readonly templates: string;
   readonly checkout: string;
   readonly baseSha: string;
@@ -75,10 +72,23 @@ export async function runAction(input: {
   readonly model: () => ModelSession;
   /** Reaches only the push. The Action passes GITHUB_TOKEN because its checkout keeps no credentials. */
   readonly pushToken?: string;
-}): Promise<LabelRunResult> {
+  readonly runLink?: string | null;
+};
+
+/**
+ * Runs a labeled-issue payload against the checkout at `checkout`, whose HEAD is `baseSha`. `templates` is the
+ * directory of workflow templates. Labels without a template are ignored.
+ */
+export async function runAction(input: LabelRunInput & { readonly payload: unknown }): Promise<LabelRunResult> {
   const event = readLabelEvent(input.payload);
+  return event.action === "labeled" ? runLabel({ ...input, event }) : { status: "ignored" };
+}
+
+/** Runs the template `event.label` names on the issue, or ignores a label without one. */
+export async function runLabel(input: LabelRunInput & { readonly event: LabelEvent }): Promise<LabelRunResult> {
+  const { event } = input;
   const template = templateForLabel(input.templates, event.label);
-  if (event.action !== "labeled" || !template) {
+  if (!template || template.label === REVISE_LABEL) {
     return { status: "ignored" };
   }
   const config = loadRepoConfig(input.checkout);
@@ -95,6 +105,7 @@ export async function runAction(input: {
       log,
       runId: input.runId,
       pushToken: input.pushToken,
+      runLink: input.runLink ?? null,
     });
   } finally {
     log.close();
@@ -102,12 +113,61 @@ export async function runAction(input: {
 }
 
 /**
- * Runs the template with a check per step, then evaluates the gate over the workspace. A pass commits the change,
- * force-pushes `thin-pr/<issue>` from the base, and opens a draft or updates the open one. A diff over the budget
- * that passes every other rule is pushed the same way, but opens no draft: the issue comment says how to approve it
- * and stores the run for `openApprovedDraft`. Anything else comments the run report and pushes nothing.
+ * Runs the template with a check per step, then evaluates the gate over the workspace. One issue comment shows the
+ * progress and ends as the run report. A pass commits the change, force-pushes `thin-pr/<issue>` from the base, and
+ * opens a draft or updates the open one. A diff over the budget that passes every other rule is pushed the same way,
+ * but opens no draft: the report says how to approve it and stores the run for `openApprovedDraft`. Anything else
+ * ends with the report and pushes nothing.
  */
-export async function runIssue(deps: {
+export async function runIssue(deps: RunDeps & {
+  readonly pushToken?: string;
+  /** Defaults to `thin-pr/<issue>`. */
+  readonly branch?: string;
+}): Promise<LabelRunResult> {
+  const { event, github } = deps;
+  const target = { owner: event.owner, repo: event.repo };
+  const branch = deps.branch ?? `thin-pr/${event.issue.number}`;
+  return gatedRun<LabelRunResult>({
+    ...deps,
+    comment: { issue: event.issue.number, title: `Running the ${deps.template.id} template on #${event.issue.number}.` },
+    async stop(status, record, outputs, error) {
+      return { body: formatRunReport({ record, outputs, branch, error }), result: { status, record, error } };
+    },
+    async gated({ decision, outputs, record, postRules, finish }) {
+      const message = `Apply thin-pr/#${event.issue.number}`;
+      const head = await deps.workspace.commitAndPush({ branch, message, token: deps.pushToken });
+      await postRules(head);
+      if (decision === "needs_approval") {
+        const waiting = record("awaiting_approval");
+        const stored = toStoredRun({
+          record: waiting,
+          branch: { name: branch, head, base: event.defaultBranch },
+          title: draftTitle(event, outputs),
+          plan: plannerOutput.safeParse(outputs.plan).data ?? null,
+          review: reviewerOutput.safeParse(outputs.review).data ?? null,
+        });
+        const report = formatRunReport({ record: waiting, outputs, branch, error: null });
+        await finish(`${report}\n\n${storedRunMarker(stored)}`);
+        // A draft from an earlier run already shows the pushed branch, so its body must stop saying the gate passed.
+        const [open] = await github.listPullsForHead({ ...target, branch });
+        if (open) {
+          await github.updatePull({ ...target, number: open.number, body: report });
+        }
+        return { status: "awaiting_approval", record: waiting, stored };
+      }
+      const body = formatRunReport({ record: record("opened"), outputs, branch, error: null });
+      const pullRequest = await publishDraft(github, event, branch, outputs, body);
+      const opened = record("opened", pullRequest);
+      await finish(formatRunReport({ record: opened, outputs, branch, error: null }));
+      return { status: "opened", record: opened };
+    },
+  });
+}
+
+type Outputs = Readonly<Partial<Record<StepId, Json>>>;
+
+/** What every gated run needs: the issue, the template, the checkout, and where it reports. */
+export type RunDeps = {
   readonly event: LabelEvent;
   readonly template: Template;
   readonly config: RepoConfig;
@@ -120,31 +180,78 @@ export async function runIssue(deps: {
   readonly github: GitHubSurface;
   readonly log: EventLog;
   readonly runId: string;
-  readonly pushToken?: string;
-  /** Defaults to `thin-pr/<issue>`. */
-  readonly branch?: string;
-}): Promise<LabelRunResult> {
+  /** Markdown that links to where the run executes, for the progress comment. */
+  readonly runLink?: string | null;
+};
+
+/** What a run that passed the gate, or only needs approval, gets to publish itself. */
+export type GatedContext = {
+  readonly decision: "pass" | "needs_approval";
+  readonly outputs: Outputs;
+  readonly record: (status: RunRecord["status"], pullRequest?: RunRecord["pullRequest"]) => RunRecord;
+  /** Posts one check per gate rule on `sha`. */
+  readonly postRules: (sha: string) => Promise<void>;
+  /** Ends the progress comment with `body`. */
+  readonly finish: (body: string) => Promise<void>;
+};
+
+/**
+ * The part a label run and a revise run share: the progress comment, install, the template with a check per step,
+ * the diff, and the gate. A run that fails before the gate, or fails it, ends with `stop`'s body. Otherwise `gated`
+ * publishes the change; an error there also ends with `stop`.
+ */
+export async function gatedRun<R>(
+  deps: RunDeps & {
+    /** Where the progress comment goes and its first line. */
+    readonly comment: { readonly issue: number; readonly title: string; readonly marker?: string };
+    readonly stop: (
+      status: "blocked" | "failed",
+      record: RunRecord,
+      outputs: Outputs,
+      error: string,
+    ) => Promise<{ readonly body: string; readonly result: R }>;
+    readonly gated: (context: GatedContext) => Promise<R>;
+  },
+): Promise<R> {
   const { event, workspace, github } = deps;
   const target = { owner: event.owner, repo: event.repo };
   const checkRuns = createCheckRuns(github, target);
-  const branch = deps.branch ?? `thin-pr/${event.issue.number}`;
   const limits = runLimits(deps.template, deps.config);
   const timeline: TimedEvent[] = [];
   let diff: Diff | null = null;
   let checks: readonly CheckResult[] = [];
   let gate: readonly GateRuleResult[] = [];
-  let outputs: Readonly<Partial<Record<StepId, Json>>> = {};
+  let outputs: Outputs = {};
 
   const record = (status: RunRecord["status"], pullRequest: RunRecord["pullRequest"] = null): RunRecord =>
     toRunRecord({ runId: deps.runId, event, template: deps.template.id, status, timeline, gate, diff, checks, pullRequest });
 
-  const stop = async (status: "blocked" | "failed", error: string): Promise<LabelRunResult> => {
-    const result = record(status);
-    await github.comment({ ...target, issue: event.issue.number, body: formatRunReport({ record: result, outputs, branch, error }) });
-    return { status, record: result, error };
+  let progress: Progress | null = null;
+  const finish = async (body: string): Promise<void> => {
+    if (progress) {
+      return progress.finish(body);
+    }
+    await github.createComment({ ...target, issue: deps.comment.issue, body });
+  };
+
+  const stop = async (status: "blocked" | "failed", error: string): Promise<R> => {
+    const { body, result } = await deps.stop(status, record(status), outputs, error);
+    await finish(body);
+    return result;
   };
 
   try {
+    const comment = await startProgress({
+      github,
+      ...target,
+      issue: deps.comment.issue,
+      title: deps.comment.title,
+      marker: deps.comment.marker,
+      steps: deps.template.steps.map((step) => step.id),
+      runId: deps.runId,
+      runLink: deps.runLink ?? null,
+    });
+    progress = comment;
     const handlers = deps.handlers(limits);
     // Before the workflow, so the implementer's run_check already has the dependencies.
     const install = await workspace.install();
@@ -160,6 +267,7 @@ export async function runIssue(deps: {
       async onEvent(runEvent) {
         timeline.push({ event: runEvent, at: new Date() });
         await checkRuns.onEvent(runEvent, workspace.baseSha);
+        await comment.onEvent(runEvent);
       },
     });
     outputs = state.outputs;
@@ -168,6 +276,7 @@ export async function runIssue(deps: {
     if (state.status !== "completed") {
       return await stop("failed", timeline.at(-1)?.event.error ?? "run failed");
     }
+    await comment.gating();
 
     const evidence = {
       plan: state.outputs.plan,
@@ -185,31 +294,13 @@ export async function runIssue(deps: {
       const failed = gate.filter((result) => result.verdict === "FAIL").map((result) => result.rule);
       return await stop("blocked", `gate failed: ${failed.join(", ")}`);
     }
-
-    const message = `Apply thin-pr/#${event.issue.number}`;
-    const head = await workspace.commitAndPush({ branch, message, token: deps.pushToken });
-    await checkRuns.postRules(gate, head);
-    if (decision === "needs_approval") {
-      const waiting = record("awaiting_approval");
-      const stored = toStoredRun({
-        record: waiting,
-        branch: { name: branch, head, base: event.defaultBranch },
-        title: draftTitle(event, outputs),
-        plan: plannerOutput.safeParse(outputs.plan).data ?? null,
-        review: reviewerOutput.safeParse(outputs.review).data ?? null,
-      });
-      const report = formatRunReport({ record: waiting, outputs, branch, error: null });
-      await github.comment({ ...target, issue: event.issue.number, body: `${report}\n\n${storedRunMarker(stored)}` });
-      // A draft from an earlier run already shows the pushed branch, so its body must stop saying the gate passed.
-      const [open] = await github.listPullsForHead({ ...target, branch });
-      if (open) {
-        await github.updatePull({ ...target, number: open.number, body: report });
-      }
-      return { status: "awaiting_approval", record: waiting, stored };
-    }
-    const body = formatRunReport({ record: record("opened"), outputs, branch, error: null });
-    const pullRequest = await publishDraft(github, event, branch, outputs, body);
-    return { status: "opened", record: record("opened", pullRequest) };
+    return await deps.gated({
+      decision,
+      outputs,
+      record,
+      postRules: (sha) => checkRuns.postRules(gate, sha),
+      finish,
+    });
   } catch (error) {
     let message = error instanceof Error && error.message.length > 0 ? error.message : "run failed";
     try {

@@ -32,6 +32,7 @@ const NO_MATCH: Record<RunStatus, string> = {
   awaiting_approval: "No run is waiting for approval.",
   blocked: "No run was blocked by the gate.",
   failed: "No run failed.",
+  cancelled: "No run was cancelled.",
 };
 
 function filterLabel(filter: Filter): string {

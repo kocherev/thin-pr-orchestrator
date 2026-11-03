@@ -3,9 +3,13 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as core from "@actions/core";
 import * as github from "@actions/github";
-import { runLabeledIssue } from "./labeled.js";
 import { exportRunRecord } from "./record.js";
+import { routeEvent, type Trigger } from "./router.js";
 import { spanNames, startTrace } from "./trace.js";
+import { runResultOf, runTrigger } from "./trigger.js";
+
+/** The account GitHub posts as for a workflow's `GITHUB_TOKEN`. */
+const ACTIONS_BOT = "github-actions[bot]";
 
 async function main(): Promise<void> {
   const token = process.env.GITHUB_TOKEN;
@@ -17,33 +21,14 @@ async function main(): Promise<void> {
   const tracing = startTrace();
   let failure = "";
   try {
-    const runId = process.env.GITHUB_RUN_ID ? `gha-${process.env.GITHUB_RUN_ID}` : `local-${Date.now()}`;
-    // actions/checkout leaves the default branch at the event's commit and stores no credentials; the push gets the token.
-    const { result, spentUsd } = await runLabeledIssue({
-      payload: github.context.payload,
-      checkout: process.cwd(),
-      baseSha: github.context.sha,
-      token,
-      runId,
-      env: process.env,
-    });
-    if (spentUsd !== null) {
-      core.info(`Model spend: ${spentUsd.toFixed(6)} USD`);
-      const spendPath = process.env.THIN_PR_SPEND_PATH;
-      if (spendPath) {
-        writeFileSync(spendPath, `${JSON.stringify({ usd: spentUsd })}\n`);
-      }
-    }
-
-    if (result.status !== "ignored") {
-      exportRunRecord(result.record, process.env.THIN_PR_RECORD_PATH);
-    }
-    if (result.status === "blocked" || result.status === "failed") {
-      failure = result.error;
-    } else if (result.status === "opened") {
-      core.info(`Draft pull request ${result.record.pullRequest?.url ?? "opened"}`);
-    } else if (result.status === "awaiting_approval") {
-      core.info(`Pushed ${result.stored.branch.name}. The diff is over the budget and waits for approval on the issue.`);
+    const route = routeEvent(github.context.eventName, github.context.payload);
+    // The workflow's condition filters most events. One that gets past it and starts nothing is no failure.
+    if (route.kind === "run") {
+      failure = await handle(route.trigger, token);
+    } else if (route.kind === "invalid") {
+      failure = `event payload invalid: ${route.reason}`;
+    } else {
+      core.info(`Nothing to do: ${route.reason}.`);
     }
   } catch (error) {
     failure = error instanceof Error ? error.message : "run failed";
@@ -72,6 +57,70 @@ async function main(): Promise<void> {
   if (failure.length > 0) {
     core.setFailed(failure);
   }
+}
+
+/** Runs the trigger and logs what happened. Returns the failure message, or "" when the job should pass. */
+async function handle(trigger: Trigger, token: string): Promise<string> {
+  const runId = process.env.GITHUB_RUN_ID ? `gha-${process.env.GITHUB_RUN_ID}` : `local-${Date.now()}`;
+  // actions/checkout stores no credentials; the push gets the token. For a label or a command it leaves the default
+  // branch at the event's commit. For a review it checks out the draft branch, whose head may be newer than the
+  // event, so the run starts from HEAD.
+  const { outcome, spentUsd } = await runTrigger({
+    trigger,
+    checkout: process.cwd(),
+    baseSha: trigger.kind === "revise" ? "HEAD" : github.context.sha,
+    token,
+    runId,
+    runLink: actionsRunLink(process.env),
+    botLogin: ACTIONS_BOT,
+    env: process.env,
+  });
+  if (outcome.kind === "command") {
+    const { result } = outcome;
+    core.info(`Command: ${result.status}${result.status === "refused" ? `. ${result.reason}` : ""}`);
+  }
+  if (spentUsd !== null) {
+    core.info(`Model spend: ${spentUsd.toFixed(6)} USD`);
+    const spendPath = process.env.THIN_PR_SPEND_PATH;
+    if (spendPath) {
+      writeFileSync(spendPath, `${JSON.stringify({ usd: spentUsd })}\n`);
+    }
+  }
+
+  if (outcome.kind === "revise") {
+    const { result } = outcome;
+    if (result.status === "ignored") {
+      core.info(`Nothing to revise: ${result.reason}.`);
+      return "";
+    }
+    exportRunRecord(result.record, process.env.THIN_PR_RECORD_PATH);
+    if (result.status === "pushed") {
+      core.info(`Pushed ${result.head} to ${trigger.kind === "revise" ? trigger.pull.branch : "the draft"}.`);
+      return "";
+    }
+    return result.error;
+  }
+  const result = runResultOf(outcome);
+  if (!result || result.status === "ignored") {
+    return "";
+  }
+  exportRunRecord(result.record, process.env.THIN_PR_RECORD_PATH);
+  switch (result.status) {
+    case "blocked":
+    case "failed":
+      return result.error;
+    case "opened":
+      core.info(`Draft pull request ${result.record.pullRequest?.url ?? "opened"}`);
+      return "";
+    case "awaiting_approval":
+      core.info(`Pushed ${result.stored.branch.name}. The diff is over the budget and waits for approval on the issue.`);
+      return "";
+  }
+}
+
+function actionsRunLink(env: NodeJS.ProcessEnv): string | null {
+  const { GITHUB_SERVER_URL: server, GITHUB_REPOSITORY: repository, GITHUB_RUN_ID: runId } = env;
+  return server && repository && runId ? `[Actions run ${runId}](${server}/${repository}/actions/runs/${runId})` : null;
 }
 
 function isDirectRun(): boolean {

@@ -1,10 +1,13 @@
 export { openApprovedDraft, readStoredRun, type ApprovalResult, type StoredRun } from "./approval.js";
-export { readLabelEvent, type LabelEvent } from "./event.js";
-export { runLabeledIssue, type LabeledIssueRun } from "./labeled.js";
+export { runCommand, type CommandResult } from "./commands.js";
+export { labelEvent, readLabelEvent, type LabelEvent } from "./event.js";
 export { runLocal } from "./local.js";
 export { verdictOf, type RunRecord, type Verdict } from "./record.js";
 export { APPROVE_COMMAND } from "./report.js";
-export { runAction, runIssue, runLimits, type LabelRunResult, type RunLimits } from "./run.js";
+export { routeEvent, triggerSchema, type Route, type Trigger } from "./router.js";
+export { runAction, runIssue, runLabel, runLimits, type LabelRunResult, type RunLimits } from "./run.js";
 export { createRunHandlers } from "./steps.js";
-export type { GitHubSurface } from "./surface.js";
+export { noReadBack, type GitHubSurface } from "./surface.js";
 export { spanNames, startTrace } from "./trace.js";
+export { runRevise, type ReviseResult } from "./revise.js";
+export { checkoutBranch, runResultOf, runTrigger, type TriggerOutcome, type TriggerRun } from "./trigger.js";

@@ -11,7 +11,7 @@ import { readLabelEvent } from "./event.js";
 import { exportRunRecord, type RunRecord } from "./record.js";
 import { runIssue } from "./run.js";
 import { createRunHandlers } from "./steps.js";
-import type { GitHubSurface } from "./surface.js";
+import { noReadBack, type GitHubSurface } from "./surface.js";
 
 const exec = promisify(execFile);
 
@@ -131,7 +131,12 @@ function localSurface(posted: string[]): GitHubSurface {
       return nextCheck - 1;
     },
     async finishCheck() {},
-    async comment({ body }) {
+    async createComment({ body }) {
+      posted.push(body);
+      return posted.length;
+    },
+    // The last body is what the issue would show, so an edit adds to the list.
+    async editComment({ body }) {
       posted.push(body);
     },
     async branchHead() {
@@ -147,6 +152,7 @@ function localSurface(posted: string[]): GitHubSurface {
       posted.push(body);
       return { number: 0, url: "" };
     },
+    ...noReadBack("a local run"),
   };
 }
 

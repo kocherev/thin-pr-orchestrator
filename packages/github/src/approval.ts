@@ -1,4 +1,4 @@
-import { STEP_IDS } from "@thin-pr/core";
+import { STEP_IDS, type Json, type StepId } from "@thin-pr/core";
 import { decideResults, GATE_RULES, GATE_VERDICTS } from "@thin-pr/gate";
 import { checkResult, plannerOutput, reviewerOutput } from "@thin-pr/specialists";
 import { z } from "zod";
@@ -19,7 +19,7 @@ const runRecord = z
     repo: z.string().regex(/^[^/]+\/[^/]+$/),
     issue: z.object({ number: z.number().int().positive(), title: z.string(), url: z.string() }).strict(),
     template: z.string().min(1),
-    status: z.enum(["opened", "awaiting_approval", "blocked", "failed"]),
+    status: z.enum(["opened", "awaiting_approval", "blocked", "failed", "cancelled"]),
     steps: z.array(
       z
         .object({
@@ -154,11 +154,15 @@ export async function openApprovedDraft(
   }
 
   const opened: RunRecord = { ...record, status: "opened" };
-  const outputs = { ...(stored.plan && { plan: stored.plan }), ...(stored.review && { review: stored.review }) };
-  const body = formatRunReport({ record: opened, outputs, branch: branch.name, error: null, approvedBy: deps.approvedBy });
+  const body = formatRunReport({ record: opened, outputs: storedOutputs(stored), branch: branch.name, error: null, by: deps.approvedBy });
   const [open] = await deps.github.listPullsForHead({ ...target, branch: branch.name });
   const pullRequest = open
     ? await deps.github.updatePull({ ...target, number: open.number, body })
     : await deps.github.openDraft({ ...target, title: stored.title, head: branch.name, base: branch.base, body, draft: true });
   return { status: "opened", record: { ...opened, pullRequest } };
+}
+
+/** The step outputs a stored run keeps, in the shape `formatRunReport` reads. */
+export function storedOutputs(stored: StoredRun): Partial<Record<StepId, Json>> {
+  return { ...(stored.plan && { plan: stored.plan }), ...(stored.review && { review: stored.review }) };
 }

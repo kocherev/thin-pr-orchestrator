@@ -5,8 +5,11 @@ describe("Octokit surface", () => {
   it("maps check, comment, and pull request calls onto the REST client", async () => {
     const calls: unknown[] = [];
     const pull = { number: 11, html_url: "https://github.com/example/sample-repo/pull/11" };
+    const base = restWith(calls, {});
     const octokit: GitHubRest = {
+      ...base,
       pulls: {
+        ...base.pulls,
         async create(params) {
           calls.push(["pulls.create", params]);
           return { data: pull };
@@ -30,6 +33,7 @@ describe("Octokit surface", () => {
         },
       },
       git: {
+        ...base.git,
         async getRef(params) {
           calls.push(["git.getRef", params]);
           if (params.ref === "heads/thin-pr/7") {
@@ -39,8 +43,13 @@ describe("Octokit surface", () => {
         },
       },
       issues: {
+        ...base.issues,
         async createComment(params) {
           calls.push(["issues.createComment", params]);
+          return { data: { id: 99 } };
+        },
+        async updateComment(params) {
+          calls.push(["issues.updateComment", params]);
         },
       },
     };
@@ -49,7 +58,8 @@ describe("Octokit surface", () => {
 
     await expect(github.startCheck({ ...target, name: "thin-pr / plan", sha: "sha-1" })).resolves.toBe(42);
     await github.finishCheck({ ...target, checkRunId: 42, conclusion: "failure", summary: "gate failed" });
-    await github.comment({ ...target, issue: 7, body: "## Run report" });
+    await expect(github.createComment({ ...target, issue: 7, body: "## Running" })).resolves.toBe(99);
+    await github.editComment({ ...target, commentId: 99, body: "## Run report" });
     await expect(github.branchHead({ ...target, branch: "thin-pr/7" })).resolves.toBe("sha-7");
     await expect(github.branchHead({ ...target, branch: "thin-pr/8" })).resolves.toBeNull();
     await expect(github.listPullsForHead({ ...target, branch: "thin-pr/7" })).resolves.toEqual([
@@ -76,7 +86,8 @@ describe("Octokit surface", () => {
           output: { title: "Failed", summary: "gate failed" },
         },
       ],
-      ["issues.createComment", { ...target, issue_number: 7, body: "## Run report" }],
+      ["issues.createComment", { ...target, issue_number: 7, body: "## Running" }],
+      ["issues.updateComment", { ...target, comment_id: 99, body: "## Run report" }],
       ["git.getRef", { ...target, ref: "heads/thin-pr/7" }],
       ["git.getRef", { ...target, ref: "heads/thin-pr/8" }],
       ["pulls.list", { ...target, head: "example:thin-pr/7", state: "open" }],
@@ -84,4 +95,118 @@ describe("Octokit surface", () => {
       ["pulls.create", { ...target, title: "Fix the stub", head: "thin-pr/7", base: "main", body: "## Plan", draft: true }],
     ]);
   });
+
+  it("maps the calls commands make, and pages through comments", async () => {
+    const calls: unknown[] = [];
+    const page = (from: number, size: number) =>
+      Array.from({ length: size }, (_, index) => ({
+        id: from + index,
+        body: `comment ${from + index}`,
+        user: { login: "octocat", type: "User" },
+      }));
+    const octokit = restWith(calls, {
+      issues: {
+        async listComments(params) {
+          calls.push(["issues.listComments", params]);
+          return { data: params.page === 1 ? page(1, 100) : [{ id: 101, user: null }] };
+        },
+        async get(params) {
+          calls.push(["issues.get", params]);
+          return { data: { number: 7, title: "Add a flag", body: null, labels: ["thin-pr", { name: "bug" }, {}] } };
+        },
+      },
+    });
+    const github = createGitHubSurface(octokit);
+    const target = { owner: "example", repo: "sample-repo" };
+
+    const comments = await github.listComments({ ...target, issue: 7 });
+    expect(comments).toHaveLength(101);
+    expect(comments[0]).toEqual({ id: 1, author: "octocat", authorType: "User", body: "comment 1" });
+    expect(comments.at(-1)).toEqual({ id: 101, author: null, authorType: null, body: "" });
+    await github.react({ ...target, commentId: 5, content: "eyes" });
+    await expect(github.getReview({ ...target, pull: 11, reviewId: 3 })).resolves.toEqual({
+      body: "Two things.",
+      comments: [
+        { path: "src/a.ts", line: 4, body: "Rename this." },
+        { path: "src/b.ts", line: 9, body: "Outdated, but still wanted." },
+        { path: "README.md", line: null, body: "On the whole file." },
+      ],
+    });
+    await expect(github.getIssue({ ...target, issue: 7 })).resolves.toEqual({
+      number: 7,
+      title: "Add a flag",
+      body: "",
+      labels: ["thin-pr", "bug"],
+    });
+    await expect(github.getPull({ ...target, number: 11 })).resolves.toEqual({
+      number: 11,
+      open: true,
+      branch: "thin-pr/7",
+      sameRepo: true,
+    });
+    await github.deleteBranch({ ...target, branch: "thin-pr/7" });
+
+    expect(calls).toEqual([
+      ["issues.listComments", { ...target, issue_number: 7, per_page: 100, page: 1 }],
+      ["issues.listComments", { ...target, issue_number: 7, per_page: 100, page: 2 }],
+      ["reactions.createForIssueComment", { ...target, comment_id: 5, content: "eyes" }],
+      ["pulls.getReview", { ...target, pull_number: 11, review_id: 3 }],
+      ["pulls.listCommentsForReview", { ...target, pull_number: 11, review_id: 3, per_page: 100 }],
+      ["issues.get", { ...target, issue_number: 7 }],
+      ["pulls.get", { ...target, pull_number: 11 }],
+      ["git.deleteRef", { ...target, ref: "heads/thin-pr/7" }],
+    ]);
+  });
 });
+
+/** A REST client whose every method records its call. `overrides` replaces methods per namespace. */
+function restWith(calls: unknown[], overrides: { readonly issues?: Partial<GitHubRest["issues"]> }): GitHubRest {
+  const unused = async (): Promise<never> => {
+    throw new Error("not used in this test");
+  };
+  return {
+    pulls: {
+      create: unused,
+      list: unused,
+      update: unused,
+      async get(params) {
+        calls.push(["pulls.get", params]);
+        return {
+          data: {
+            number: 11,
+            state: "open",
+            head: { ref: "thin-pr/7", repo: { full_name: "example/sample-repo" } },
+            base: { repo: { full_name: "example/sample-repo" } },
+          },
+        };
+      },
+      async getReview(params) {
+        calls.push(["pulls.getReview", params]);
+        return { data: { body: "Two things." } };
+      },
+      async listCommentsForReview(params) {
+        calls.push(["pulls.listCommentsForReview", params]);
+        return {
+          data: [
+            { path: "src/a.ts", line: 4, body: "Rename this." },
+            { path: "src/b.ts", line: null, original_line: 9, body: "Outdated, but still wanted." },
+            { path: "README.md", body: "On the whole file." },
+          ],
+        };
+      },
+    },
+    checks: { create: unused, update: unused },
+    git: {
+      getRef: unused,
+      async deleteRef(params) {
+        calls.push(["git.deleteRef", params]);
+      },
+    },
+    reactions: {
+      async createForIssueComment(params) {
+        calls.push(["reactions.createForIssueComment", params]);
+      },
+    },
+    issues: { createComment: unused, updateComment: unused, listComments: unused, get: unused, ...overrides.issues },
+  };
+}

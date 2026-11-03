@@ -11,14 +11,14 @@ const DELIVERY_ID = "72d3162e-cc78-11e3-81ab-4c9367dc0958";
 
 const JOB: Job = {
   deliveryId: DELIVERY_ID,
+  key: DELIVERY_ID,
   installationId: 42,
-  owner: "example",
-  repo: "sample-repo",
-  defaultBranch: "main",
-  issueNumber: 7,
-  issueTitle: "Add a flag",
-  issueBody: "Add a --verbose flag.",
-  label: "thin-pr",
+  trigger: {
+    kind: "label",
+    repo: { owner: "example", name: "sample-repo", defaultBranch: "main" },
+    issue: { number: 7, title: "Add a flag", body: "Add a --verbose flag." },
+    label: "thin-pr",
+  },
 };
 
 const LABELED = JSON.stringify({
@@ -108,6 +108,7 @@ describe("webhook intake", () => {
           ANTHROPIC_API_KEY: "test-anthropic-key",
           THIN_PR_MODEL: "live",
           THIN_PR_SPEND_LIMIT_USD: "25",
+          GITHUB_APP_SLUG: "thin-pr-test",
         },
       },
     ]);
@@ -128,6 +129,20 @@ describe("webhook intake", () => {
   it("answers 204 to events that do not start a run", async () => {
     expect((await deliver("ping", JSON.stringify({ zen: "Keep it logically awesome." }))).status).toBe(204);
     expect((await deliver("issues", LABELED.replace('"thin-pr"', '"bug"'))).status).toBe(204);
+  });
+
+  it("queues a command from a collaborator and ignores the same command from a bot", async () => {
+    const command = (user: { login: string; type: string }) =>
+      JSON.stringify({
+        action: "created",
+        issue: { number: 7, title: "Add a flag", body: null, labels: [{ name: "thin-pr" }] },
+        comment: { id: 55, body: "/thin-pr approve", user, author_association: "MEMBER" },
+        repository: { name: "sample-repo", default_branch: "main", owner: { login: "example" } },
+        sender: user,
+        installation: { id: 42 },
+      });
+    expect((await deliver("issue_comment", command({ login: "octocat", type: "User" }))).status).toBe(202);
+    expect((await deliver("issue_comment", command({ login: "thin-pr[bot]", type: "Bot" }))).status).toBe(204);
   });
 
   it("accepts only POST", async () => {

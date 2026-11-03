@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,13 +7,13 @@ import { templateForLabel } from "@thin-pr/core";
 import { createAnthropicClient, scriptedUpstream, type ModelSession, type Script } from "@thin-pr/specialists";
 import { createScratchRepo, loadRepoConfig } from "@thin-pr/workspace";
 import { openApprovedDraft, readStoredRun, type StoredRun } from "./approval.js";
+import { git, memoryGitHub, type Call } from "./fake-github.js";
 import { runAction, runLimits, type LabelRunResult } from "./run.js";
 import type { GitHubSurface } from "./surface.js";
 
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const cleanups: (() => void)[] = [];
 
-type Call = { readonly op: string } & Readonly<Record<string, unknown>>;
 
 afterEach(() => {
   for (const cleanup of cleanups.splice(0)) {
@@ -89,8 +88,9 @@ describe("issue label", () => {
       ["plan", "implement", "verify", "review", "write"].map((step) => [`thin-pr / ${step}`, repo.baseSha]),
     );
     expect(checkShas.slice(5).every(([, sha]) => sha === head)).toBe(true);
-    expect(memory.calls.at(-2)).toMatchObject({ op: "listPullsForHead", branch: "thin-pr/7" });
-    const draft = memory.calls.at(-1);
+    const pullCalls = memory.calls.filter((call) => !call.op.endsWith("Comment"));
+    expect(pullCalls.at(-2)).toMatchObject({ op: "listPullsForHead", branch: "thin-pr/7" });
+    const draft = pullCalls.at(-1);
     expect(draft).toMatchObject({ op: "openDraft", title: "Fix the stub", head: "thin-pr/7", base: "main", draft: true });
     const body = String(draft?.body);
     expect(body.split("\n")[0]).toBe("**Gate passed.** All 9 rules passed for #7.");
@@ -104,7 +104,49 @@ describe("issue label", () => {
       "Run report: 5 step runs, 0 loops, 0 retries",
     ]);
     expect(body).toContain("Plan the stub change.\n\n- edit the stub");
-    expect(memory.calls.some((call) => call.op === "comment")).toBe(false);
+    expect(finalComment(memory.calls).split("\n")[0]).toBe(
+      "**Gate passed.** All 9 rules passed for #7. Draft: https://github.com/example/sample-repo/pull/11",
+    );
+  });
+
+  it("creates one progress comment, edits it at each step, and ends it as the run report", async () => {
+    const repo = scratch(PASSING_CHECKS);
+    const memory = memoryGitHub();
+    const directory = mkdtempSync(join(tmpdir(), "thin-pr-label-"));
+    cleanups.push(() => rmSync(directory, { recursive: true, force: true }));
+    const result = await runAction({
+      payload: readFixture(),
+      templates: join(root, "templates"),
+      checkout: repo.dir,
+      baseSha: repo.baseSha,
+      runId: "run-7",
+      logPath: join(directory, "events.sqlite"),
+      github: memory.github,
+      model: () => cassette("gate-pass"),
+      runLink: "[Actions run 9](https://github.com/example/sample-repo/actions/runs/9)",
+    });
+    expect(result.status).toBe("opened");
+
+    const created = memory.calls.filter((call) => call.op === "createComment");
+    expect(created).toHaveLength(1);
+    expect(created[0]).toMatchObject({ issue: 7 });
+    const bodies = [created[0], ...memory.calls.filter((call) => call.op === "editComment")].map((call) => String(call?.body));
+    expect(new Set(memory.calls.filter((call) => call.op === "editComment").map((call) => call.commentId)).size).toBe(1);
+    expect(bodies[0]?.split("\n")[0]).toBe(
+      "**Running the feature template on #7.** Run `run-7`, [Actions run 9](https://github.com/example/sample-repo/actions/runs/9). Cost so far: 0.000000 USD.",
+    );
+    expect(bodies[0]).toContain("| plan | pending |  |  | 0.000000 USD |");
+    expect(bodies[0]).toContain("| gate | pending | | | |");
+    expect(bodies[1]).toContain("| plan | running | 1 | 0 | 0.000000 USD |");
+    expect(bodies[2]).toMatch(/\| plan \| done \| 1 \| 0 \| 0\.\d{6} USD \|/);
+    expect(bodies[2]).not.toContain("Cost so far: 0.000000 USD");
+    // Five steps, each started and finished, then the gate, then the final report.
+    expect(bodies).toHaveLength(1 + 10 + 1 + 1);
+    expect(bodies.at(-2)).toContain("| gate | running | | | |");
+    expect(bodies.at(-1)?.split("\n")[0]).toBe(
+      "**Gate passed.** All 9 rules passed for #7. Draft: https://github.com/example/sample-repo/pull/11",
+    );
+    expect(sections(bodies.at(-1) ?? "")).toContain("Run report: 5 step runs, 0 loops, 0 retries");
   });
 
   it("comments the run report and pushes nothing when a gate rule fails", async () => {
@@ -125,9 +167,9 @@ describe("issue label", () => {
     expect(memory.calls.some((call) => call.op === "openDraft" || call.op === "listPullsForHead")).toBe(false);
     const ruleChecks = memory.calls.filter((call) => call.op === "startCheck" && String(call.name).includes("/ gate /"));
     expect(ruleChecks.every((call) => call.sha === repo.baseSha)).toBe(true);
-    const comment = memory.calls.find((call) => call.op === "comment");
+    const comment = memory.calls.find((call) => call.op === "createComment");
     expect(comment).toMatchObject({ issue: 7, owner: "example", repo: "sample-repo" });
-    const body = String(comment?.body);
+    const body = finalComment(memory.calls);
     expect(body.split("\n")[0]).toBe("**Gate failed.** 1 of 9 rules failed: `review`. Nothing was pushed.");
     expect(gateRows(body)[0]).toBe("review FAIL");
     expect(body).toContain("| `review` | **FAIL** | Reviewer requested changes (1 note). |");
@@ -159,7 +201,7 @@ describe("issue label", () => {
     expect(result.record.gate.find((rule) => rule.rule === "tests")?.reason).toBe(
       "Tests failed (exit 1): echo '1 failed'; exit 1",
     );
-    const body = String(memory.calls.find((call) => call.op === "comment")?.body);
+    const body = finalComment(memory.calls);
     expect(gateRows(body)[0]).toBe("tests FAIL");
     expect(sections(body)).toContain("Checks: typecheck exit 0, test exit 1 (open)");
     expect(body).toContain("`test` exited 1 in ");
@@ -179,7 +221,7 @@ describe("issue label", () => {
       return;
     }
     expect(result.record.steps).toEqual([]);
-    const body = String(memory.calls.find((call) => call.op === "comment")?.body);
+    const body = finalComment(memory.calls);
     expect(body.split("\n")[0]).toBe("**Run failed.** install failed (exit 3): echo 'lockfile is out of date'; exit 3");
     expect(body).toContain("```text\nlockfile is out of date\n```");
     expect(body).toContain("The gate did not run.");
@@ -194,7 +236,7 @@ describe("issue label", () => {
     });
 
     expect(result).toMatchObject({ status: "blocked", error: "gate failed: diff" });
-    expect(memory.calls.find((call) => call.op === "comment")?.body).toContain("| `diff` | **FAIL** | Diff is empty. |");
+    expect(finalComment(memory.calls)).toContain("| `diff` | **FAIL** | Diff is empty. |");
   });
 
   it("comments the run report when a step fails", async () => {
@@ -215,8 +257,7 @@ describe("issue label", () => {
       ["plan", 1, "failed"],
       ["plan", 2, "failed"],
     ]);
-    const comment = memory.calls.find((call) => call.op === "comment");
-    const body = String(comment?.body);
+    const body = finalComment(memory.calls);
     expect(body.split("\n")[0]).toMatch(/^\*\*Run failed\.\*\* plan failed after 2 attempts: /);
     expect(sections(body)).toContain("Run report: 2 step runs, 0 loops, 1 retry");
     expect(body).toMatch(/^\| plan \| 2 \| 0 \| failed \| .* \| planner output invalid at summary/m);
@@ -238,7 +279,7 @@ describe("issue label", () => {
       "plan 1 finished",
       "implement 1 failed",
     ]);
-    const body = String(memory.calls.find((call) => call.op === "comment")?.body);
+    const body = finalComment(memory.calls);
     expect(body.split("\n")[0]).toBe(`**Run failed.** ${result.error}`);
     expect(git(repo.remote, "branch", "--list", "thin-pr/7")).toBe("");
   });
@@ -265,7 +306,7 @@ describe("issue label", () => {
       status: "failed",
       error: "plan failed after 2 attempts: planner request was refused by claude-sonnet-5-5 (category: cyber)",
     });
-    expect(memory.calls.find((call) => call.op === "comment")?.body).toContain("(category: cyber)");
+    expect(finalComment(memory.calls)).toContain("(category: cyber)");
     if (result.status !== "failed") {
       return;
     }
@@ -320,8 +361,9 @@ describe("issue label", () => {
     expect(git(repo.remote, "rev-parse", "thin-pr/7")).not.toBe(firstHead);
     expect(git(repo.remote, "rev-list", "--count", "main..thin-pr/7")).toBe("1");
     expect(second.calls.some((call) => call.op === "openDraft")).toBe(false);
-    expect(second.calls.at(-1)).toMatchObject({ op: "updatePull", number: 11 });
-    expect(second.calls.at(-1)?.body).toMatch(/^\*\*Gate passed\.\*\*/);
+    const update = second.calls.filter((call) => call.op === "updatePull").at(-1);
+    expect(update).toMatchObject({ number: 11 });
+    expect(update?.body).toMatch(/^\*\*Gate passed\.\*\*/);
   });
 
   it("comments the setup error when the model cannot start", async () => {
@@ -339,7 +381,7 @@ describe("issue label", () => {
     });
 
     expect(result).toMatchObject({ status: "failed", error: "ANTHROPIC_API_KEY is missing" });
-    expect(memory.calls.find((call) => call.op === "comment")?.body).toMatch(/^\*\*Run failed\.\*\* ANTHROPIC_API_KEY is missing\n/);
+    expect(finalComment(memory.calls)).toMatch(/^\*\*Run failed\.\*\* ANTHROPIC_API_KEY is missing\n/);
     expect(memory.calls.some((call) => call.op === "startCheck")).toBe(false);
   });
 
@@ -356,12 +398,22 @@ describe("issue label", () => {
   it("points the workflow at the label, the full checkout and a neutral commit identity", () => {
     const workflow = readFileSync(join(root, ".github/workflows/thin-pr.yml"), "utf8");
     expect(workflow).toContain("types: [labeled]");
-    expect(workflow).toContain("github.event.label.name == 'thin-pr'");
+    expect(workflow).toContain("github.event.label.name == 'thin-pr' || startsWith(github.event.label.name, 'thin-pr:')");
+    expect(workflow).toContain("github.event.sender.type != 'Bot'");
+    expect(workflow).toContain(`contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)`);
+    expect(workflow).toContain(`contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association)`);
+    for (const event of ["issue_comment:", "pull_request_review:", "pull_request_review_comment:"]) {
+      expect(workflow).toContain(`  ${event}`);
+    }
+    expect(workflow).toContain("group: thin-pr-${{ github.event.issue.number || github.event.pull_request.number }}");
+    expect(workflow).toContain("ref: ${{ github.event.pull_request.head.ref }}");
+    const manifest = JSON.parse(readFileSync(join(root, "packages/app/github-app-manifest.json"), "utf8")) as { default_events: string[] };
+    expect(manifest.default_events).toEqual(["issues", "issue_comment", "pull_request_review", "pull_request_review_comment"]);
     expect(workflow).toContain("packages/github/src/action.ts");
     expect(workflow).toContain("actions/checkout@v7");
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("persist-credentials: false");
-    expect(readFileSync(fileURLToPath(new URL("./labeled.ts", import.meta.url)), "utf8")).toContain("pushToken: input.token");
+    expect(readFileSync(fileURLToPath(new URL("./trigger.ts", import.meta.url)), "utf8")).toContain("pushToken: input.token");
     expect(workflow).toContain("GIT_AUTHOR_NAME: thin-pr[bot]");
     expect(workflow).toContain("GIT_COMMITTER_EMAIL: thin-pr@example.invalid");
     expect(workflow).toContain("ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}");
@@ -409,7 +461,7 @@ describe("approval", () => {
     if (result.status !== "awaiting_approval") {
       throw new Error(`expected awaiting_approval, got ${result.status}`);
     }
-    const comment = String(memory.calls.find((call) => call.op === "comment")?.body);
+    const comment = finalComment(memory.calls);
     return { repo, memory, result, comment };
   }
 
@@ -510,6 +562,11 @@ describe("runLimits", () => {
   });
 });
 
+/** The body the run's issue comment ends with: the last edit, or the comment itself when it was never edited. */
+function finalComment(calls: readonly Call[]): string {
+  return String(calls.filter((call) => call.op === "createComment" || call.op === "editComment").at(-1)?.body);
+}
+
 /** Each gate table row as "rule VERDICT", in the order the body lists them. */
 function gateRows(body: string): string[] {
   return [...body.matchAll(/^\| `(\w+)` \| \**(PASS|FAIL|NEEDS_APPROVAL)\** \|/gm)].map((match) => `${match[1]} ${match[2]}`);
@@ -578,50 +635,6 @@ async function run(
     github,
     model: () => options.model,
   });
-}
-
-/** An in-memory GitHub. Branch heads come from `remote`, the bare repo the run pushes to. */
-function memoryGitHub(options?: { readonly openPull?: { readonly number: number; readonly url: string }; readonly remote?: string }) {
-  const calls: Call[] = [];
-  let nextId = 1;
-  const github: GitHubSurface = {
-    async startCheck(input) {
-      calls.push({ op: "startCheck", ...input });
-      nextId += 1;
-      return nextId - 1;
-    },
-    async finishCheck(input) {
-      calls.push({ op: "finishCheck", ...input });
-    },
-    async comment(input) {
-      calls.push({ op: "comment", ...input });
-    },
-    async branchHead(input) {
-      calls.push({ op: "branchHead", ...input });
-      if (!options?.remote) {
-        return null;
-      }
-      const refs = git(options.remote, "for-each-ref", "--format=%(objectname)", `refs/heads/${input.branch}`);
-      return refs.length > 0 ? refs : null;
-    },
-    async listPullsForHead(input) {
-      calls.push({ op: "listPullsForHead", ...input });
-      return options?.openPull ? [options.openPull] : [];
-    },
-    async updatePull(input) {
-      calls.push({ op: "updatePull", ...input });
-      return { number: input.number, url: `https://github.com/${input.owner}/${input.repo}/pull/${input.number}` };
-    },
-    async openDraft(input) {
-      calls.push({ op: "openDraft", ...input });
-      return { number: 11, url: `https://github.com/${input.owner}/${input.repo}/pull/11` };
-    },
-  };
-  return { github, calls };
-}
-
-function git(cwd: string, ...args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
 
 function specifiers(source: string): string[] {
