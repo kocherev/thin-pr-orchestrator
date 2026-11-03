@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { loadEvalReport, loadRuns } from "./load";
-import type { EvalReport, RunRecord } from "./schema";
+import { loadEvalReport, loadExpected, loadRuns } from "./load";
+import type { EvalReport, Expected, RunRecord } from "./schema";
 
 const consoleRoot = process.cwd();
 const repoRoot = join(consoleRoot, "..", "..");
@@ -22,4 +22,8 @@ export function getRun(runId: string): RunRecord | undefined {
 
 export function getEvalReport(): EvalReport | null {
   return loadEvalReport(REPORT_FILE);
+}
+
+export function getExpected(): Map<string, Expected> {
+  return loadExpected(join(repoRoot, "evals", "cases"));
 }

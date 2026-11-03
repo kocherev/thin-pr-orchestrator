@@ -77,6 +77,14 @@ export const runRecordSchema = z
   })
   .strict();
 
+/** Parses `evals/cases/<id>/expected.json`, the labels `scripts/eval.ts` scores each case against. */
+export const expectedSchema = z
+  .object({
+    verdict: z.enum(["opened", "blocked"]),
+    failedRules: z.array(z.string().min(1)).min(1).optional(),
+  })
+  .strict();
+
 /** Parses `evals/report.json`, the `ReportFile` that `scripts/eval.ts` writes. */
 export const evalReportSchema = z
   .object({
@@ -106,3 +114,4 @@ export type CheckResult = RunRecord["checks"][number];
 export type Diff = NonNullable<RunRecord["diff"]>;
 export type EvalReport = z.infer<typeof evalReportSchema>;
 export type EvalCase = EvalReport["cases"][number];
+export type Expected = z.infer<typeof expectedSchema>;

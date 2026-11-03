@@ -6,8 +6,8 @@ import { EmptyState, Section } from "@/components/section";
 import { StatStrip } from "@/components/stat-strip";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getEvalReport, getRun } from "@/lib/data";
-import { summarizeEvals } from "@/lib/evals";
+import { getEvalReport, getExpected, getRun } from "@/lib/data";
+import { isCorrect, summarizeEvals } from "@/lib/evals";
 import { formatDate, formatDuration, formatPercent, formatUsd } from "@/lib/format";
 import { REPLAY_NOTE } from "@/lib/run";
 import type { RunStatus } from "@/lib/schema";
@@ -35,7 +35,8 @@ export default function EvalsPage() {
     );
   }
 
-  const summary = summarizeEvals(report);
+  const expected = getExpected();
+  const summary = summarizeEvals(report, expected);
 
   return (
     <>
@@ -44,7 +45,7 @@ export default function EvalsPage() {
         description={
           <>
             <p>
-              Each case runs a labeled issue against the sample repo and compares the run status with the expected one.
+              Each case runs a labeled issue against the sample repo. A run that failed before the gate counts as blocked.
               Recorded {formatDate(report.generatedAt)}.
             </p>
             <p>{REPLAY_NOTE}</p>
@@ -56,8 +57,8 @@ export default function EvalsPage() {
         stats={[
           {
             label: "Verdict accuracy",
-            value: formatPercent(summary.matched, summary.total),
-            detail: `${summary.matched} of ${summary.total} cases match`,
+            value: formatPercent(summary.correct, summary.total),
+            detail: `${summary.correct} of ${summary.total} cases match their label`,
           },
           {
             label: "Resolve rate",
@@ -72,7 +73,7 @@ export default function EvalsPage() {
           { label: "Total cost", value: formatUsd(summary.totalCostUsd), detail: `${summary.total} cases` },
         ]}
       />
-      <Section id="cases" title="Cases" meta={`${summary.total - summary.matched} mismatched`}>
+      <Section id="cases" title="Cases" meta={`${summary.total - summary.correct} mismatched`}>
         <Table>
           <TableHeader>
             <TableRow>
@@ -88,7 +89,7 @@ export default function EvalsPage() {
           </TableHeader>
           <TableBody>
             {report.cases.map((evalCase) => {
-              const match = evalCase.expected === evalCase.actual;
+              const match = isCorrect(evalCase, expected.get(evalCase.caseId));
               return (
                 <TableRow key={evalCase.caseId} className={cn(!match && "bg-danger/6")}>
                   <TableCell className="max-w-0 min-w-36 whitespace-normal sm:min-w-52">

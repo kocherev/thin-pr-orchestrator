@@ -1,7 +1,14 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { evalReportSchema, runRecordSchema, type EvalReport, type RunRecord } from "./schema";
+import {
+  evalReportSchema,
+  expectedSchema,
+  runRecordSchema,
+  type EvalReport,
+  type Expected,
+  type RunRecord,
+} from "./schema";
 import { runStartedAt } from "./run";
 
 function parseJsonFile<T>(schema: z.ZodType<T>, file: string): T {
@@ -41,4 +48,14 @@ export function loadRuns(directories: string[]): RunRecord[] {
 
 export function loadEvalReport(file: string): EvalReport | null {
   return existsSync(file) ? parseJsonFile(evalReportSchema, file) : null;
+}
+
+/** Reads the expected label of every case under `evals/cases/`, keyed by case id. */
+export function loadExpected(casesDirectory: string): Map<string, Expected> {
+  if (!existsSync(casesDirectory)) return new Map();
+  return new Map(
+    readdirSync(casesDirectory)
+      .filter((id) => existsSync(join(casesDirectory, id, "expected.json")))
+      .map((id) => [id, parseJsonFile(expectedSchema, join(casesDirectory, id, "expected.json"))]),
+  );
 }
