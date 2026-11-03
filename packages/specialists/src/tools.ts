@@ -15,7 +15,7 @@ import type { Workspace } from "./workspace.js";
 
 const READ_MAX_TOKENS = 16_000;
 
-/** Enough for a few rounds of parallel reads and searches before the reply. */
+/** Enough for a few rounds of parallel reads and searches before the reply. The last turn must reply. */
 const READ_MAX_TURNS = 8;
 
 /**
@@ -48,7 +48,13 @@ export async function structuredWithReads<T>(
     },
     { headers: { [SPECIALIST_HEADER]: request.specialist } },
   );
-  const last = await runToolLoop(runner, { specialist: request.specialist, maxTurns: READ_MAX_TURNS, maxTokens: READ_MAX_TOKENS });
+  const last = await runToolLoop(runner, {
+    specialist: request.specialist,
+    maxTurns: READ_MAX_TURNS,
+    maxTokens: READ_MAX_TOKENS,
+    // A large repo can take more reads than the cap allows. The model then answers from what it has read.
+    onLastTurn: () => runner.setMessagesParams((params) => ({ ...params, tool_choice: { type: "none" } })),
+  });
   if (!last || last.stop_reason === "max_tokens") {
     throw new TruncatedOutputError(request.specialist, READ_MAX_TOKENS);
   }
@@ -70,11 +76,11 @@ export class TurnLimitError extends Error {
 /**
  * Drives a tool runner until the model stops asking for tools and returns the last message. A refusal, a tool call
  * cut off at `maxTokens`, or a request for tools on turn `maxTurns` throws. The runner runs a turn's tools only when
- * the loop asks for the next message, so a throw here stops them.
+ * the loop asks for the next message, so a throw here stops them. `onLastTurn` runs before the last request.
  */
 export async function runToolLoop(
   runner: AsyncIterable<Anthropic.Beta.Messages.BetaMessage>,
-  limits: { readonly specialist: string; readonly maxTurns: number; readonly maxTokens: number },
+  limits: { readonly specialist: string; readonly maxTurns: number; readonly maxTokens: number; readonly onLastTurn?: () => void },
 ): Promise<Anthropic.Beta.Messages.BetaMessage | null> {
   let turns = 0;
   let last: Anthropic.Beta.Messages.BetaMessage | null = null;
@@ -89,6 +95,9 @@ export async function runToolLoop(
     }
     if (message.stop_reason === "tool_use" && turns >= limits.maxTurns) {
       throw new TurnLimitError(limits.specialist, limits.maxTurns);
+    }
+    if (message.stop_reason === "tool_use" && turns === limits.maxTurns - 1) {
+      limits.onLastTurn?.();
     }
   }
   return last;

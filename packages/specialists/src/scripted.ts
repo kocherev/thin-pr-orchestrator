@@ -22,6 +22,7 @@ const request = z.looseObject({
   model: z.string(),
   messages: z.array(z.looseObject({ role: z.string() })),
   tools: z.array(z.unknown()).optional(),
+  tool_choice: z.looseObject({ type: z.string() }).optional(),
   output_config: z.looseObject({ format: z.looseObject({ schema: z.looseObject({ properties: z.record(z.string(), z.unknown()) }) }).optional() }).optional(),
 });
 
@@ -47,7 +48,8 @@ export function scriptedUpstream(script: Script): typeof fetch {
       );
 
     if (specialist !== "implementer") {
-      const reads = specialist === "planner" ? script.plannerReads?.[turn] : undefined;
+      // With tool_choice none the API returns no tool call, so the planner replies.
+      const reads = specialist === "planner" && body.tool_choice?.type !== "none" ? script.plannerReads?.[turn] : undefined;
       if (reads) {
         return toolUse("plan", reads);
       }
