@@ -10,6 +10,9 @@ import type { CheckResult, Workspace } from "./workspace.js";
 
 const text = z.string().min(1);
 
+/** The planner sees the tracked paths so its steps name real files. Past this many, the prompt notes the rest. */
+const MAX_PLANNED_FILES = 500;
+
 export const plannerOutput = z.object({ summary: text, steps: z.array(text).min(1) }).strict();
 
 /** `files` comes from the workspace diff, never from the model. */
@@ -69,7 +72,10 @@ export function createStepHandlers(session: ModelSession, workspace: Workspace):
 
   return {
     plan: metered(async (context) => {
-      const input = withFeedback("Plan the change.", context.feedback);
+      const files = await workspace.listFiles();
+      const shown = files.slice(0, MAX_PLANNED_FILES);
+      const more = files.length > shown.length ? `\n(${files.length - shown.length} more files not shown)` : "";
+      const input = withFeedback(`Repository files:\n${shown.join("\n")}${more}\n\nPlan the change.`, context.feedback);
       const output = await structured(client, { ...route("plan", context), system: PLANNER_SYSTEM, input, schema: plannerOutput });
       return { outcome: "done", output };
     }),
