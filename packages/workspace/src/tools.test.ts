@@ -14,4 +14,17 @@ describe("file tools", () => {
 
     expect(await workspace.readFile("src/a.ts")).toBe("const a = 2;\nconst b = 2;\n");
   });
+
+  it("runs the edits after a failed one in the same turn", async () => {
+    const workspace = createMemoryWorkspace({ "src/a.ts": "const a = 1;\nconst b = 1;\n" }, passing);
+
+    const edits = await Promise.allSettled([
+      workspace.replace("src/a.ts", "const a = 1;", "const a = 2;"),
+      workspace.replace("src/a.ts", "const c = 1;", "const c = 2;"),
+      workspace.replace("src/a.ts", "const b = 1;", "const b = 2;"),
+    ]);
+
+    expect(edits.map((edit) => edit.status)).toEqual(["fulfilled", "rejected", "fulfilled"]);
+    expect(await workspace.readFile("src/a.ts")).toBe("const a = 2;\nconst b = 2;\n");
+  });
 });

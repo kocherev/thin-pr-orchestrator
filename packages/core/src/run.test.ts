@@ -23,8 +23,10 @@ afterEach(() => {
 });
 
 const template: Template = {
-  id: "small-feature",
+  id: "feature",
   label: "thin-pr",
+  budget: { max_files: 12, max_lines: 600 },
+  spend_usd: 5,
   steps: [
     { id: "plan", retries: 0 },
     { id: "implement", retries: 1 },

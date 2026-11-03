@@ -20,7 +20,7 @@ The implementer edits code only through six tools over the `Workspace` interface
 - `replace` edits an existing file, and its old text must match exactly once. It does not check `paths`. The `paths` rule fails the run when the edited file is denied. `docs/gate.md` shows the eval case.
 - `create_file` refuses a path that `paths.deny` matches or that no `paths.allow` glob matches, and refuses a file that exists.
 - `run_check` takes only `typecheck` or `test` and runs the command `.thin-pr.yml` sets for it. The model cannot pass a command.
-- The tool loop fails after 25 turns.
+- The implementer's tool loop fails after 60 turns, and the planner's after 8. The planner has only `read_file` and `search`.
 
 ## Check environment
 
@@ -78,7 +78,7 @@ The three workflows set `permissions: {}` at the top and grant each job only wha
 
 ## Spend cap
 
-`createAnthropicClient` meters every live and recorded call. Before each request, the meter prices the largest reply the request allows and stops with `SpendLimitError` when the session's spend plus that price would pass `THIN_PR_SPEND_LIMIT_USD`. The default is 25 USD. The App sets 25 in `wrangler.jsonc`, and the nightly eval sets 15. Replay never reaches the network.
+`createAnthropicClient` meters every live and recorded call. Before each request, the meter prices the largest reply the request allows and stops with `SpendLimitError` when the session's spend plus that price would pass `THIN_PR_SPEND_LIMIT_USD`. The default is 25 USD. The App sets 25 in `wrangler.jsonc`, and the nightly eval sets 15. Each run also has its own cap, the template's `spend_usd` or the `.thin-pr.yml` override, and the same check stops a call that could pass it. A spend stop fails the run at once without retries. Replay never reaches the network.
 
 ## Telemetry
 

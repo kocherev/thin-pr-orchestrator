@@ -1,0 +1,18 @@
+{
+  "action": "labeled",
+  "label": {
+    "name": "thin-pr"
+  },
+  "issue": {
+    "number": 21,
+    "title": "Document every helper",
+    "body": "Each module under src/ needs a JSDoc comment on every export, a page under docs/ with a usage example, and a usage test under test/ that runs the example from its page. Link the four pages from the README."
+  },
+  "repository": {
+    "name": "sample-repo",
+    "default_branch": "main",
+    "owner": {
+      "login": "example"
+    }
+  }
+}

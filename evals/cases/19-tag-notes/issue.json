@@ -1,0 +1,18 @@
+{
+  "action": "labeled",
+  "label": {
+    "name": "thin-pr"
+  },
+  "issue": {
+    "number": 19,
+    "title": "Collect tags from notes",
+    "body": "Notes can carry tags such as #home or #work. Add a helper that reads the tags in one line, lowercased and without the #. Add notesWithTag(text, tag) to src/notes.ts that returns the lines carrying a tag, matched without case and with or without the #. Test both and list them in the README."
+  },
+  "repository": {
+    "name": "sample-repo",
+    "default_branch": "main",
+    "owner": {
+      "login": "example"
+    }
+  }
+}

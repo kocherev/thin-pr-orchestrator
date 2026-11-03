@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-03T05:00:15.336Z",
+  "generatedAt": "2026-11-03T07:24:08.194Z",
   "cases": [
     {
       "caseId": "01-clamp-decrement",
@@ -145,11 +145,9 @@
     {
       "caseId": "11-wide-touch",
       "title": "Mark every helper",
-      "expected": "blocked",
-      "actual": "blocked",
-      "failedRules": [
-        "budget"
-      ],
+      "expected": "opened",
+      "actual": "opened",
+      "failedRules": [],
       "costUsd": 0.033016,
       "durationMs": 23085,
       "models": [
@@ -161,11 +159,9 @@
     {
       "caseId": "12-long-readme",
       "title": "Rewrite the readme",
-      "expected": "blocked",
-      "actual": "blocked",
-      "failedRules": [
-        "budget"
-      ],
+      "expected": "opened",
+      "actual": "opened",
+      "failedRules": [],
       "costUsd": 0.027994,
       "durationMs": 20955,
       "models": [
@@ -262,6 +258,48 @@
       "failedRules": [],
       "costUsd": 0.074424,
       "durationMs": 34635,
+      "models": [
+        "claude-haiku-5-5",
+        "claude-opus-5-5",
+        "claude-sonnet-5-5"
+      ]
+    },
+    {
+      "caseId": "19-tag-notes",
+      "title": "Collect tags from notes",
+      "expected": "opened",
+      "actual": "opened",
+      "failedRules": [],
+      "costUsd": 0.068132,
+      "durationMs": 29836,
+      "models": [
+        "claude-haiku-5-5",
+        "claude-opus-5-5",
+        "claude-sonnet-5-5"
+      ]
+    },
+    {
+      "caseId": "20-rename-split-lines",
+      "title": "Rename splitNotes to splitLines",
+      "expected": "opened",
+      "actual": "opened",
+      "failedRules": [],
+      "costUsd": 0.043086,
+      "durationMs": 24756,
+      "models": [
+        "claude-haiku-5-5",
+        "claude-opus-5-5",
+        "claude-sonnet-5-5"
+      ]
+    },
+    {
+      "caseId": "21-document-every-helper",
+      "title": "Document every helper",
+      "expected": "awaiting_approval",
+      "actual": "awaiting_approval",
+      "failedRules": [],
+      "costUsd": 0.113283,
+      "durationMs": 37968,
       "models": [
         "claude-haiku-5-5",
         "claude-opus-5-5",

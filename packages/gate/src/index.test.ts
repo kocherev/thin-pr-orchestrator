@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import type { CheckResult, Diff } from "@thin-pr/specialists";
 import { loadRepoConfig } from "@thin-pr/workspace";
 import { describe, expect, it } from "vitest";
-import { decide, evaluate, GATE_RULES, type RunEvidence } from "./index.js";
+import { decide, decideResults, evaluate, GATE_RULES, type RunEvidence } from "./index.js";
 
 // This directory has no .thin-pr.yml, so it gives the default config.
 const config = loadRepoConfig(fileURLToPath(new URL(".", import.meta.url)));
@@ -53,19 +53,45 @@ describe("evaluate", () => {
     expect(reason({ diff: { ...twoLines, meaningful: false } }, "diff")).toBe("FAIL: Diff only changes whitespace.");
   });
 
-  it("fails budget on too many files or too many lines", () => {
+  it("asks for approval when only the budget is over: too many files or too many lines", () => {
     const files = (count: number, lines: number): Diff => ({
       files: Array.from({ length: count }, (_, index) => ({ path: `src/f${index}.ts`, added: lines, removed: 0 })),
       meaningful: true,
       patch: "",
     });
     expect(reason({ diff: files(3, 1) }, "budget")).toBe(
-      "FAIL: Diff exceeds the budget (3 files, 3 lines; limit 2 files, 16 lines).",
+      "NEEDS_APPROVAL: Diff exceeds the budget (3 files, 3 lines; limit 2 files, 16 lines).",
     );
     expect(reason({ diff: files(1, 17) }, "budget")).toBe(
-      "FAIL: Diff exceeds the budget (1 file, 17 lines; limit 2 files, 16 lines).",
+      "NEEDS_APPROVAL: Diff exceeds the budget (1 file, 17 lines; limit 2 files, 16 lines).",
     );
+    expect(decide(evidence({ diff: files(1, 17) }))).toBe("needs_approval");
     expect(reason({ diff: files(2, 8) }, "budget")).toMatch(/^PASS/);
+    expect(reason({ diff: files(13, 1), budget: { max_files: 12, max_lines: 600 } }, "budget")).toMatch(/^NEEDS_APPROVAL/);
+    expect(reason({ diff: files(12, 50), budget: { max_files: 12, max_lines: 600 } }, "budget")).toMatch(/^PASS/);
+  });
+
+  it("fails an over-size diff when another rule fails, and leaves an empty diff to the diff rule", () => {
+    const wide: Diff = { ...twoLines, files: [{ path: "src/counter.ts", added: 30, removed: 0 }] };
+    const failing = evidence({ diff: wide, checks: [check("typecheck", 0), check("test", 1)] });
+    expect(evaluate(failing).find((result) => result.rule === "budget")).toEqual({
+      rule: "budget",
+      verdict: "FAIL",
+      reason: "Diff exceeds the budget (1 file, 30 lines; limit 2 files, 16 lines).",
+    });
+    expect(decide(failing)).toBe("fail");
+    expect(reason({ diff: null }, "budget")).toBe("FAIL: Budget was not measured.");
+    const empty = evidence({ diff: { files: [], meaningful: false, patch: "" } });
+    expect(evaluate(empty).filter((result) => result.verdict !== "PASS").map((result) => result.rule)).toEqual(["diff"]);
+  });
+
+  it("decides stored results: any FAIL fails, else NEEDS_APPROVAL waits, else it passes", () => {
+    const results = evaluate(evidence({}));
+    expect(decideResults(results)).toBe("pass");
+    const over = results.map((result) => (result.rule === "budget" ? { ...result, verdict: "NEEDS_APPROVAL" as const } : result));
+    expect(decideResults(over)).toBe("needs_approval");
+    expect(decideResults(over.map((result) => (result.rule === "tests" ? { ...result, verdict: "FAIL" as const } : result)))).toBe("fail");
+    expect(decideResults([])).toBe("fail");
   });
 
   it("fails paths when a changed file is denied or outside allow", () => {
@@ -127,6 +153,7 @@ function evidence(overrides: Partial<RunEvidence>): RunEvidence {
     contracts: ["plan", "implement", "verify", "review", "write"].map((step) => ({ step, valid: true })),
     diff: twoLines,
     checks: [check("typecheck", 0), check("test", 0)],
+    budget: { max_files: 2, max_lines: 16 },
     config,
     ...overrides,
   };

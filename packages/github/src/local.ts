@@ -20,7 +20,7 @@ const TEMPLATES = fileURLToPath(new URL("../../../templates", import.meta.url));
 export type LocalRunResult = {
   readonly status: RunRecord["status"];
   readonly record: RunRecord;
-  /** The branch that holds the change. Only a run that passes the gate creates one. */
+  /** The branch that holds the change. Only a run that passes the gate, or waits for approval, creates one. */
   readonly branch: string | null;
   /** What GitHub would have received: the draft body when the gate passes, the run report comment otherwise. */
   readonly report: string;
@@ -89,7 +89,7 @@ export async function runLocal(input: {
       template,
       config,
       workspace,
-      handlers: () => createRunHandlers(input.model(), workspace),
+      handlers: (limits) => createRunHandlers(input.model(), workspace, limits),
       github: localSurface(posted),
       log,
       runId,
@@ -105,7 +105,7 @@ export async function runLocal(input: {
     return {
       status: record.status,
       record,
-      branch: record.status === "opened" ? branch : null,
+      branch: record.status === "opened" || record.status === "awaiting_approval" ? branch : null,
       report: posted.at(-1) ?? "",
       recordPath,
     };
@@ -133,6 +133,9 @@ function localSurface(posted: string[]): GitHubSurface {
     async finishCheck() {},
     async comment({ body }) {
       posted.push(body);
+    },
+    async branchHead() {
+      return null;
     },
     async listPullsForHead() {
       return [];

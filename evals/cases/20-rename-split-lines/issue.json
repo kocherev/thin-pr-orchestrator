@@ -1,0 +1,18 @@
+{
+  "action": "labeled",
+  "label": {
+    "name": "thin-pr"
+  },
+  "issue": {
+    "number": 20,
+    "title": "Rename splitNotes to splitLines",
+    "body": "splitNotes splits any text into lines, not only notes. Rename it to splitLines in the source, the test, and the README. The behavior stays the same, and no old name stays behind."
+  },
+  "repository": {
+    "name": "sample-repo",
+    "default_branch": "main",
+    "owner": {
+      "login": "example"
+    }
+  }
+}

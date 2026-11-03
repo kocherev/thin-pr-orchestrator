@@ -16,7 +16,7 @@ export type RecordResult = {
 
 /**
  * Runs the named cases against the live API, one at a time, and rewrites each case's cassette. `"all"` means every
- * case expected to open. The cases expected to block replay scripted failures, so they keep their cassettes.
+ * case expected to open or to wait for approval. The cases expected to block replay scripted failures, so they keep their cassettes.
  * One spend limit covers the whole recording.
  */
 export async function recordCases(input: {
@@ -44,7 +44,7 @@ export async function recordCases(input: {
     throw new Error(`no eval case named ${unknown.join(", ")}`);
   }
   const items =
-    input.cases === "all" ? all.filter((item) => item.expected.verdict === "opened") : all.filter((item) => input.cases.includes(item.id));
+    input.cases === "all" ? all.filter((item) => item.expected.verdict !== "blocked") : all.filter((item) => input.cases.includes(item.id));
 
   const recorded: string[] = [];
   let spentUsd = 0;

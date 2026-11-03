@@ -16,6 +16,8 @@ const steps = ["plan", "implement", "verify", "review", "write"] as const;
 const expected = [
   "thin-pr.run",
   ...steps.map((step) => `thin-pr.${step}`),
+  // One tool runner for the planner, which may read files, and one for the implementer.
+  "anthropic.messages.tool_runner",
   "anthropic.messages.tool_runner",
   "anthropic.custom_tool_use read_file",
   "anthropic.custom_tool_use replace",
@@ -26,7 +28,7 @@ const stepOf: Record<string, string> = { planner: "plan", implementer: "implemen
 // Prompt, issue, file, and reply text from the replayed run. None of it may reach a span.
 const content = [
   "Sample thin pull request",
-  "Run the small-feature template",
+  "Run the feature template",
   "Plan the change.",
   "Plan the stub change",
   "export function stub",

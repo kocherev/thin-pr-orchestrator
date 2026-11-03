@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readLabelEvent, runLocal } from "@thin-pr/github";
+import { readLabelEvent, runLocal, verdictOf } from "@thin-pr/github";
 import { createAnthropicClient } from "@thin-pr/specialists";
 import { createScratchRepo } from "@thin-pr/workspace";
 import { z } from "zod";
@@ -9,7 +9,7 @@ import { z } from "zod";
 const EVALS = fileURLToPath(new URL("../../../evals", import.meta.url));
 
 const expectedSchema = z
-  .object({ verdict: z.enum(["opened", "blocked"]), failedRules: z.array(z.string()).min(1).optional() })
+  .object({ verdict: z.enum(["opened", "awaiting_approval", "blocked"]), failedRules: z.array(z.string()).min(1).optional() })
   .strict();
 
 /**
@@ -33,7 +33,7 @@ export async function replayCase(caseId: string) {
       issue: `${issue.title}\n\n${issue.body}`,
       model: () => createAnthropicClient({ mode: "replay", cassettePath: join(dir, "cassette.jsonl") }),
     });
-    const verdict = result.status === "opened" ? "opened" : "blocked";
+    const verdict = verdictOf(result.status);
     const failedRules = result.record.gate.filter((rule) => rule.verdict === "FAIL").map((rule) => rule.rule);
     const rulesMatch = !expected.failedRules || [...expected.failedRules].sort().join() === [...failedRules].sort().join();
     return {

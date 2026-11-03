@@ -46,7 +46,7 @@ describe("thin-pr run", () => {
       version: 1,
       repo: "local/checkout",
       issue: { number: 1, title: "Clamp decrement at zero", url: "" },
-      template: "small-feature",
+      template: "feature",
       status: "opened",
       pullRequest: null,
       diff: { files: [{ path: "src/counter.ts" }] },

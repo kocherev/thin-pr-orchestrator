@@ -1,6 +1,6 @@
 # Thin PR Orchestrator
 
-Label a GitHub issue `thin-pr`, and a fixed TypeScript workflow plans, edits, checks, and reviews a small change, then opens a draft pull request only when nine gate rules pass.
+Label a GitHub issue `thin-pr`, and a fixed TypeScript workflow plans, edits, checks, and reviews a change, then opens a draft pull request only when nine gate rules pass. A change over the template's size budget waits for a person to approve it.
 
 ![Console run detail for eval case 18-live-edit: nine passing gate rules, both checks, a step timeline where verify sends a failing test back to implement once, and the two-file diff](docs/demo/console-run.png)
 
@@ -27,6 +27,7 @@ flowchart LR
   review -. changes requested .-> implement
   write --> gate["Nine gate rules"]
   gate -->|all pass| draft["Push thin-pr/&lt;issue&gt;<br/>open the draft"]
+  gate -->|only over budget| wait["Push thin-pr/&lt;issue&gt;<br/>wait for /thin-pr approve"]
   gate -->|any fail| comment["Comment the run report"]
 ```
 
@@ -61,25 +62,26 @@ To run on GitHub, add the `ANTHROPIC_API_KEY` repository secret, allow GitHub Ac
 
 ## Results
 
-`pnpm eval` replays 23 labeled issues and runs each repo's checks for real: 18 against the TypeScript package in `evals/sample-repo` with `tsc` and `vitest`, and 5 against the Python package in `evals/sample-python` with `python3`. Some cases add hidden tests the implementer never sees. Eleven cases should open a draft. Twelve should not: one per gate rule from `diff` to `review`, a second budget case, an empty plan that fails before the gate, and three Python cases that fail `tests`, `paths`, and `secrets`.
+`pnpm eval` replays 26 labeled issues and runs each repo's checks for real: 21 against the TypeScript package in `evals/sample-repo` with `tsc` and `vitest`, and 5 against the Python package in `evals/sample-python` with `python3`. Some cases add hidden tests the implementer never sees. Fifteen cases should open a draft, two of them multi-file changes of 5 and 3 files. Ten should not: one per gate rule from `diff` to `review` except `budget`, an empty plan that fails before the gate, and three Python cases that fail `tests`, `paths`, and `secrets`. One case changes 13 files, one more than the feature budget, and must end waiting for approval.
 
 | Metric | Value |
 | --- | --- |
-| Verdict accuracy | 23/23 (100.0%) |
-| Resolve rate | 11/11 (100.0%) |
-| Cost per resolved case | 0.031228 USD |
+| Verdict accuracy | 26/26 (100.0%) |
+| Resolve rate | 15/15 (100.0%) |
+| Waited for approval | 1/1 |
+| Cost per resolved case | 0.034382 USD |
 | Judge agreement | pending live recording |
 
 The cassettes and the judge batch have no live recording yet, so the costs are token estimates and the judge has no score. `evals/README.md` has every case and the commands that record them.
 
 ## Model routing
 
-`templates/small-feature.yaml` routes the `thin-pr` label. `templates/README.md` lists the other two templates.
+`templates/feature.yaml` routes the `thin-pr` label. Its budget is 12 files and 600 changed lines, and one run may spend 5 USD. A bigger diff that passes every other rule pushes the branch and waits for `/thin-pr approve`. A model call that could pass the spend limit is not sent, and the run fails with a report. These limits are placeholders until the real-repo eval measures what lands reliably. `.thin-pr.yml` can override them. `templates/README.md` lists the other two templates.
 
 | Step | Model | Effort | Why |
 | --- | --- | --- | --- |
-| plan | `claude-sonnet-5-5` | medium | One structured reply. The prompt asks for one to five steps, each naming the file it changes. |
-| implement | `claude-opus-5-5` | high | The only step that writes code. It runs a tool loop of up to 25 turns and runs the checks itself. |
+| plan | `claude-sonnet-5-5` | medium | One structured reply. It may first read and search files, up to 8 turns, so each step names a file it has seen. |
+| implement | `claude-opus-5-5` | high | The only step that writes code. It runs a tool loop of up to 60 turns, clears old tool results on the API side, and runs the checks itself. |
 | verify | none | none | Runs `typecheck` and `test` from `.thin-pr.yml`. |
 | review | `claude-sonnet-5-5` | high | Reads the patch and the check logs. Its verdict is a gate rule. |
 | write | `claude-haiku-5-5` | low | Writes the draft title. Code builds the body. |

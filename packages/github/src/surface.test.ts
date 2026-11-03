@@ -29,6 +29,15 @@ describe("Octokit surface", () => {
           calls.push(["checks.update", params]);
         },
       },
+      git: {
+        async getRef(params) {
+          calls.push(["git.getRef", params]);
+          if (params.ref === "heads/thin-pr/7") {
+            return { data: { object: { sha: "sha-7" } } };
+          }
+          throw Object.assign(new Error("Not Found"), { status: 404 });
+        },
+      },
       issues: {
         async createComment(params) {
           calls.push(["issues.createComment", params]);
@@ -41,6 +50,8 @@ describe("Octokit surface", () => {
     await expect(github.startCheck({ ...target, name: "thin-pr / plan", sha: "sha-1" })).resolves.toBe(42);
     await github.finishCheck({ ...target, checkRunId: 42, conclusion: "failure", summary: "gate failed" });
     await github.comment({ ...target, issue: 7, body: "## Run report" });
+    await expect(github.branchHead({ ...target, branch: "thin-pr/7" })).resolves.toBe("sha-7");
+    await expect(github.branchHead({ ...target, branch: "thin-pr/8" })).resolves.toBeNull();
     await expect(github.listPullsForHead({ ...target, branch: "thin-pr/7" })).resolves.toEqual([
       { number: 11, url: pull.html_url },
     ]);
@@ -66,6 +77,8 @@ describe("Octokit surface", () => {
         },
       ],
       ["issues.createComment", { ...target, issue_number: 7, body: "## Run report" }],
+      ["git.getRef", { ...target, ref: "heads/thin-pr/7" }],
+      ["git.getRef", { ...target, ref: "heads/thin-pr/8" }],
       ["pulls.list", { ...target, head: "example:thin-pr/7", state: "open" }],
       ["pulls.update", { ...target, pull_number: 11, body: "## Plan" }],
       ["pulls.create", { ...target, title: "Fix the stub", head: "thin-pr/7", base: "main", body: "## Plan", draft: true }],

@@ -11,7 +11,7 @@ export type RunRecord = {
   readonly repo: string;
   readonly issue: { readonly number: number; readonly title: string; readonly url: string };
   readonly template: string;
-  readonly status: "opened" | "blocked" | "failed";
+  readonly status: "opened" | "awaiting_approval" | "blocked" | "failed";
   readonly steps: readonly {
     readonly id: StepId;
     readonly attempt: number;
@@ -110,4 +110,11 @@ export function exportRunRecord(record: RunRecord, path: string | undefined): vo
   }
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(record, null, 2)}\n`);
+}
+
+/** The verdict the evals score. A run that failed before the gate counts as blocked. */
+export type Verdict = "opened" | "awaiting_approval" | "blocked";
+
+export function verdictOf(status: RunRecord["status"]): Verdict {
+  return status === "failed" ? "blocked" : status;
 }

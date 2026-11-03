@@ -20,13 +20,13 @@
           },
           "spans": [
             {
-              "traceId": "905218daacc2bb1498613b4993f50f4e",
-              "spanId": "0acf4b2980e979d5",
-              "parentSpanId": "fe9079ea60f4181b",
+              "traceId": "568cb17c050a0b4bbb7159d101f5977f",
+              "spanId": "3b6917231022c1e2",
+              "parentSpanId": "70afb1e3da7bd9c2",
               "name": "anthropic.messages.create",
               "kind": 3,
-              "startTimeUnixNano": "1793639936408000000",
-              "endTimeUnixNano": "1793639936530917833",
+              "startTimeUnixNano": "1793690284721000000",
+              "endTimeUnixNano": "1793690284725304542",
               "attributes": [
                 {
                   "key": "gen_ai.provider.name",
@@ -172,13 +172,57 @@
               "flags": 257
             },
             {
-              "traceId": "905218daacc2bb1498613b4993f50f4e",
-              "spanId": "2e293d9a2a1ea6d9",
-              "parentSpanId": "8b945bcb68bf71bd",
+              "traceId": "568cb17c050a0b4bbb7159d101f5977f",
+              "spanId": "70afb1e3da7bd9c2",
+              "parentSpanId": "caa30ae04b8a1b01",
+              "name": "anthropic.messages.tool_runner",
+              "kind": 1,
+              "startTimeUnixNano": "1793690284720000000",
+              "endTimeUnixNano": "1793690284725364833",
+              "attributes": [
+                {
+                  "key": "gen_ai.operation.name",
+                  "value": {
+                    "stringValue": "invoke_agent"
+                  }
+                },
+                {
+                  "key": "gen_ai.provider.name",
+                  "value": {
+                    "stringValue": "anthropic"
+                  }
+                },
+                {
+                  "key": "gen_ai.request.model",
+                  "value": {
+                    "stringValue": "claude-sonnet-5-5"
+                  }
+                },
+                {
+                  "key": "gen_ai.output.type",
+                  "value": {
+                    "stringValue": "json"
+                  }
+                }
+              ],
+              "droppedAttributesCount": 0,
+              "events": [],
+              "droppedEventsCount": 0,
+              "status": {
+                "code": 1
+              },
+              "links": [],
+              "droppedLinksCount": 0,
+              "flags": 257
+            },
+            {
+              "traceId": "568cb17c050a0b4bbb7159d101f5977f",
+              "spanId": "93f2d9bdac7210d0",
+              "parentSpanId": "1aae784857cb9b5a",
               "name": "anthropic.messages.create",
               "kind": 3,
-              "startTimeUnixNano": "1793639936571000000",
-              "endTimeUnixNano": "1793639936574309250",
+              "startTimeUnixNano": "1793690284728000000",
+              "endTimeUnixNano": "1793690284728931291",
               "attributes": [
                 {
                   "key": "gen_ai.provider.name",
@@ -223,6 +267,9 @@
                       "values": [
                         {
                           "stringValue": "server-side-fallback-2026-07-01"
+                        },
+                        {
+                          "stringValue": "context-management-2025-06-27"
                         }
                       ]
                     }
@@ -318,13 +365,13 @@
               "flags": 257
             },
             {
-              "traceId": "905218daacc2bb1498613b4993f50f4e",
-              "spanId": "7124fa7df558c9c3",
-              "parentSpanId": "8b945bcb68bf71bd",
+              "traceId": "568cb17c050a0b4bbb7159d101f5977f",
+              "spanId": "d9b17bbca49b6bad",
+              "parentSpanId": "1aae784857cb9b5a",
               "name": "anthropic.custom_tool_use read_file",
               "kind": 1,
-              "startTimeUnixNano": "1793639936576000000",
-              "endTimeUnixNano": "1793639936576993292",
+              "startTimeUnixNano": "1793690284729000000",
+              "endTimeUnixNano": "1793690284729269000",
               "attributes": [
                 {
                   "key": "gen_ai.operation.name",
@@ -374,13 +421,13 @@
               "flags": 257
             },
             {
-              "traceId": "905218daacc2bb1498613b4993f50f4e",
-              "spanId": "3bf1457f4fcfc102",
-              "parentSpanId": "8b945bcb68bf71bd",
+              "traceId": "568cb17c050a0b4bbb7159d101f5977f",
+              "spanId": "ed622920762f467f",
+              "parentSpanId": "1aae784857cb9b5a",
               "name": "anthropic.messages.create",
               "kind": 3,
-              "startTimeUnixNano": "1793639936577000000",
-              "endTimeUnixNano": "1793639936579007875",
+              "startTimeUnixNano": "1793690284730000000",
+              "endTimeUnixNano": "1793690284730810041",
               "attributes": [
                 {
                   "key": "gen_ai.provider.name",
@@ -425,6 +472,9 @@
                       "values": [
                         {
                           "stringValue": "server-side-fallback-2026-07-01"
+                        },
+                        {
+                          "stringValue": "context-management-2025-06-27"
                         }
                       ]
                     }
@@ -520,13 +570,13 @@
               "flags": 257
             },
             {
-              "traceId": "905218daacc2bb1498613b4993f50f4e",
-              "spanId": "3982722df782a15d",
-              "parentSpanId": "8b945bcb68bf71bd",
+              "traceId": "568cb17c050a0b4bbb7159d101f5977f",
+              "spanId": "ba91483503bcc2de",
+              "parentSpanId": "1aae784857cb9b5a",
               "name": "anthropic.custom_tool_use replace",
               "kind": 1,
-              "startTimeUnixNano": "1793639936580000000",
-              "endTimeUnixNano": "1793639936581603458",
+              "startTimeUnixNano": "1793690284731000000",
+              "endTimeUnixNano": "1793690284731399000",
               "attributes": [
                 {
                   "key": "gen_ai.operation.name",
@@ -576,13 +626,13 @@
               "flags": 257
             },
             {
-              "traceId": "905218daacc2bb1498613b4993f50f4e",
-              "spanId": "ee8fe84183157734",
-              "parentSpanId": "8b945bcb68bf71bd",
+              "traceId": "568cb17c050a0b4bbb7159d101f5977f",
+              "spanId": "7cac738b90f07ddf",
+              "parentSpanId": "1aae784857cb9b5a",
               "name": "anthropic.messages.create",
               "kind": 3,
-              "startTimeUnixNano": "1793639936582000000",
-              "endTimeUnixNano": "1793639936583869667",
+              "startTimeUnixNano": "1793690284731000000",
+              "endTimeUnixNano": "1793690284731619875",
               "attributes": [
                 {
                   "key": "gen_ai.provider.name",
@@ -627,6 +677,9 @@
                       "values": [
                         {
                           "stringValue": "server-side-fallback-2026-07-01"
+                        },
+                        {
+                          "stringValue": "context-management-2025-06-27"
                         }
                       ]
                     }
@@ -722,13 +775,13 @@
               "flags": 257
             },
             {
-              "traceId": "905218daacc2bb1498613b4993f50f4e",
-              "spanId": "8b945bcb68bf71bd",
-              "parentSpanId": "53bbebb13d8860cb",
+              "traceId": "568cb17c050a0b4bbb7159d101f5977f",
+              "spanId": "1aae784857cb9b5a",
+              "parentSpanId": "def83b71e040de91",
               "name": "anthropic.messages.tool_runner",
               "kind": 1,
-              "startTimeUnixNano": "1793639936570000000",
-              "endTimeUnixNano": "1793639936583826458",
+              "startTimeUnixNano": "1793690284728000000",
+              "endTimeUnixNano": "1793690284732141459",
               "attributes": [
                 {
                   "key": "gen_ai.operation.name",
@@ -760,13 +813,13 @@
               "flags": 257
             },
             {
-              "traceId": "905218daacc2bb1498613b4993f50f4e",
-              "spanId": "067405ee5a63a18b",
-              "parentSpanId": "68b27ab6999ffd6e",
+              "traceId": "568cb17c050a0b4bbb7159d101f5977f",
+              "spanId": "52960a6e54ff3e83",
+              "parentSpanId": "22338de0479ed332",
               "name": "anthropic.messages.create",
               "kind": 3,
-              "startTimeUnixNano": "1793639937895000000",
-              "endTimeUnixNano": "1793639937897177917",
+              "startTimeUnixNano": "1793690284816000000",
+              "endTimeUnixNano": "1793690284816774750",
               "attributes": [
                 {
                   "key": "gen_ai.provider.name",
@@ -912,13 +965,13 @@
               "flags": 257
             },
             {
-              "traceId": "905218daacc2bb1498613b4993f50f4e",
-              "spanId": "f680775c3d41dd31",
-              "parentSpanId": "0b9b14145304a006",
+              "traceId": "568cb17c050a0b4bbb7159d101f5977f",
+              "spanId": "e29814be1c5af464",
+              "parentSpanId": "71632060cc85d350",
               "name": "anthropic.messages.create",
               "kind": 3,
-              "startTimeUnixNano": "1793639937902000000",
-              "endTimeUnixNano": "1793639937903570667",
+              "startTimeUnixNano": "1793690284819000000",
+              "endTimeUnixNano": "1793690284819458000",
               "attributes": [
                 {
                   "key": "gen_ai.provider.name",
@@ -1059,13 +1112,13 @@
           },
           "spans": [
             {
-              "traceId": "905218daacc2bb1498613b4993f50f4e",
-              "spanId": "fe9079ea60f4181b",
-              "parentSpanId": "4bcbac08b6db8eef",
+              "traceId": "568cb17c050a0b4bbb7159d101f5977f",
+              "spanId": "caa30ae04b8a1b01",
+              "parentSpanId": "1e8c596ff655f3e2",
               "name": "thin-pr.plan",
               "kind": 1,
-              "startTimeUnixNano": "1793639936399000000",
-              "endTimeUnixNano": "1793639936563677208",
+              "startTimeUnixNano": "1793690284709000000",
+              "endTimeUnixNano": "1793690284726381500",
               "attributes": [
                 {
                   "key": "thin_pr.step",
@@ -1127,13 +1180,13 @@
               "flags": 257
             },
             {
-              "traceId": "905218daacc2bb1498613b4993f50f4e",
-              "spanId": "53bbebb13d8860cb",
-              "parentSpanId": "4bcbac08b6db8eef",
+              "traceId": "568cb17c050a0b4bbb7159d101f5977f",
+              "spanId": "def83b71e040de91",
+              "parentSpanId": "1e8c596ff655f3e2",
               "name": "thin-pr.implement",
               "kind": 1,
-              "startTimeUnixNano": "1793639936564000000",
-              "endTimeUnixNano": "1793639937327268834",
+              "startTimeUnixNano": "1793690284726000000",
+              "endTimeUnixNano": "1793690284770764458",
               "attributes": [
                 {
                   "key": "thin_pr.step",
@@ -1195,13 +1248,13 @@
               "flags": 257
             },
             {
-              "traceId": "905218daacc2bb1498613b4993f50f4e",
-              "spanId": "75ea6cfe4662a174",
-              "parentSpanId": "4bcbac08b6db8eef",
+              "traceId": "568cb17c050a0b4bbb7159d101f5977f",
+              "spanId": "2ed3ac1afcc488c2",
+              "parentSpanId": "1e8c596ff655f3e2",
               "name": "thin-pr.verify",
               "kind": 1,
-              "startTimeUnixNano": "1793639937327000000",
-              "endTimeUnixNano": "1793639937410047291",
+              "startTimeUnixNano": "1793690284771000000",
+              "endTimeUnixNano": "1793690284778363125",
               "attributes": [
                 {
                   "key": "thin_pr.step",
@@ -1263,13 +1316,13 @@
               "flags": 257
             },
             {
-              "traceId": "905218daacc2bb1498613b4993f50f4e",
-              "spanId": "68b27ab6999ffd6e",
-              "parentSpanId": "4bcbac08b6db8eef",
+              "traceId": "568cb17c050a0b4bbb7159d101f5977f",
+              "spanId": "22338de0479ed332",
+              "parentSpanId": "1e8c596ff655f3e2",
               "name": "thin-pr.review",
               "kind": 1,
-              "startTimeUnixNano": "1793639937411000000",
-              "endTimeUnixNano": "1793639937899192875",
+              "startTimeUnixNano": "1793690284779000000",
+              "endTimeUnixNano": "1793690284818137333",
               "attributes": [
                 {
                   "key": "thin_pr.step",
@@ -1331,13 +1384,13 @@
               "flags": 257
             },
             {
-              "traceId": "905218daacc2bb1498613b4993f50f4e",
-              "spanId": "0b9b14145304a006",
-              "parentSpanId": "4bcbac08b6db8eef",
+              "traceId": "568cb17c050a0b4bbb7159d101f5977f",
+              "spanId": "71632060cc85d350",
+              "parentSpanId": "1e8c596ff655f3e2",
               "name": "thin-pr.write",
               "kind": 1,
-              "startTimeUnixNano": "1793639937899000000",
-              "endTimeUnixNano": "1793639937905147958",
+              "startTimeUnixNano": "1793690284818000000",
+              "endTimeUnixNano": "1793690284819629416",
               "attributes": [
                 {
                   "key": "thin_pr.step",
@@ -1399,12 +1452,12 @@
               "flags": 257
             },
             {
-              "traceId": "905218daacc2bb1498613b4993f50f4e",
-              "spanId": "4bcbac08b6db8eef",
+              "traceId": "568cb17c050a0b4bbb7159d101f5977f",
+              "spanId": "1e8c596ff655f3e2",
               "name": "thin-pr.run",
               "kind": 1,
-              "startTimeUnixNano": "1793639936397000000",
-              "endTimeUnixNano": "1793639937905156167",
+              "startTimeUnixNano": "1793690284708000000",
+              "endTimeUnixNano": "1793690284819024750",
               "attributes": [
                 {
                   "key": "thin_pr.run_id",
@@ -1415,7 +1468,7 @@
                 {
                   "key": "thin_pr.template_id",
                   "value": {
-                    "stringValue": "small-feature"
+                    "stringValue": "feature"
                   }
                 },
                 {

@@ -16,7 +16,9 @@ const repoConfigSchema = z
       .prefault({}),
     // Optional: a checkout that already has its dependencies needs no install.
     install: command.optional(),
-    budget: z.object({ max_files: limit.default(2), max_lines: limit.default(16) }).strict().prefault({}),
+    // Overrides for the template's budget and spend. A field left out keeps the template's value.
+    budget: z.object({ max_files: limit.optional(), max_lines: limit.optional() }).strict().prefault({}),
+    spend_usd: z.number().positive().optional(),
     paths: z
       .object({
         allow: z.array(glob).min(1).default(["src/**", "test/**", "examples/**", "README.md", "docs/**"]),

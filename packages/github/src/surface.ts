@@ -36,10 +36,15 @@ export type GitHubRest = {
       readonly repo: string;
       readonly check_run_id: number;
       readonly status: "completed";
-      readonly conclusion: "success" | "failure";
+      readonly conclusion: CheckConclusion;
       readonly completed_at: string;
       readonly output: { readonly title: string; readonly summary: string };
     }): Promise<unknown>;
+  };
+  git: {
+    getRef(params: { readonly owner: string; readonly repo: string; readonly ref: string }): Promise<{
+      data: { object: { sha: string } };
+    }>;
   };
   issues: {
     createComment(params: {
@@ -53,6 +58,9 @@ export type GitHubRest = {
 
 type PullRequest = { readonly number: number; readonly url: string };
 
+/** `neutral` marks a rule that waits for a person, such as `budget` with `NEEDS_APPROVAL`. */
+type CheckConclusion = "success" | "failure" | "neutral";
+
 export type GitHubSurface = {
   startCheck(input: {
     readonly owner: string;
@@ -64,7 +72,7 @@ export type GitHubSurface = {
     readonly owner: string;
     readonly repo: string;
     readonly checkRunId: number;
-    readonly conclusion: "success" | "failure";
+    readonly conclusion: CheckConclusion;
     readonly summary: string;
     readonly title?: string;
   }): Promise<void>;
@@ -74,6 +82,8 @@ export type GitHubSurface = {
     readonly issue: number;
     readonly body: string;
   }): Promise<void>;
+  /** The commit `branch` points at, or null when the branch does not exist. */
+  branchHead(input: { readonly owner: string; readonly repo: string; readonly branch: string }): Promise<string | null>;
   /** Open pull requests whose head is `branch` in the same repo. */
   listPullsForHead(input: { readonly owner: string; readonly repo: string; readonly branch: string }): Promise<PullRequest[]>;
   updatePull(input: {
@@ -115,7 +125,7 @@ export function createGitHubSurface(octokit: GitHubRest): GitHubSurface {
         conclusion: input.conclusion,
         completed_at: new Date().toISOString(),
         output: {
-          title: input.title ?? (input.conclusion === "success" ? "Passed" : "Failed"),
+          title: input.title ?? { success: "Passed", failure: "Failed", neutral: "Needs approval" }[input.conclusion],
           summary: input.summary,
         },
       });
@@ -127,6 +137,17 @@ export function createGitHubSurface(octokit: GitHubRest): GitHubSurface {
         issue_number: input.issue,
         body: input.body,
       });
+    },
+    async branchHead(input) {
+      try {
+        const { data } = await octokit.git.getRef({ owner: input.owner, repo: input.repo, ref: `heads/${input.branch}` });
+        return data.object.sha;
+      } catch (error) {
+        if (typeof error === "object" && error !== null && "status" in error && error.status === 404) {
+          return null;
+        }
+        throw error;
+      }
     },
     async listPullsForHead(input) {
       const { data } = await octokit.pulls.list({

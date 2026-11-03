@@ -4,12 +4,13 @@ Each run is one OpenTelemetry trace. `packages/core` opens a span for the run an
 
 ## Span tree
 
-This is `docs/demo/trace.json`, the gate-pass replay that `pnpm trace` writes. It has 15 spans in one trace.
+This is `docs/demo/trace.json`, the gate-pass replay that `pnpm trace` writes. It has 16 spans in one trace.
 
 ```text
 thin-pr.run                                 packages/core
   thin-pr.plan                              packages/core
-    anthropic.messages.create               SDK, CLIENT
+    anthropic.messages.tool_runner          SDK
+      anthropic.messages.create             SDK, CLIENT
   thin-pr.implement                         packages/core
     anthropic.messages.tool_runner          SDK
       anthropic.messages.create             SDK, CLIENT
@@ -44,7 +45,7 @@ docker run --rm -d --name jaeger -p 16686:16686 -p 4318:4318 jaegertracing/jaege
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 pnpm trace
 ```
 
-Open `http://localhost:16686` and pick the service `thin-pr-orchestrator`. Jaeger 2.22.0 shows the 15 spans above in one trace. `docker stop jaeger` stops and removes the container.
+Open `http://localhost:16686` and pick the service `thin-pr-orchestrator`. Jaeger 2.22.0 shows the 16 spans above in one trace. The screenshot below predates the planner's tool runner, so it shows 15. `docker stop jaeger` stops and removes the container.
 
 ![Jaeger 2.22.0 trace view of the run-7 replay: thin-pr.run with its plan, implement, verify, review, and write spans, and the model request and tool spans under them, 15 spans in all](demo/trace-jaeger.png)
 
@@ -83,7 +84,7 @@ Set the repository variable `OTEL_EXPORTER_OTLP_ENDPOINT` and the repository sec
 | Attribute | Value |
 |---|---|
 | `thin_pr.run_id` | The run id, such as `run-7` or `gha-<GITHUB_RUN_ID>` |
-| `thin_pr.template_id` | The template, such as `small-feature` |
+| `thin_pr.template_id` | The template, such as `feature` |
 | `thin_pr.usage.*` | The run totals. The five names are listed under the step spans |
 
 ### `thin-pr.<step>`
@@ -133,7 +134,7 @@ The SDK sets these. They follow the OpenTelemetry GenAI semantic conventions.
 
 ### Tool spans
 
-`anthropic.messages.tool_runner` wraps the implementer's tool loop. Each `anthropic.custom_tool_use <tool>` span has `gen_ai.tool.name`, `gen_ai.tool.call.id`, and `gen_ai.tool.description`. The description is the fixed text in `packages/specialists/src/implementer.ts`.
+`anthropic.messages.tool_runner` wraps the planner's and the implementer's tool loops. The gate-pass planner reads nothing, so its runner holds one request. Each `anthropic.custom_tool_use <tool>` span has `gen_ai.tool.name`, `gen_ai.tool.call.id`, and `gen_ai.tool.description`. The description is the fixed text in `packages/specialists/src/tools.ts`.
 
 ### Totals
 

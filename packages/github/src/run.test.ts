@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import { templateForLabel } from "@thin-pr/core";
 import { createAnthropicClient, scriptedUpstream, type ModelSession, type Script } from "@thin-pr/specialists";
-import { createScratchRepo } from "@thin-pr/workspace";
-import { runAction, type LabelRunResult } from "./run.js";
+import { createScratchRepo, loadRepoConfig } from "@thin-pr/workspace";
+import { openApprovedDraft, readStoredRun, type StoredRun } from "./approval.js";
+import { runAction, runLimits, type LabelRunResult } from "./run.js";
 import type { GitHubSurface } from "./surface.js";
 
 const root = fileURLToPath(new URL("../../..", import.meta.url));
@@ -221,6 +223,26 @@ describe("issue label", () => {
     expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
   });
 
+  it("stops the run without a retry when the next model call could pass spend_usd", async () => {
+    // The planner's request could cost 0.16 USD and fits 0.2. The implementer's could cost 0.64 USD and does not.
+    const repo = scratch(`spend_usd: 0.2\n${PASSING_CHECKS}`);
+    const memory = memoryGitHub();
+    const result = await run(repo, memory.github, { model: scripted(STUB_SCRIPT) });
+
+    expect(result.status).toBe("failed");
+    if (result.status !== "failed") {
+      return;
+    }
+    expect(result.error).toMatch(/^implement stopped: the next model call could pass the run's spend_usd of 0\.2 USD \(0\.\d{6} USD spent\)$/);
+    expect(result.record.steps.map((step) => `${step.id} ${step.attempt} ${step.outcome}`)).toEqual([
+      "plan 1 finished",
+      "implement 1 failed",
+    ]);
+    const body = String(memory.calls.find((call) => call.op === "comment")?.body);
+    expect(body.split("\n")[0]).toBe(`**Run failed.** ${result.error}`);
+    expect(git(repo.remote, "branch", "--list", "thin-pr/7")).toBe("");
+  });
+
   it("fails the step with the refusal category when the model declines", async () => {
     const repo = scratch(PASSING_CHECKS);
     const memory = memoryGitHub();
@@ -376,9 +398,121 @@ describe("issue label", () => {
   });
 });
 
+describe("approval", () => {
+  // The stub change is 2 lines, so a 1-line override puts it over the budget while every other rule passes.
+  const OVER_BUDGET = `budget:\n  max_lines: 1\n${PASSING_CHECKS}`;
+
+  async function awaitingRun() {
+    const repo = scratch(OVER_BUDGET);
+    const memory = memoryGitHub();
+    const result = await run(repo, memory.github, { model: cassette("gate-pass") });
+    if (result.status !== "awaiting_approval") {
+      throw new Error(`expected awaiting_approval, got ${result.status}`);
+    }
+    const comment = String(memory.calls.find((call) => call.op === "comment")?.body);
+    return { repo, memory, result, comment };
+  }
+
+  it("pushes the branch over the budget, opens no draft, and comments how to approve", async () => {
+    const { repo, memory, result, comment } = await awaitingRun();
+
+    const head = git(repo.remote, "rev-parse", "thin-pr/7");
+    expect(git(repo.remote, "show", "thin-pr/7:src/stub.ts")).toContain("return 1;");
+    expect(memory.calls.some((call) => call.op === "openDraft" || call.op === "updatePull")).toBe(false);
+    expect(result.record).toMatchObject({ status: "awaiting_approval", pullRequest: null });
+    expect(result.stored).toMatchObject({ branch: { name: "thin-pr/7", head, base: "main" }, title: "Fix the stub" });
+    expect(result.record.gate.filter((rule) => rule.verdict !== "PASS")).toEqual([
+      { rule: "budget", verdict: "NEEDS_APPROVAL", reason: "Diff exceeds the budget (1 file, 2 lines; limit 12 files, 1 line)." },
+    ]);
+    const budgetCheck = memory.calls.findIndex((call) => call.op === "startCheck" && call.name === "thin-pr / gate / budget");
+    expect(memory.calls[budgetCheck]).toMatchObject({ sha: head });
+    expect(memory.calls[budgetCheck + 1]).toMatchObject({ op: "finishCheck", conclusion: "neutral", title: "NEEDS_APPROVAL" });
+
+    const [first, , second] = comment.split("\n");
+    expect(first).toBe(
+      "**Waiting for approval.** Diff exceeds the budget (1 file, 2 lines; limit 12 files, 1 line). The other 8 rules passed. `thin-pr/7` is pushed, and no draft is open.",
+    );
+    expect(second).toMatch(/^To open the draft, a user with write access comments `\/thin-pr approve` on this issue\. /);
+    expect(gateRows(comment)[0]).toBe("budget NEEDS_APPROVAL");
+    expect(sections(comment)).toContain("Diff: 1 file, 1 added, 1 removed (open)");
+    expect(comment).toContain("| `src/stub.ts` | 1 | 1 |");
+    expect(readStoredRun(comment)).toEqual(result.stored);
+  });
+
+  it("opens the draft for an approved run after re-checking the stored run and the branch", async () => {
+    const { repo, comment } = await awaitingRun();
+    const stored = readStoredRun(comment);
+    if (!stored) throw new Error("no stored run in the comment");
+    const approver = memoryGitHub({ remote: repo.remote });
+
+    const approved = await openApprovedDraft(stored, { github: approver.github, approvedBy: "octocat" });
+
+    expect(approved).toMatchObject({
+      status: "opened",
+      record: { status: "opened", pullRequest: { number: 11, url: "https://github.com/example/sample-repo/pull/11" } },
+    });
+    expect(approver.calls.map((call) => call.op)).toEqual(["branchHead", "listPullsForHead", "openDraft"]);
+    const draft = approver.calls.at(-1);
+    expect(draft).toMatchObject({ title: "Fix the stub", head: "thin-pr/7", base: "main", draft: true });
+    const body = String(draft?.body);
+    expect(body.split("\n")[0]).toBe(
+      "**Gate passed with approval.** Diff exceeds the budget (1 file, 2 lines; limit 12 files, 1 line). octocat approved it. The other 8 rules passed for #7.",
+    );
+    expect(body).toContain("Plan the stub change.\n\n- edit the stub");
+    expect(sections(body)).toContain("Review: approve");
+  });
+
+  it("refuses an approval when the branch moved, the run is not waiting, or the stored gate fails", async () => {
+    const { repo, comment } = await awaitingRun();
+    const stored = readStoredRun(comment);
+    if (!stored) throw new Error("no stored run in the comment");
+    const approve = async (input: StoredRun) => {
+      const approver = memoryGitHub({ remote: repo.remote });
+      const result = await openApprovedDraft(input, { github: approver.github, approvedBy: "octocat" });
+      expect(approver.calls.some((call) => call.op === "openDraft" || call.op === "updatePull")).toBe(false);
+      return result;
+    };
+
+    expect(await approve({ ...stored, record: { ...stored.record, status: "blocked" } })).toEqual({
+      status: "refused",
+      reason: "Run run-7 is blocked, not awaiting approval.",
+    });
+    const failing = stored.record.gate.map((rule) => (rule.rule === "tests" ? { ...rule, verdict: "FAIL" as const } : rule));
+    expect(await approve({ ...stored, record: { ...stored.record, gate: failing } })).toEqual({
+      status: "refused",
+      reason: "The stored gate results decide fail, not needs_approval.",
+    });
+
+    const moved = cloneAndCommit(repo.remote, "README.md", "# Sample\n");
+    git(moved.dir, "push", "--quiet", "--force", "origin", "HEAD:refs/heads/thin-pr/7");
+    const result = await approve(stored);
+    expect(result.status).toBe("refused");
+    expect(result.status === "refused" && result.reason).toBe(
+      `\`thin-pr/7\` now points at ${moved.baseSha.slice(0, 7)}, and the gate measured ${stored.branch.head.slice(0, 7)}. Run thin-pr again to gate the branch as it is.`,
+    );
+    expect(readStoredRun("no marker here")).toBeNull();
+    expect(readStoredRun("<!-- thin-pr-run:bm90IGpzb24= -->")).toBeNull();
+  });
+});
+
+describe("runLimits", () => {
+  it("takes each budget field and the spend from .thin-pr.yml when it sets one, and the rest from the template", () => {
+    const feature = templateForLabel(join(root, "templates"), "thin-pr");
+    if (!feature) throw new Error("no feature template");
+    expect(runLimits(feature, loadRepoConfig(scratch(PASSING_CHECKS).dir))).toEqual({
+      budget: { max_files: 12, max_lines: 600 },
+      spendUsd: 5,
+    });
+    expect(runLimits(feature, loadRepoConfig(scratch("budget:\n  max_lines: 40\nspend_usd: 0.5\n").dir))).toEqual({
+      budget: { max_files: 12, max_lines: 40 },
+      spendUsd: 0.5,
+    });
+  });
+});
+
 /** Each gate table row as "rule VERDICT", in the order the body lists them. */
 function gateRows(body: string): string[] {
-  return [...body.matchAll(/^\| `(\w+)` \| \**(PASS|FAIL)\** \|/gm)].map((match) => `${match[1]} ${match[2]}`);
+  return [...body.matchAll(/^\| `(\w+)` \| \**(PASS|FAIL|NEEDS_APPROVAL)\** \|/gm)].map((match) => `${match[1]} ${match[2]}`);
 }
 
 /** The summary of each collapsible section, marked when it opens by default. */
@@ -446,7 +580,8 @@ async function run(
   });
 }
 
-function memoryGitHub(options?: { readonly openPull?: { readonly number: number; readonly url: string } }) {
+/** An in-memory GitHub. Branch heads come from `remote`, the bare repo the run pushes to. */
+function memoryGitHub(options?: { readonly openPull?: { readonly number: number; readonly url: string }; readonly remote?: string }) {
   const calls: Call[] = [];
   let nextId = 1;
   const github: GitHubSurface = {
@@ -460,6 +595,14 @@ function memoryGitHub(options?: { readonly openPull?: { readonly number: number;
     },
     async comment(input) {
       calls.push({ op: "comment", ...input });
+    },
+    async branchHead(input) {
+      calls.push({ op: "branchHead", ...input });
+      if (!options?.remote) {
+        return null;
+      }
+      const refs = git(options.remote, "for-each-ref", "--format=%(objectname)", `refs/heads/${input.branch}`);
+      return refs.length > 0 ? refs : null;
     },
     async listPullsForHead(input) {
       calls.push({ op: "listPullsForHead", ...input });

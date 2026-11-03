@@ -28,7 +28,7 @@ const OPENED: RunRecord = {
   runId: "local-1",
   repo: "local/sample-repo",
   issue: { number: 1, title: "Clamp decrement at zero", url: "" },
-  template: "small-feature",
+  template: "feature",
   status: "opened",
   steps: [],
   gate: PASSED,

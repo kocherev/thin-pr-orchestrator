@@ -54,7 +54,7 @@ async function main(argv: readonly string[]): Promise<number> {
   }
   lines.push(`Record: ${result.recordPath}`);
   process.stdout.write(`${lines.join("\n")}\n`);
-  return result.status === "opened" ? 0 : 1;
+  return result.status === "opened" || result.status === "awaiting_approval" ? 0 : 1;
 }
 
 // Issue text is rarely a valid path, and a long one fails stat with ENAMETOOLONG instead of ENOENT.

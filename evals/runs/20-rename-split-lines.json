@@ -1,0 +1,226 @@
+{
+  "version": 1,
+  "runId": "eval-20-rename-split-lines",
+  "repo": "example/sample-repo",
+  "issue": {
+    "number": 20,
+    "title": "Rename splitNotes to splitLines",
+    "url": "https://github.com/example/sample-repo/issues/20"
+  },
+  "template": "feature",
+  "status": "opened",
+  "steps": [
+    {
+      "id": "plan",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-03T07:24:06.518Z",
+      "durationMs": 6132,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 618,
+          "outputTokens": 143,
+          "cacheReadTokens": 0,
+          "costUsd": 0.002666,
+          "durationMs": 2972
+        },
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 748,
+          "outputTokens": 190,
+          "cacheReadTokens": 0,
+          "costUsd": 0.003396,
+          "durationMs": 3160
+        }
+      ],
+      "summary": "Rename splitNotes to splitLines in src/notes.ts, test/notes.test.ts, and README.md."
+    },
+    {
+      "id": "implement",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-03T07:24:12.650Z",
+      "durationMs": 12568,
+      "usage": [
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 917,
+          "outputTokens": 143,
+          "cacheReadTokens": 0,
+          "costUsd": 0.006528,
+          "durationMs": 2972
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1046,
+          "outputTokens": 305,
+          "cacheReadTokens": 0,
+          "costUsd": 0.010284,
+          "durationMs": 3620
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1346,
+          "outputTokens": 143,
+          "cacheReadTokens": 0,
+          "costUsd": 0.008244,
+          "durationMs": 2972
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1402,
+          "outputTokens": 151,
+          "cacheReadTokens": 0,
+          "costUsd": 0.008628,
+          "durationMs": 3004
+        }
+      ],
+      "summary": "Renamed splitNotes to splitLines in the source, the test, and the README. No other file used it."
+    },
+    {
+      "id": "verify",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-03T07:24:25.218Z",
+      "durationMs": 0,
+      "usage": [],
+      "summary": "typecheck passed; test passed."
+    },
+    {
+      "id": "review",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-03T07:24:25.218Z",
+      "durationMs": 3032,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 820,
+          "outputTokens": 158,
+          "cacheReadTokens": 0,
+          "costUsd": 0.00322,
+          "durationMs": 3032
+        }
+      ],
+      "summary": "The rename is complete and the behavior is unchanged. The checks pass."
+    },
+    {
+      "id": "write",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-03T07:24:28.250Z",
+      "durationMs": 3024,
+      "usage": [
+        {
+          "model": "claude-haiku-5-5",
+          "inputTokens": 421,
+          "outputTokens": 156,
+          "cacheReadTokens": 0,
+          "costUsd": 0.00012009999999999999,
+          "durationMs": 3024
+        }
+      ],
+      "summary": "Rename splitNotes."
+    }
+  ],
+  "gate": [
+    {
+      "rule": "plan",
+      "verdict": "PASS",
+      "reason": "Plan is present (3 steps)."
+    },
+    {
+      "rule": "contracts",
+      "verdict": "PASS",
+      "reason": "Step outputs match their contracts."
+    },
+    {
+      "rule": "diff",
+      "verdict": "PASS",
+      "reason": "Diff is present (3 files, 8 lines)."
+    },
+    {
+      "rule": "budget",
+      "verdict": "PASS",
+      "reason": "Diff is within the budget (3 files, 8 lines; limit 12 files, 600 lines)."
+    },
+    {
+      "rule": "paths",
+      "verdict": "PASS",
+      "reason": "Every changed path is allowed."
+    },
+    {
+      "rule": "secrets",
+      "verdict": "PASS",
+      "reason": "No added line looks like a secret."
+    },
+    {
+      "rule": "typecheck",
+      "verdict": "PASS",
+      "reason": "Typecheck passed: tsc --noEmit"
+    },
+    {
+      "rule": "tests",
+      "verdict": "PASS",
+      "reason": "Tests passed: vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1"
+    },
+    {
+      "rule": "review",
+      "verdict": "PASS",
+      "reason": "Reviewer approved."
+    }
+  ],
+  "diff": {
+    "files": [
+      {
+        "path": "README.md",
+        "added": 1,
+        "removed": 1
+      },
+      {
+        "path": "src/notes.ts",
+        "added": 1,
+        "removed": 1
+      },
+      {
+        "path": "test/notes.test.ts",
+        "added": 2,
+        "removed": 2
+      }
+    ],
+    "meaningful": true,
+    "patch": "diff --git a/README.md b/README.md\nindex c0b1033..ee7c200 100644\n--- a/README.md\n+++ b/README.md\n@@ -4,5 +4,5 @@ Small helpers used by the replay fixtures.\n \n - `increment` and `decrement` change a count.\n - `formatCount` renders a count.\n-- `splitNotes` splits text into lines.\n+- `splitLines` splits text into lines.\n - `parseFlag` reads true and false.\ndiff --git a/src/notes.ts b/src/notes.ts\nindex db28111..35edc36 100644\n--- a/src/notes.ts\n+++ b/src/notes.ts\n@@ -1,3 +1,3 @@\n-export function splitNotes(text: string): string[] {\n+export function splitLines(text: string): string[] {\n   return text.split(\"\\n\");\n }\ndiff --git a/test/notes.test.ts b/test/notes.test.ts\nindex 6daef50..9177b44 100644\n--- a/test/notes.test.ts\n+++ b/test/notes.test.ts\n@@ -1,6 +1,6 @@\n import { expect, it } from \"vitest\";\n-import { splitNotes } from \"../src/notes.js\";\n+import { splitLines } from \"../src/notes.js\";\n \n it(\"splits text into lines\", () => {\n-  expect(splitNotes(\"buy milk\\ncall home\")).toEqual([\"buy milk\", \"call home\"]);\n+  expect(splitLines(\"buy milk\\ncall home\")).toEqual([\"buy milk\", \"call home\"]);\n });\n"
+  },
+  "checks": [
+    {
+      "name": "typecheck",
+      "command": "tsc --noEmit",
+      "exitCode": 0,
+      "durationMs": 0,
+      "logTail": ""
+    },
+    {
+      "name": "test",
+      "command": "vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1",
+      "exitCode": 0,
+      "durationMs": 0,
+      "logTail": "\n RUN  v5.0.5 .\n\n\n Test Files  5 passed (5)\n      Tests  5 passed (5)\n\n"
+    }
+  ],
+  "pullRequest": {
+    "number": 1,
+    "url": "https://example.test/example/sample-repo/pull/1"
+  },
+  "totals": {
+    "costUsd": 0.0430861,
+    "durationMs": 24756,
+    "inputTokens": 7318,
+    "outputTokens": 1389
+  }
+}

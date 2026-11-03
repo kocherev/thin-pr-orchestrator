@@ -20,6 +20,7 @@ import {
   type ModelSession,
 } from "@thin-pr/specialists";
 import { loadRepoConfig, openWorkspace, type GitWorkspace, type RepoConfig } from "@thin-pr/workspace";
+import { storedRunMarker, toStoredRun, type StoredRun } from "./approval.js";
 import { createCheckRuns } from "./checks.js";
 import { readLabelEvent, type LabelEvent } from "./event.js";
 import { toRunRecord, type RunRecord, type TimedEvent } from "./record.js";
@@ -30,7 +31,25 @@ import type { GitHubSurface } from "./surface.js";
 export type LabelRunResult =
   | { readonly status: "ignored" }
   | { readonly status: "opened"; readonly record: RunRecord }
+  /** `stored` is also in the issue comment, for `openApprovedDraft`. */
+  | { readonly status: "awaiting_approval"; readonly record: RunRecord; readonly stored: StoredRun }
   | { readonly status: "blocked" | "failed"; readonly record: RunRecord; readonly error: string };
+
+/** What one run may change and spend: the template's limits with the `.thin-pr.yml` overrides applied field by field. */
+export type RunLimits = {
+  readonly budget: { readonly max_files: number; readonly max_lines: number };
+  readonly spendUsd: number;
+};
+
+export function runLimits(template: Template, config: RepoConfig): RunLimits {
+  return {
+    budget: {
+      max_files: config.budget.max_files ?? template.budget.max_files,
+      max_lines: config.budget.max_lines ?? template.budget.max_lines,
+    },
+    spendUsd: config.spend_usd ?? template.spend_usd,
+  };
+}
 
 const CONTRACTS: Record<StepId, { safeParse(value: unknown): { success: boolean } }> = {
   plan: plannerOutput,
@@ -71,7 +90,7 @@ export async function runAction(input: {
       template,
       config,
       workspace,
-      handlers: () => createRunHandlers(input.model(), workspace),
+      handlers: (limits) => createRunHandlers(input.model(), workspace, limits),
       github: input.github,
       log,
       runId: input.runId,
@@ -84,16 +103,20 @@ export async function runAction(input: {
 
 /**
  * Runs the template with a check per step, then evaluates the gate over the workspace. A pass commits the change,
- * force-pushes `thin-pr/<issue>` from the base, and opens a draft or updates the open one. Anything else comments
- * the run report on the issue.
+ * force-pushes `thin-pr/<issue>` from the base, and opens a draft or updates the open one. A diff over the budget
+ * that passes every other rule is pushed the same way, but opens no draft: the issue comment says how to approve it
+ * and stores the run for `openApprovedDraft`. Anything else comments the run report and pushes nothing.
  */
 export async function runIssue(deps: {
   readonly event: LabelEvent;
   readonly template: Template;
   readonly config: RepoConfig;
   readonly workspace: GitWorkspace;
-  /** Built first inside the run, so a setup error such as a missing API key is reported on the issue. */
-  readonly handlers: () => Readonly<Record<StepId, StepHandler>>;
+  /**
+   * Built first inside the run, so a setup error such as a missing API key is reported on the issue. The model steps
+   * must keep to `limits.spendUsd`.
+   */
+  readonly handlers: (limits: RunLimits) => Readonly<Record<StepId, StepHandler>>;
   readonly github: GitHubSurface;
   readonly log: EventLog;
   readonly runId: string;
@@ -105,6 +128,7 @@ export async function runIssue(deps: {
   const target = { owner: event.owner, repo: event.repo };
   const checkRuns = createCheckRuns(github, target);
   const branch = deps.branch ?? `thin-pr/${event.issue.number}`;
+  const limits = runLimits(deps.template, deps.config);
   const timeline: TimedEvent[] = [];
   let diff: Diff | null = null;
   let checks: readonly CheckResult[] = [];
@@ -121,7 +145,7 @@ export async function runIssue(deps: {
   };
 
   try {
-    const handlers = deps.handlers();
+    const handlers = deps.handlers(limits);
     // Before the workflow, so the implementer's run_check already has the dependencies.
     const install = await workspace.install();
     if (install && install.exitCode !== 0) {
@@ -151,10 +175,12 @@ export async function runIssue(deps: {
       contracts: deps.template.steps.map(({ id }) => ({ step: id, valid: CONTRACTS[id].safeParse(state.outputs[id]).success })),
       diff,
       checks,
+      budget: limits.budget,
       config: deps.config,
     };
     gate = evaluate(evidence);
-    if (decide(evidence) === "fail") {
+    const decision = decide(evidence);
+    if (decision === "fail") {
       await checkRuns.postRules(gate, workspace.baseSha);
       const failed = gate.filter((result) => result.verdict === "FAIL").map((result) => result.rule);
       return await stop("blocked", `gate failed: ${failed.join(", ")}`);
@@ -163,6 +189,24 @@ export async function runIssue(deps: {
     const message = `Apply thin-pr/#${event.issue.number}`;
     const head = await workspace.commitAndPush({ branch, message, token: deps.pushToken });
     await checkRuns.postRules(gate, head);
+    if (decision === "needs_approval") {
+      const waiting = record("awaiting_approval");
+      const stored = toStoredRun({
+        record: waiting,
+        branch: { name: branch, head, base: event.defaultBranch },
+        title: draftTitle(event, outputs),
+        plan: plannerOutput.safeParse(outputs.plan).data ?? null,
+        review: reviewerOutput.safeParse(outputs.review).data ?? null,
+      });
+      const report = formatRunReport({ record: waiting, outputs, branch, error: null });
+      await github.comment({ ...target, issue: event.issue.number, body: `${report}\n\n${storedRunMarker(stored)}` });
+      // A draft from an earlier run already shows the pushed branch, so its body must stop saying the gate passed.
+      const [open] = await github.listPullsForHead({ ...target, branch });
+      if (open) {
+        await github.updatePull({ ...target, number: open.number, body: report });
+      }
+      return { status: "awaiting_approval", record: waiting, stored };
+    }
     const body = formatRunReport({ record: record("opened"), outputs, branch, error: null });
     const pullRequest = await publishDraft(github, event, branch, outputs, body);
     return { status: "opened", record: record("opened", pullRequest) };
@@ -190,6 +234,9 @@ async function publishDraft(
   if (open) {
     return github.updatePull({ ...target, number: open.number, body });
   }
-  const title = prWriterOutput.safeParse(outputs.write).data?.title ?? `thin-pr #${event.issue.number}`;
-  return github.openDraft({ ...target, title, head: branch, base: event.defaultBranch, body, draft: true });
+  return github.openDraft({ ...target, title: draftTitle(event, outputs), head: branch, base: event.defaultBranch, body, draft: true });
+}
+
+function draftTitle(event: LabelEvent, outputs: Readonly<Partial<Record<StepId, Json>>>): string {
+  return prWriterOutput.safeParse(outputs.write).data?.title ?? `thin-pr #${event.issue.number}`;
 }

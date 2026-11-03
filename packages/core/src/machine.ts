@@ -16,14 +16,19 @@ type RunInput = {
 /** A step that ran out of retries or loops. The run records it and stops. */
 class StepFailure extends Error {}
 
-/** A failed attempt that already spent model calls. The `failed` event keeps its usage, so the run totals count it. */
+/**
+ * A failed attempt. The `failed` event keeps its usage, so the run totals count it. `retryable: false` stops the
+ * run at once, for a failure that another attempt would hit too, such as a spend limit.
+ */
 export class StepError extends Error {
   readonly usage: readonly Usage[];
+  readonly retryable: boolean;
 
-  constructor(cause: unknown, usage: readonly Usage[]) {
+  constructor(cause: unknown, usage: readonly Usage[], options: { readonly retryable?: boolean } = {}) {
     super(cause instanceof Error ? cause.message : String(cause), { cause });
     this.name = "StepError";
     this.usage = usage;
+    this.retryable = options.retryable ?? true;
   }
 }
 
@@ -76,6 +81,9 @@ export async function runWorkflow(input: RunInput): Promise<RunState> {
         lastError = error instanceof Error && error.message.length > 0 ? error.message : "step failed";
         const usage = error instanceof StepError ? error.usage : [];
         await emit({ step: step.id, kind: "failed", attempt, error: lastError, usage });
+        if (error instanceof StepError && !error.retryable) {
+          throw new StepFailure(`${step.id} stopped: ${lastError}`);
+        }
         continue;
       }
 

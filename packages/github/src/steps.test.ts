@@ -7,6 +7,7 @@ import { createMemoryWorkspace } from "@thin-pr/workspace";
 import { afterEach, describe, expect, it } from "vitest";
 import { createRunHandlers, createVerifyHandler } from "./steps.js";
 
+const LIMITS = { spendUsd: 5 };
 const passing = { exitCode: 0, logTail: "" };
 const failingTest = { exitCode: 1, logTail: "FAIL test/counter.test.ts > clamps at zero" };
 
@@ -67,11 +68,11 @@ describe("implement", () => {
   it("edits through the tools on a replayed cassette and stops when the model does", async () => {
     const cassettePath = join(temporary(), "implement.jsonl");
     const recorder = createAnthropicClient({ mode: "record", cassettePath, apiKey: "test-key", fetch: scriptedUpstream(script) });
-    await createRunHandlers(recorder, counterWorkspace()).implement({ ...context("implement", 0), outputs: { plan } });
+    await createRunHandlers(recorder, counterWorkspace(), LIMITS).implement({ ...context("implement", 0), outputs: { plan } });
 
     const workspace = counterWorkspace();
     const player = createAnthropicClient({ mode: "replay", cassettePath, fetch: offline }, {});
-    const result = await createRunHandlers(player, workspace).implement({ ...context("implement", 0), outputs: { plan } });
+    const result = await createRunHandlers(player, workspace, LIMITS).implement({ ...context("implement", 0), outputs: { plan } });
 
     expect(result).toMatchObject({
       outcome: "done",
@@ -90,10 +91,49 @@ describe("implement", () => {
       return fetch(url, init);
     };
     const session = createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: captured });
-    await createRunHandlers(session, counterWorkspace()).plan(context("plan", 0));
+    await createRunHandlers(session, counterWorkspace(), LIMITS).plan(context("plan", 0));
 
     expect(bodies).toHaveLength(1);
     expect(bodies[0]).toContain("Repository files:\\nsrc/counter.ts");
+  });
+
+  it("lets the planner read the files it names before it replies", async () => {
+    const fetch = scriptedUpstream({ ...script, plannerReads: [[{ name: "read_file", input: { path: "src/counter.ts" } }]] });
+    const bodies: { tools?: { name: string }[]; messages: { content: unknown }[] }[] = [];
+    const captured: typeof globalThis.fetch = (url, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as (typeof bodies)[number]);
+      return fetch(url, init);
+    };
+    const session = createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: captured });
+    const result = await createRunHandlers(session, counterWorkspace(), LIMITS).plan(context("plan", 0));
+
+    expect(result).toMatchObject({ outcome: "done", output: plan });
+    expect(result.usage).toHaveLength(2);
+    expect(bodies[0]?.tools?.map((tool) => tool.name)).toEqual(["read_file", "search"]);
+    expect(JSON.stringify(bodies[1]?.messages.at(-1)?.content)).toContain("export const count = 1;");
+  });
+
+  it("asks the API to clear old tool results in the implementer's loop", async () => {
+    const fetch = scriptedUpstream(script);
+    const sent: { headers: Headers; body: Record<string, unknown> }[] = [];
+    const captured: typeof globalThis.fetch = (url, init) => {
+      sent.push({ headers: new Headers(init?.headers), body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+      return fetch(url, init);
+    };
+    const session = createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: captured });
+    await createRunHandlers(session, counterWorkspace(), LIMITS).implement({ ...context("implement", 0), outputs: { plan } });
+
+    expect(sent[0]?.headers.get("anthropic-beta")).toContain("context-management-2025-06-27");
+    expect(sent[0]?.body.context_management).toEqual({
+      edits: [
+        {
+          type: "clear_tool_uses_20250919",
+          trigger: { type: "input_tokens", value: 60_000 },
+          keep: { type: "tool_uses", value: 6 },
+          clear_at_least: { type: "input_tokens", value: 20_000 },
+        },
+      ],
+    });
   });
 
   it("stops a model that keeps asking for tools at the turn cap", async () => {

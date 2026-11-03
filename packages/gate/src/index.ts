@@ -6,11 +6,17 @@ export const GATE_RULES = ["plan", "contracts", "diff", "budget", "paths", "secr
 
 type GateRule = (typeof GATE_RULES)[number];
 
+/** Only `budget` returns `NEEDS_APPROVAL`: the diff is over size and every other rule passes. */
+export const GATE_VERDICTS = ["PASS", "FAIL", "NEEDS_APPROVAL"] as const;
+
 export type GateRuleResult = {
   readonly rule: GateRule;
-  readonly verdict: "PASS" | "FAIL";
+  readonly verdict: (typeof GATE_VERDICTS)[number];
   readonly reason: string;
 };
+
+/** `pass` opens a draft, `needs_approval` pushes the branch and waits for a person, `fail` pushes nothing. */
+export type GateDecision = "pass" | "needs_approval" | "fail";
 
 /** What the gate reads after a run. Step outputs stay `unknown` until a rule parses them. */
 export type RunEvidence = {
@@ -21,6 +27,8 @@ export type RunEvidence = {
   /** The workspace diff against the base, or null when it was not measured. */
   readonly diff: Diff | null;
   readonly checks: readonly CheckResult[];
+  /** The template's budget with the `.thin-pr.yml` overrides applied. */
+  readonly budget: { readonly max_files: number; readonly max_lines: number };
   readonly config: RepoConfig;
 };
 
@@ -38,11 +46,22 @@ const RULES: Record<GateRule, (evidence: RunEvidence) => GateRuleResult> = {
 
 /** One result per rule, in `GATE_RULES` order. */
 export function evaluate(evidence: RunEvidence): readonly GateRuleResult[] {
-  return GATE_RULES.map((rule) => RULES[rule](evidence));
+  const results = GATE_RULES.map((rule) => RULES[rule](evidence));
+  // An approval only answers the size. When another rule fails there is nothing to approve, so over size is a FAIL.
+  const othersPass = results.every((result) => result.rule === "budget" || result.verdict === "PASS");
+  return results.map((result) => (result.verdict === "NEEDS_APPROVAL" && !othersPass ? { ...result, verdict: "FAIL" } : result));
 }
 
-export function decide(evidence: RunEvidence): "pass" | "fail" {
-  return evaluate(evidence).every((result) => result.verdict === "PASS") ? "pass" : "fail";
+export function decide(evidence: RunEvidence): GateDecision {
+  return decideResults(evaluate(evidence));
+}
+
+/** The decision over results `evaluate` returned, such as the ones a RunRecord stores. */
+export function decideResults(results: readonly GateRuleResult[]): GateDecision {
+  if (results.length === 0 || results.some((result) => result.verdict === "FAIL")) {
+    return "fail";
+  }
+  return results.some((result) => result.verdict === "NEEDS_APPROVAL") ? "needs_approval" : "pass";
 }
 
 function planRule({ plan }: RunEvidence): GateRuleResult {
@@ -80,16 +99,17 @@ function diffRule({ diff }: RunEvidence): GateRuleResult {
   return pass("diff", `Diff is present (${countNoun(diff.files.length, "file")}, ${countNoun(changedLines(diff), "line")}).`);
 }
 
-function budgetRule({ diff, config }: RunEvidence): GateRuleResult {
+function budgetRule({ diff, budget }: RunEvidence): GateRuleResult {
   if (!diff) {
     return fail("budget", "Budget was not measured.");
   }
   const files = diff.files.length;
   const lines = changedLines(diff);
-  const { max_files: maxFiles, max_lines: maxLines } = config.budget;
+  const { max_files: maxFiles, max_lines: maxLines } = budget;
   const detail = `${countNoun(files, "file")}, ${countNoun(lines, "line")}; limit ${countNoun(maxFiles, "file")}, ${countNoun(maxLines, "line")}`;
   if (files > maxFiles || lines > maxLines) {
-    return fail("budget", `Diff exceeds the budget (${detail}).`);
+    // `evaluate` turns this into FAIL when another rule fails.
+    return { rule: "budget", verdict: "NEEDS_APPROVAL", reason: `Diff exceeds the budget (${detail}).` };
   }
   return pass("budget", `Diff is within the budget (${detail}).`);
 }

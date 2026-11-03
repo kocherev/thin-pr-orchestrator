@@ -16,7 +16,7 @@ describe("loadRepoConfig", () => {
   it("uses the defaults when .thin-pr.yml is missing", () => {
     expect(loadRepoConfig(repo())).toEqual({
       checks: { typecheck: "pnpm exec tsc --noEmit", test: "pnpm exec vitest run" },
-      budget: { max_files: 2, max_lines: 16 },
+      budget: {},
       paths: {
         allow: ["src/**", "test/**", "examples/**", "README.md", "docs/**"],
         deny: [".github/**", "**/.env*", "pnpm-lock.yaml", "package-lock.json"],
@@ -25,15 +25,18 @@ describe("loadRepoConfig", () => {
   });
 
   it("keeps the defaults a file does not override", () => {
-    const config = loadRepoConfig(repo("install: pnpm install --frozen-lockfile\nchecks:\n  test: vitest run\nbudget:\n  max_lines: 40\n"));
+    const config = loadRepoConfig(repo("install: pnpm install --frozen-lockfile\nchecks:\n  test: vitest run\nbudget:\n  max_lines: 40\nspend_usd: 2.5\n"));
     expect(config.install).toBe("pnpm install --frozen-lockfile");
     expect(config.checks).toEqual({ typecheck: "pnpm exec tsc --noEmit", test: "vitest run" });
-    expect(config.budget).toEqual({ max_files: 2, max_lines: 40 });
+    // A budget override sets only the fields it names. The rest come from the template.
+    expect(config.budget).toEqual({ max_lines: 40 });
+    expect(config.spend_usd).toBe(2.5);
     expect(config.paths.deny).toContain(".github/**");
   });
 
   it("rejects a bad value with its path", () => {
     expect(() => loadRepoConfig(repo("budget:\n  max_files: 0\n"))).toThrow(".thin-pr.yml invalid at budget.max_files");
+    expect(() => loadRepoConfig(repo("spend_usd: 0\n"))).toThrow(".thin-pr.yml invalid at spend_usd");
     expect(() => loadRepoConfig(repo("checks:\n  lint: eslint .\n"))).toThrow(".thin-pr.yml invalid at checks");
     expect(() => loadRepoConfig(repo("budget: [\n"))).toThrow(".thin-pr.yml is not valid YAML");
   });

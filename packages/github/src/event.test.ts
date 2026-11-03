@@ -18,10 +18,10 @@ describe("readLabelEvent", () => {
       issue: {
         number: 7,
         title: "Sample thin pull request",
-        body: "Run the small-feature template on this issue.",
+        body: "Run the feature template on this issue.",
         url: "https://github.com/example/sample-repo/issues/7",
       },
-      issueText: "#7 Sample thin pull request\n\nRun the small-feature template on this issue.",
+      issueText: "#7 Sample thin pull request\n\nRun the feature template on this issue.",
     });
   });
 

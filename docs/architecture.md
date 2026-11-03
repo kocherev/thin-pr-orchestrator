@@ -22,6 +22,8 @@ flowchart TD
   end
   steps --> gate["Nine gate rules<br/>packages/gate"]
   gate -->|every rule passes| draft["Push thin-pr/&lt;issue&gt;<br/>open or update the draft"]
+  gate -->|only over the budget| wait["Push thin-pr/&lt;issue&gt;<br/>comment how to approve<br/>no draft"]
+  wait -. /thin-pr approve .-> approved["openApprovedDraft<br/>re-check, open the draft"]
   gate -->|a rule fails| comment["Comment the run report<br/>push nothing"]
 ```
 
@@ -34,7 +36,7 @@ The Action and the App answer the same label. The App defers to an enabled thin-
 | `packages/core` | Template loading, the step machine with retries and bounded loops, the SQLite run log, `replay`, run and step spans. | Import a model client or a GitHub client. `pnpm lint` fails on either. |
 | `packages/specialists` | The Zod output contracts, the system prompts, `createAnthropicClient` with replay, record, and the spend meter, the planner, implementer, reviewer, and pr-writer handlers, and the judge. The `Workspace` interface lives here. | Import `packages/github`. |
 | `packages/workspace` | The git checkout a run edits: file tools, the check runner, `git diff` against the base, commit and push, and `.thin-pr.yml`. `createMemoryWorkspace` is the in-memory version for tests. | Call a model. |
-| `packages/gate` | Nine pure rules over the run evidence. `evaluate` returns a verdict and a reason per rule. `decide` returns `pass` only when all nine pass. | Read the model's own claims about the change. |
+| `packages/gate` | Nine pure rules over the run evidence. `evaluate` returns a verdict and a reason per rule. `decide` returns `pass` when all nine pass, `needs_approval` when only the budget is over, and `fail` otherwise. | Read the model's own claims about the change. |
 | `packages/github` | The only GitHub client. It parses the webhook payload, runs `verify`, posts check runs, builds the RunRecord, writes the draft body and the run report, pushes, and opens the draft. It also holds the Action entry, `runLocal`, and the CLI. | Live inside `packages/core`. |
 | `packages/app` | A Cloudflare Worker that verifies the webhook, queues the job, mints an installation token, and starts a container that calls `runLabeledIssue`. | Run the workflow itself. |
 | `packages/mcp` | A stdio MCP server with `list_runs`, `get_run`, `replay_case`, and `start_run`. | Push or call GitHub. |
@@ -44,11 +46,13 @@ The Action and the App answer the same label. The App defers to an enabled thin-
 
 A loop that keeps calling a model until it decides it is done hides three decisions: which step runs next, how many times a step may retry, and whether a pull request opens. Here the template decides the first two, and the gate decides the third. The template is YAML, and the gate is nine pure functions.
 
-A template is YAML data under `templates/`. Its `label` selects it, and each step names its id, an optional model and effort, a retry count, and an optional loop. `templates/README.md` lists the three templates.
+A template is YAML data under `templates/`. Its `label` selects it. `budget` sets the review size, `max_files` and `max_lines`, that a run may reach before a person must approve it, and `spend_usd` caps one run's model spend. Each step names its id, an optional model and effort, a retry count, and an optional loop. `templates/README.md` lists the three templates.
 
 ```yaml
-id: small-feature
+id: feature
 label: thin-pr
+budget: { max_files: 12, max_lines: 600 }
+spend_usd: 5
 steps:
   - { id: plan,      model: claude-sonnet-5-5, effort: medium, retries: 1 }
   - { id: implement, model: claude-opus-5-5,   effort: high,   retries: 1 }
@@ -80,13 +84,15 @@ The gate is not a step. `runIssue` evaluates it after `write` finishes. `runIssu
 
 Each model step takes its model and effort from the template step, or from the specialist default when the step names none. Every request sets `thinking` to adaptive and an explicit `output_config.effort`. It omits `temperature`, `top_p`, and `top_k`. Opus 5.5 and Sonnet 5.5 requests opt into the server-side fallback.
 
-The planner, reviewer, and pr-writer are structured-output calls built from their `.strict()` Zod schemas. A reply that still fails the schema throws `SpecialistSchemaError` with the specialist, the phase, and the path of the first issue. A refusal fails the step with its category. A reply cut off at `max_tokens` is retried once with twice the room.
+The planner, reviewer, and pr-writer are structured-output calls built from their `.strict()` Zod schemas. The planner's call also carries `read_file` and `search`, so it can read the files it is about to name. Its tool loop stops after 8 turns. A reply that still fails the schema throws `SpecialistSchemaError` with the specialist, the phase, and the path of the first issue. A refusal fails the step with its category. A reviewer or pr-writer reply cut off at `max_tokens` is retried once with twice the room. A cut-off planner reply fails the attempt, and the step retries.
 
-The implementer runs in the SDK tool runner with six strict tools: `list_files`, `read_file`, `search`, `replace`, `create_file`, and `run_check`. It stops when the model stops asking for tools, and fails after 25 turns. A model never reports which files changed. The `files` field comes from `git diff`.
+The implementer runs in the SDK tool runner with six strict tools: `list_files`, `read_file`, `search`, `replace`, `create_file`, and `run_check`. It stops when the model stops asking for tools, and fails after 60 turns. A feature can touch 12 files, and reading, editing, and checking that many took more than the old 25. The run's `spend_usd` caps what a long loop costs. The request turns on context editing with `clear_tool_uses_20250919`: past 60,000 input tokens the API clears old tool results, keeps the 6 most recent tool calls, and clears at least 20,000 tokens at a time, since each clear invalidates the cached prefix. The API does this on its side, so the tool runner keeps the full history unchanged. A model never reports which files changed. The `files` field comes from `git diff`.
 
-The planner reads the issue and the repository's tracked paths, up to 500 of them, so each step names a real file.
+The planner reads the issue and the repository's tracked paths, up to 500 of them, and can read and search files, so each step names a real file.
 
-An attempt that fails after a model call throws `StepError` with that call's usage. Core keeps it on the `failed` event, so the run totals count refused and retried calls.
+An attempt that fails after a model call throws `StepError` with that call's usage. Core keeps it on the `failed` event, so the run totals count refused and retried calls. A `StepError` with `retryable: false` stops the run without the remaining retries. The specialists throw one for a spend limit, since every retry would hit it too.
+
+Each run's session has two spend limits. `THIN_PR_SPEND_LIMIT_USD`, 25 USD by default, covers the whole client. The template's `spend_usd`, or the `.thin-pr.yml` override, covers one run: `createRunHandlers` passes it to the meter with `limitRun`. Before each live call the meter prices the largest reply the request allows. When that could pass either limit, the call is not sent, the run fails, and the report says which limit and how much was spent.
 
 The reviewer reads the plan, the workspace patch, and the verify results. `changes_requested` loops back to implement with the notes as feedback while the template allows another loop.
 
@@ -96,9 +102,10 @@ The reviewer reads the plan, the workspace patch, and the verify results. `chang
 2. `runWorkflow` runs the template. Each event goes to the SQLite log with its full JSON output and model usage. `onEvent` opens and closes one check run per step, named `thin-pr / <step>`, on the base commit.
 3. After the run, `runIssue` measures `workspace.diff()` and reads the last verify output. Those two values and the parsed plan and review are the gate's evidence.
 4. When every rule passes, `runIssue` commits the checkout and force-pushes `thin-pr/<issue>` with a lease. It posts one check per rule, named `thin-pr / gate / <rule>`, on the new commit, then opens a draft or updates the open one.
-5. When a rule fails, `runIssue` posts the rule checks on the base commit and comments the run report on the issue. Nothing is pushed.
+5. When only `budget` asks for approval, `runIssue` pushes the branch and posts the rule checks the same way, with `budget` as a neutral check. It opens no draft. It comments the run report with the changed files, the command `/thin-pr approve`, and a hidden marker that stores the run. An open draft for the branch gets the report as its body. `openApprovedDraft` in `packages/github/src/approval.ts` re-checks the stored run and the branch head, then opens the draft. `docs/gate.md` has the checks.
+6. When a rule fails, `runIssue` posts the rule checks on the base commit and comments the run report on the issue. Nothing is pushed.
 
-The draft body and the issue comment come from one function, `formatRunReport` in `packages/github/src/report.ts`. Each starts with a one-line outcome and the gate table, failing rules first. Then come the cost, the tokens, and the duration for the run and for each model. Collapsible sections hold the plan, each check's exit code and log tail, the review verdict and notes, and one row per step attempt with its loop count. The pr-writer `title` becomes the draft title, or `thin-pr #<issue>` when the title is missing. Its `body` field is not used. The gate and the body read the parsed outputs from the run, never the model text a second time.
+The draft body and the issue comment come from one function, `formatRunReport` in `packages/github/src/report.ts`. Each starts with a one-line outcome and the gate table, failing rules first. Then come the cost, the tokens, and the duration for the run and for each model. A run over the budget also gets an open section that lists each changed file with its added and removed lines. Collapsible sections hold the plan, each check's exit code and log tail, the review verdict and notes, and one row per step attempt with its loop count. The pr-writer `title` becomes the draft title, or `thin-pr #<issue>` when the title is missing. Its `body` field is not used. The gate and the body read the parsed outputs from the run, never the model text a second time.
 
 `replay(events)` folds a stored log back into the final state: outputs, loops, and usage. `packages/core/src/run.test.ts` checks that it matches what `runWorkflow` returned. `toRunRecord` turns the timed events into a RunRecord, the JSON shape the MCP server, the evals, and `evals/runs/` use.
 
@@ -106,11 +113,11 @@ The draft body and the issue comment come from one function, `formatRunReport` i
 
 ## Evals and the judge
 
-`pnpm eval` replays 23 labeled issues against `evals/sample-repo` with real `tsc` and `vitest` and against `evals/sample-python` with real `python3`, and `pnpm eval:judge` grades the replayed runs against human labels. `evals/README.md` describes both, the cases, and the nightly live run. `docs/gate.md` lists the case that trips each rule.
+`pnpm eval` replays 26 labeled issues against `evals/sample-repo` with real `tsc` and `vitest` and against `evals/sample-python` with real `python3`, and `pnpm eval:judge` grades the replayed runs against human labels. `evals/README.md` describes both, the cases, and the nightly live run. `docs/gate.md` lists the case that trips each rule.
 
 ## Non-goals
 
 - CI and `pnpm eval` do not call a live model. They replay cassettes.
-- The run pushes only after the gate passes, and only to `thin-pr/<issue>`. It does not merge, request reviewers, or close the issue.
-- There is no chat UI, no second orchestrator, and no open-ended agent loop. The implementer's loop is capped at 25 turns, and its tools reach only the workspace. There is no shell tool.
+- The run pushes only after the gate passes or asks for approval, and only to `thin-pr/<issue>`. It does not merge, request reviewers, or close the issue.
+- There is no chat UI, no second orchestrator, and no open-ended agent loop. The implementer's loop is capped at 60 turns and the planner's at 8, and their tools reach only the workspace. There is no shell tool.
 - `packages/core` does not grow a model SDK import or a GitHub client import. `.agents/skills/core-boundary` is the list.
