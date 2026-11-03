@@ -1,4 +1,6 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { statSync } from "node:fs";
+import { delimiter, dirname, isAbsolute, join } from "node:path";
 
 const LOG_TAIL_CHARS = 4096;
 const SECRET_NAME = /TOKEN|KEY|SECRET|PASSWORD/i;
@@ -10,22 +12,55 @@ export function scrubEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return Object.fromEntries(Object.entries(env).filter(([name]) => !SECRET_NAME.test(name) && !SECRET_PREFIX.test(name)));
 }
 
+// sudo sets these for the check user. Passing the run's own would point the check at the run's home.
+const USER_VARS = /^(HOME|USER|LOGNAME|SHELL|MAIL|PWD|OLDPWD|SUDO_\w+)$/;
+// sudo also adds these. SUDO_COMMAND holds the whole command line, which a check has no use for.
+const SUDO_VARS = ["SUDO_COMMAND", "SUDO_USER", "SUDO_UID", "SUDO_GID", "SUDO_HOME"];
+
+/**
+ * Lets `user` write the checkout but not `.git`, and reach it and the tools on PATH through the folders above them.
+ * New files the run or the check creates stay writable by both.
+ */
+export function shareWithCheckUser(dir: string, user: string): void {
+  const self = process.getuid?.();
+  setfacl(["-R", "-m", `u:${user}:rwX,d:u:${user}:rwX,d:u:${self}:rwX`, dir]);
+  setfacl(["-R", "-b", join(dir, ".git")]);
+  const tools = (process.env.PATH ?? "").split(delimiter).filter(isAbsolute);
+  const above = new Set<string>();
+  for (const start of [dir, ...tools]) {
+    for (let parent = dirname(start); parent !== dirname(parent); parent = dirname(parent)) {
+      above.add(parent);
+    }
+  }
+  for (const parent of above) {
+    // Only this process's folders, and only search access: a home folder at 750 hides the tools under it.
+    if (statSync(parent, { throwIfNoEntry: false })?.uid === self) {
+      setfacl(["-m", `u:${user}:x`, parent]);
+    }
+  }
+}
+
 /**
  * Runs `command` through `/bin/sh` in its own process group, so a timeout kills everything it started.
  * The result keeps the last 4 KB of stdout and stderr, interleaved as they arrived.
+ *
+ * With `user`, the command runs as that user through `sudo`. A scrubbed environment alone does not keep secrets
+ * from a check, since any process of the run's own user can read `/proc/<pid>/environ` of the run and its parents.
+ * Once the check ends, every process of `user` is killed, including any it moved out of its process group.
  */
 export function runShell(
   command: string,
-  options: { readonly cwd: string; readonly timeoutMs: number },
+  options: { readonly cwd: string; readonly timeoutMs: number; readonly user?: string },
 ): Promise<{ exitCode: number; durationMs: number; logTail: string }> {
+  const { user } = options;
+  const env = scrubEnv(process.env);
+  const [file, args] =
+    user === undefined
+      ? ["/bin/sh", ["-c", command]]
+      : ["sudo", ["-n", "-H", "-u", user, "--", "env", ...SUDO_VARS.flatMap((name) => ["-u", name]), ...checkUserEnv(env), "/bin/sh", "-c", command]];
   return new Promise((resolve, reject) => {
     const started = performance.now();
-    const child = spawn("/bin/sh", ["-c", command], {
-      cwd: options.cwd,
-      env: scrubEnv(process.env),
-      detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const child = spawn(file, args, { cwd: options.cwd, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let log = "";
     const append = (chunk: string) => {
       log = (log + chunk).slice(-LOG_TAIL_CHARS);
@@ -36,6 +71,10 @@ export function runShell(
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
+      if (user !== undefined) {
+        killAll(user);
+        return;
+      }
       if (child.pid === undefined) {
         return;
       }
@@ -52,6 +91,9 @@ export function runShell(
     });
     child.on("close", (code) => {
       clearTimeout(timer);
+      if (user !== undefined) {
+        killAll(user);
+      }
       if (timedOut) {
         append(`\ntimed out after ${options.timeoutMs} ms\n`);
       }
@@ -63,4 +105,23 @@ export function runShell(
       });
     });
   });
+}
+
+/** The check's variables as `NAME=value` arguments for `env`, since sudo resets the environment. */
+function checkUserEnv(env: NodeJS.ProcessEnv): string[] {
+  return Object.entries(env)
+    .filter(([name, value]) => value !== undefined && !USER_VARS.test(name))
+    .map(([name, value]) => `${name}=${value}`);
+}
+
+/** Kills every process of `user`. `kill -1` skips the shell that sends it, and the run's user cannot signal them. */
+function killAll(user: string): void {
+  spawnSync("sudo", ["-n", "-u", user, "--", "/bin/sh", "-c", "kill -9 -1"], { stdio: "ignore" });
+}
+
+function setfacl(args: readonly string[]): void {
+  const result = spawnSync("setfacl", args, { encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(`setfacl ${args.join(" ")} failed: ${result.error?.message ?? result.stderr.trim()}`);
+  }
 }

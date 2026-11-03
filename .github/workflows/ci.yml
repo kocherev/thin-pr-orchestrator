@@ -49,6 +49,15 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # Checks run as a second user, so they cannot read the run's secrets. The canary stands in for a real key.
+      - name: Sandbox
+        env:
+          THIN_PR_CANARY_KEY: canary-ci
+          THIN_PR_CHECK_USER: thin-pr-check
+        run: |
+          sudo useradd --create-home thin-pr-check
+          pnpm test:sandbox
+
       - name: Eval
         run: pnpm eval
 

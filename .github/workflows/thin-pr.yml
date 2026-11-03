@@ -69,8 +69,13 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # Checks run as this second user, so code the model wrote cannot read the run's secrets. See docs/security.md.
+      - name: Create the check user
+        run: sudo useradd --create-home thin-pr-check
+
       - name: Run the event
         env:
+          THIN_PR_CHECK_USER: thin-pr-check
           GITHUB_TOKEN: ${{ github.token }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           THIN_PR_TRACE_PATH: artifacts/trace.json
