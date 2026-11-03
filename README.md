@@ -240,10 +240,6 @@ A model payload that lists files does not open a draft. The gate reads `git diff
 
 [Draft pull request 13](https://github.com/kocherev/thin-pr-orchestrator/pull/13) is the live run for [issue 12](https://github.com/kocherev/thin-pr-orchestrator/issues/12). The head commit adds `examples/clamp.ts`. The measured diff is 1 file and 6 lines, inside the budget of 2 files and 16 lines. Plan, tests, contracts, diff, and budget all passed. The client reported a spend of $0.000661 for that run, using the published Haiku 5.5 rates of $0.10 per million input tokens and $0.50 per million output tokens.
 
-![Still of the Files tab on draft pull request 13, showing the diff for examples/clamp.ts](docs/demo/draft-pull-request.png)
-
-That image is a still of the live draft diff. It is not a screen recording of the label, the Actions log, or the draft opening.
-
 - That run used the earlier five-rule gate. Today the `thin-pr` label reaches a draft only after typecheck and tests pass on the checkout and the gate reads `git diff`. A model file list is not the diff.
 - The draft opens only after all nine gate rules pass. A failed rule comments `## Run report` on the issue and opens no pull request.
 - That run used the earlier single-model client on `claude-haiku-5-5`. Today each step uses the model its template names.
