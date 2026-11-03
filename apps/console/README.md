@@ -34,4 +34,4 @@ Eval runs replay recorded model responses against `example/sample-repo` and `exa
 
 ## Tests
 
-`lib/load.test.ts` parses every committed eval run and the report. `lib/diff.test.ts` covers the patch parser. Both run with the root `pnpm test`.
+`lib/load.test.ts` parses every committed eval run and the report. `lib/diff.test.ts` covers the patch parser. `lib/run.test.ts` checks the sentence each run page opens with, which says why the run ended. All of them run with the root `pnpm test`.

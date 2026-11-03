@@ -1,3 +1,4 @@
+import { joinWords, RULE_LABEL, STEP_LABEL } from "./labels";
 import type { RunRecord, RunStep } from "./schema";
 
 /** The eval cases replay recorded model responses against these repos. Their issue and PR links do not exist. */
@@ -19,6 +20,61 @@ export function gateSummary(run: RunRecord): { passed: number; total: number } {
     passed: run.gate.filter((result) => result.verdict === "PASS").length,
     total: run.gate.length,
   };
+}
+
+export const APPROVE_COMMAND = "/thin-pr approve";
+
+/** Loop feedback and planner errors carry a log. The first line names the failure. */
+export function firstLine(text: string): string {
+  return text.split("\n", 1)[0] ?? "";
+}
+
+export type Outcome = {
+  /** A few words for the runs table. */
+  short: string;
+  /** One sentence that says why the run ended the way it did. */
+  headline: string;
+  /** The gate reason or step summary behind the headline. */
+  detail: string | null;
+};
+
+/** Explains a run's status from the gate rules and steps that decided it. */
+export function runOutcome(run: RunRecord): Outcome {
+  switch (run.status) {
+    case "opened":
+      return {
+        short: `${run.gate.length}/${run.gate.length} passed`,
+        headline: `All ${run.gate.length} gate rules passed, so a draft pull request opened.`,
+        detail: null,
+      };
+    case "awaiting_approval": {
+      const waiting = run.gate.filter((result) => result.verdict === "NEEDS_APPROVAL");
+      const names = joinWords(waiting.map((result) => RULE_LABEL[result.rule].toLowerCase()));
+      return {
+        short: `Over ${names}`,
+        headline: `Waiting for approval. Every other rule passed, but the change is over its ${names}.`,
+        detail: waiting[0]?.reason ?? null,
+      };
+    }
+    case "blocked": {
+      const failed = run.gate.filter((result) => result.verdict === "FAIL");
+      const names = joinWords(failed.map((result) => RULE_LABEL[result.rule]));
+      return {
+        short: `${names} failed`,
+        headline: `Blocked because ${failed.length === 1 ? "one gate rule" : `${failed.length} gate rules`} failed: ${names}.`,
+        detail: failed[0]?.reason ?? null,
+      };
+    }
+    case "failed": {
+      const step = run.steps.findLast((candidate) => candidate.outcome === "failed");
+      const where = step ? STEP_LABEL[step.id].toLowerCase() : "first";
+      return {
+        short: `Stopped at ${where}`,
+        headline: `Stopped at the ${where} step, before the gate could run.`,
+        detail: step ? firstLine(step.summary) : null,
+      };
+    }
+  }
 }
 
 export function stepUsage(step: RunStep) {

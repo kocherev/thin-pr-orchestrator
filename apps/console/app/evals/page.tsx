@@ -4,20 +4,17 @@ import { FailIcon, PassIcon } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState, Section } from "@/components/section";
 import { StatStrip } from "@/components/stat-strip";
+import { StatusText } from "@/components/status-pill";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getEvalReport, getExpected, getRun } from "@/lib/data";
 import { isCorrect, summarizeEvals } from "@/lib/evals";
+import { ruleLabel } from "@/lib/labels";
 import { formatDate, formatDuration, formatPercent, formatUsd } from "@/lib/format";
 import { REPLAY_NOTE } from "@/lib/run";
-import type { RunStatus } from "@/lib/schema";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Evals" };
-
-function VerdictText({ verdict }: { verdict: RunStatus }) {
-  return <span className="font-mono">{verdict}</span>;
-}
 
 export default function EvalsPage() {
   const report = getEvalReport();
@@ -26,9 +23,11 @@ export default function EvalsPage() {
       <>
         <PageHeader title="Evals" />
         <div className="rounded-xl bg-surface shadow-border">
-          <EmptyState title="No eval report">
-            Run <code className="font-mono text-foreground">pnpm eval -- --write</code> to write{" "}
-            <code className="font-mono text-foreground">evals/report.json</code>, then rebuild the console.
+          <EmptyState title="No eval report yet">
+            The eval suite scores every labeled case. Run{" "}
+            <code className="font-mono text-foreground">pnpm eval -- --write</code> to record{" "}
+            <code className="font-mono text-foreground">evals/report.json</code>, then{" "}
+            <code className="font-mono text-foreground">pnpm console:build</code>.
           </EmptyState>
         </div>
       </>
@@ -44,11 +43,12 @@ export default function EvalsPage() {
         title="Evals"
         description={
           <>
-            <p>
-              Each case runs a labeled issue against the sample repo. A run that failed before the gate counts as blocked.
-              Recorded {formatDate(report.generatedAt)}.
+            <p className="max-w-[68ch]">
+              Each case is an issue with a known right answer: open a pull request, wait for approval or stop. The suite
+              runs every case and checks the run ended as labeled. A run that failed before the gate counts as
+              blocked. Recorded {formatDate(report.generatedAt)}.
             </p>
-            <p>{REPLAY_NOTE}</p>
+            <p className="mt-2 text-xs">{REPLAY_NOTE}</p>
           </>
         }
       />
@@ -58,33 +58,38 @@ export default function EvalsPage() {
           {
             label: "Verdict accuracy",
             value: formatPercent(summary.correct, summary.total),
-            detail: `${summary.correct} of ${summary.total} cases match their label`,
+            detail: `${summary.correct} of ${summary.total} cases ended as labeled`,
+            tone: summary.correct === summary.total ? "text-success" : "text-danger",
           },
           {
             label: "Resolve rate",
             value: formatPercent(summary.resolved, summary.shouldOpen),
-            detail: `${summary.resolved} of ${summary.shouldOpen} cases that should open`,
+            detail: `${summary.resolved} of ${summary.shouldOpen} cases that should open did`,
           },
           {
             label: "Cost per resolved",
             value: summary.costPerResolvedUsd === null ? "n/a" : formatUsd(summary.costPerResolvedUsd),
-            detail: "spend on those cases / opened",
+            detail: "spend on cases that should open, per one that did",
           },
           { label: "Total cost", value: formatUsd(summary.totalCostUsd), detail: `${summary.total} cases` },
         ]}
       />
-      <Section id="cases" title="Cases" meta={`${summary.total - summary.correct} mismatched`}>
+      <Section
+        id="cases"
+        title="Cases"
+        meta={summary.correct === summary.total ? "Every case matches" : `${summary.total - summary.correct} mismatched`}
+      >
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Case</TableHead>
-              <TableHead className="hidden sm:table-cell">Expected</TableHead>
-              <TableHead className="hidden sm:table-cell">Actual</TableHead>
+              <TableHead className="hidden md:table-cell">Expected</TableHead>
+              <TableHead className="hidden md:table-cell">Actual</TableHead>
               <TableHead>Match</TableHead>
-              <TableHead className="hidden sm:table-cell">Rules failed</TableHead>
-              <TableHead className="hidden md:table-cell">Models</TableHead>
-              <TableHead className="text-right">Cost</TableHead>
-              <TableHead className="hidden text-right sm:table-cell">Duration</TableHead>
+              <TableHead className="hidden lg:table-cell">Rules failed</TableHead>
+              <TableHead className="hidden xl:table-cell">Models</TableHead>
+              <TableHead className="hidden text-right sm:table-cell">Cost</TableHead>
+              <TableHead className="hidden text-right lg:table-cell">Duration</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -96,20 +101,20 @@ export default function EvalsPage() {
                     {getRun(`eval-${evalCase.caseId}`) ? (
                       <Link
                         href={`/runs/eval-${evalCase.caseId}`}
-                        className="block font-medium text-pretty underline-offset-2 hover:underline sm:truncate"
+                        className="block font-medium text-pretty underline-offset-2 hover:underline"
                       >
                         {evalCase.title}
                       </Link>
                     ) : (
-                      <span className="block font-medium text-pretty sm:truncate">{evalCase.title}</span>
+                      <span className="block font-medium text-pretty">{evalCase.title}</span>
                     )}
-                    <span className="block truncate font-mono text-xs text-muted-foreground">{evalCase.caseId}</span>
+                    <span className="block font-mono text-xs [overflow-wrap:anywhere] text-muted-foreground">{evalCase.caseId}</span>
                   </TableCell>
-                  <TableCell className="hidden sm:table-cell">
-                    <VerdictText verdict={evalCase.expected} />
+                  <TableCell className="hidden md:table-cell">
+                    <StatusText status={evalCase.expected} />
                   </TableCell>
-                  <TableCell className="hidden sm:table-cell">
-                    <VerdictText verdict={evalCase.actual} />
+                  <TableCell className="hidden md:table-cell">
+                    <StatusText status={evalCase.actual} />
                   </TableCell>
                   <TableCell>
                     {match ? (
@@ -122,12 +127,12 @@ export default function EvalsPage() {
                       </span>
                     )}
                   </TableCell>
-                  <TableCell className="hidden sm:table-cell">
+                  <TableCell className="hidden lg:table-cell">
                     {evalCase.failedRules.length > 0 ? (
                       <span className="flex gap-1">
                         {evalCase.failedRules.map((rule) => (
-                          <Badge key={rule} tone="neutral" className="font-mono">
-                            {rule}
+                          <Badge key={rule} tone="neutral">
+                            {ruleLabel(rule)}
                           </Badge>
                         ))}
                       </span>
@@ -135,11 +140,11 @@ export default function EvalsPage() {
                       <span className="text-muted-foreground">None</span>
                     )}
                   </TableCell>
-                  <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
+                  <TableCell className="hidden font-mono text-xs text-muted-foreground xl:table-cell">
                     {evalCase.models.map((model) => model.replace(/^claude-/, "")).join(", ")}
                   </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">{formatUsd(evalCase.costUsd)}</TableCell>
-                  <TableCell className="hidden text-right font-mono text-muted-foreground tabular-nums sm:table-cell">
+                  <TableCell className="hidden text-right tabular-nums sm:table-cell">{formatUsd(evalCase.costUsd)}</TableCell>
+                  <TableCell className="hidden text-right text-muted-foreground tabular-nums lg:table-cell">
                     {formatDuration(evalCase.durationMs)}
                   </TableCell>
                 </TableRow>
