@@ -199,9 +199,12 @@ describe("replay eval", () => {
     }
   });
 
-  it("keeps the eval on the CI workflow", () => {
+  it("keeps the eval and the python3 its Python cases need on the CI and nightly workflows", () => {
     const workflow = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
     expect(workflow).toContain("run: pnpm eval");
+    for (const name of ["ci.yml", "nightly-eval.yml"]) {
+      expect(readFileSync(join(root, ".github/workflows", name), "utf8")).toContain("uses: actions/setup-python@v7");
+    }
   });
 });
 
