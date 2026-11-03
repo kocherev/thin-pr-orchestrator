@@ -17,6 +17,7 @@
     "eval:judge": "node --disable-warning=ExperimentalWarning --import tsx scripts/judge.ts",
     "trace": "node --disable-warning=ExperimentalWarning --import tsx scripts/trace.ts",
     "verify": "bash scripts/verify.sh",
+    "ci:local": "bash scripts/ci-local.sh",
     "thin-pr": "node --disable-warning=ExperimentalWarning packages/github/bin/thin-pr.js",
     "build": "tsc -b --pretty false",
     "console:build": "pnpm --filter console build"
