@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { createAnthropicClient } from "@thin-pr/specialists";
+import { createAnthropicClient, scriptedUpstream, type Script } from "@thin-pr/specialists";
 import { createScratchRepo } from "@thin-pr/workspace";
 import { readStoredRun } from "./approval.js";
 import { HELP, runCommand } from "./commands.js";
@@ -23,6 +23,18 @@ afterEach(() => {
 
 const SELF = "thin-pr[bot]";
 const REPO = { owner: "example", name: "sample-repo", defaultBranch: "main" };
+const STUB_SCRIPT: Script = {
+  planner: [{ summary: "Plan the stub change.", steps: ["edit the stub"] }],
+  implementer: {
+    turns: [
+      [{ name: "read_file", input: { path: "src/stub.ts" } }],
+      [{ name: "replace", input: { path: "src/stub.ts", old_text: "return 0;", new_text: "return 1;" } }],
+    ],
+    summary: "Apply the stub change.",
+  },
+  reviewer: [{ summary: "Stub review found nothing.", verdict: "approve", notes: [] }],
+  "pr-writer": [{ summary: "pass", title: "Fix the stub" }],
+};
 // The stub change is 2 lines, so a 1-line budget puts it over while every other rule passes.
 const OVER_BUDGET = "budget:\n  max_lines: 1\nchecks:\n  typecheck: echo typecheck ok\n  test: echo test ok\n";
 
@@ -55,7 +67,8 @@ async function awaitingRun() {
     runId: "run-7",
     logPath: join(directory, "events.sqlite"),
     github: first.github,
-    model: () => createAnthropicClient({ mode: "replay", cassettePath: join(root, "fixtures", "gate-pass.jsonl") }, {}),
+    // The prompts state the 1-line budget, so the gate-pass recording no longer matches.
+    model: () => createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: scriptedUpstream(STUB_SCRIPT) }, {}),
   });
   if (result.status !== "awaiting_approval") {
     throw new Error(`expected awaiting_approval, got ${result.status}`);
