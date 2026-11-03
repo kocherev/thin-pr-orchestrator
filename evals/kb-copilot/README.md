@@ -1,8 +1,10 @@
 # Real-repo eval: kb-copilot
 
-thin-pr ran ten issues against [kb-copilot](https://github.com/kocherev/kb-copilot) at commit `4d4740f`, a codebase it had never seen. It's a pnpm and uv monorepo with a Next.js web app, a FastAPI service, an MCP server, a desktop agent, and evals. Six issues are Python and four are TypeScript.
+thin-pr ran ten issues against [kb-copilot](https://github.com/kocherev/kb-copilot) at commit `315c64a`, a codebase it had never seen. It's a pnpm and uv monorepo with a Next.js web app, a FastAPI service, an MCP server, a desktop agent, and evals. Six issues are Python and four are TypeScript.
 
 The repo owner wrote each issue, plus a hidden acceptance test that fails before a correct fix and passes after. thin-pr saw only the issue's title and body. It never saw the hidden test or the owner's reference fix. The owner then read every diff and gave a verdict.
+
+Commit `315c64a` was `4d4740f` when the eval ran. kb-copilot later rewrote its history to change the root commit's author, and every commit got a new ID with the same tree, so the diffs and tests apply unchanged.
 
 ## Results
 
@@ -49,7 +51,7 @@ Each folder holds the issue as thin-pr got it (`issue.md`) and the diff it produ
 
 ## How it ran
 
-Each issue ran in a fresh clone of kb-copilot at `4d4740f`, with no remote. Nothing was pushed, and no pull request was opened on kb-copilot.
+Each issue ran in a fresh clone of kb-copilot at `315c64a`, with no remote. Nothing was pushed, and no pull request was opened on kb-copilot.
 
 ```bash
 pnpm thin-pr run --repo <clone> --issue issue.md --config thin-pr.yml --label thin-pr:bugfix
