@@ -11,9 +11,9 @@ type SectionProps = {
 
 export function Section({ id, title, meta, className, children }: SectionProps) {
   return (
-    <section aria-labelledby={id} className={cn("flex min-w-0 flex-col gap-2", className)}>
+    <section aria-labelledby={id} className={cn("flex min-w-0 flex-col gap-2.5", className)}>
       <div className="flex items-baseline justify-between gap-3">
-        <h2 id={id} className="text-sm font-semibold">
+        <h2 id={id} className="text-base font-semibold tracking-tight">
           {title}
         </h2>
         {meta ? <div className="text-xs text-muted-foreground tabular-nums">{meta}</div> : null}

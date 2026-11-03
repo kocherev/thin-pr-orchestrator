@@ -11,6 +11,7 @@ const badgeVariants = cva(
         success: "bg-success/12 text-success",
         danger: "bg-danger/12 text-danger",
         warning: "bg-warning/14 text-warning",
+        primary: "bg-primary/12 text-primary",
       },
     },
     defaultVariants: { tone: "neutral" },
