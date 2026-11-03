@@ -31,7 +31,7 @@ You do not need `.env` for lint, typecheck, test, or eval. Copy `.env.example` t
 
 ## Commands
 
-Run these from the repo root, in this order, after `pnpm install`. Each one exits 0 when it passes. Read the output. A command you did not run is not a pass. `pnpm verify` runs all six in this order and stops at the first failure.
+Run these from the repo root, in this order, after `pnpm install`. Each one exits 0 when it passes. Read the output. A command you did not run is not a pass. `pnpm verify` runs all six in this order and stops at the first failure. `pnpm ci:local` runs them as CI does, before a push.
 
 ### pnpm lint
 
@@ -97,6 +97,19 @@ Runs `node --disable-warning=ExperimentalWarning --import tsx scripts/trace.ts`.
 
 The command replays run `run-7` on a scratch checkout and exports OTLP JSON. Set `THIN_PR_TRACE_PATH` to write a file. With the variable empty, the JSON goes to stdout. `pnpm verify` sets it to a temp file, so it prints only the span names and the file path. With `OTEL_EXPORTER_OTLP_ENDPOINT` set, the spans go to that endpoint and no file is written. `docs/telemetry.md` has the backends and the attributes. `docs/demo/trace.json` is one file from this command. `@opentelemetry/sdk-node` 0.300.0 requires Node.js 22.15 or later.
 
+### pnpm ci:local
+
+Runs `bash scripts/ci-local.sh`. It needs Docker, and it tests the committed `HEAD`, so commit first.
+
+It runs the CI jobs in `.github/workflows/ci.yml` where they differ from `pnpm verify` on a Mac:
+- gitleaks at CI's version, on the commits since `origin/main`
+- the check job (`pnpm verify`) in a Linux container, from `git archive HEAD`, as `actions/checkout` sees it
+- `pnpm test:sandbox` as a real second user
+- the Action's production install, run from another checkout
+- the console and deploy-check builds
+
+Exit 0 means all of them passed. It takes a few minutes. Two failures that once reached GitHub would have stopped here: a gitleaks false positive, and a temp-path bug that shows only on Linux.
+
 ## Layout
 
 `packages/core` is the control plane. It runs the template, appends each step event to SQLite, and does not call a model. `packages/specialists` holds planner, implementer, reviewer, and pr-writer as step handlers, the `Workspace` interface, and `createAnthropicClient`. `THIN_PR_MODEL` is `live`, `record`, or `replay`. `replay` is the default, except in the labeled-issue Action, which defaults to `live` and fails the run when `ANTHROPIC_API_KEY` is missing. `record` and `replay` read the cassette path from `THIN_PR_CASSETTE`. `packages/workspace` is the git checkout a run edits: file tools, the check runner with a scrubbed environment, a timeout, and an optional second user from `THIN_PR_CHECK_USER`, `git diff` against the base, commit and push, and `.thin-pr.yml`. `packages/gate` evaluates plan, contracts, diff, budget, paths, secrets, typecheck, tests, and review. Each rule returns `PASS` or `FAIL` and a reason. `budget` returns `NEEDS_APPROVAL` when the diff is over size and every other rule passes. `packages/github` is the only package that calls GitHub. It runs `verify`, posts the checks, and pushes `thin-pr/<issue>` and opens or updates a draft pull request when every gate rule passes. A run that only needs approval pushes the branch, opens no draft, and comments how to approve. `/thin-pr approve` calls `openApprovedDraft` to open it later. A failure ends the run's progress comment with the run report and pushes nothing. `routeEvent` in `packages/github/src/router.ts` is the one router for labels, `/thin-pr` commands, and reviews, in the Action and the App. A review on a draft starts the `revise` template on the draft branch. Specialists do not import `packages/github`.
@@ -125,6 +138,7 @@ Use ponytail and the working style on every change. Ponytail stops extra code. T
 
 - Write each commit subject as one imperative sentence in sentence case, such as `Run typecheck and tests on the pull request branch`. Do not use a conventional-commit prefix such as `feat:` or `fix:`. A plain-prose body is optional.
 - Name the branch `feat/<slug>`, `fix/<slug>`, `refactor/<slug>`, `chore/<slug>`, or `docs/<slug>`.
+- Run `pnpm ci:local` before every push, and push only when it passes.
 - Open one pull request per change. Merge it with a squash merge.
 - Merge only when CI is green.
 
