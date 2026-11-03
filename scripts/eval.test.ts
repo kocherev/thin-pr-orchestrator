@@ -113,7 +113,7 @@ describe("replay eval", () => {
     expect(workflow).toContain("run: pnpm eval");
     expect(readFileSync(join(root, "scripts/verify.sh"), "utf8")).toMatch(/^for step in lint typecheck test eval /m);
     for (const name of ["ci.yml", "nightly-eval.yml"]) {
-      expect(readFileSync(join(root, ".github/workflows", name), "utf8")).toContain("uses: actions/setup-python@v7");
+      expect(readFileSync(join(root, ".github/workflows", name), "utf8")).toContain("uses: actions/setup-python@");
     }
   });
 });

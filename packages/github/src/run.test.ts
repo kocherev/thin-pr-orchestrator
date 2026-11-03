@@ -396,6 +396,14 @@ describe("issue label", () => {
     expect(memory.calls).toEqual([]);
   });
 
+  it("pins every third-party Action to a commit, since these jobs hold secrets and write access", () => {
+    const files = [".github/workflows/ci.yml", ".github/workflows/thin-pr.yml", ".github/workflows/nightly-eval.yml", "action.yml", "docs/install.md"];
+    const uses = files.flatMap((file) => [...readFileSync(join(root, file), "utf8").matchAll(/uses: (\S+)/g)].map((match) => match[1] ?? ""));
+    const thirdParty = uses.filter((ref) => !ref.startsWith("./") && ref !== "kocherev/thin-pr-orchestrator@<commit");
+    expect(thirdParty.length).toBeGreaterThan(10);
+    expect(thirdParty.filter((ref) => !/@[0-9a-f]{40}$/.test(ref))).toEqual([]);
+  });
+
   it("points the workflow at the label, the full checkout and a neutral commit identity", () => {
     const workflow = readFileSync(join(root, ".github/workflows/thin-pr.yml"), "utf8");
     expect(workflow).toContain("types: [labeled]");
@@ -410,7 +418,7 @@ describe("issue label", () => {
     expect(workflow).toContain("ref: ${{ github.event.pull_request.head.ref }}");
     const manifest = JSON.parse(readFileSync(join(root, "packages/app/github-app-manifest.json"), "utf8")) as { default_events: string[] };
     expect(manifest.default_events).toEqual(["issues", "issue_comment", "pull_request_review", "pull_request_review_comment"]);
-    expect(workflow).toContain("actions/checkout@v7");
+    expect(workflow).toContain("uses: actions/checkout@");
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("persist-credentials: false");
     expect(readFileSync(fileURLToPath(new URL("./trigger.ts", import.meta.url)), "utf8")).toContain("pushToken: input.token");
