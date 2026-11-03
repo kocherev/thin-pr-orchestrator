@@ -6,7 +6,8 @@ const PATTERNS: readonly { readonly kind: string; readonly pattern: RegExp }[] =
   { kind: "GitHub token", pattern: /\b(?:gh[pos]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,})/ },
   { kind: "Anthropic API key", pattern: /\bsk-ant-[A-Za-z0-9_-]{20,}/ },
   { kind: "Slack token", pattern: /\bxox[abprs]-[A-Za-z0-9-]{10,}/ },
-  { kind: "credential assignment", pattern: /(?:password|secret|token)\s*[:=]\s*['"][^'"]{12,}/i },
+  // A real value mixes letters and digits. Words alone, such as a test's "internal-secret", are placeholders.
+  { kind: "credential assignment", pattern: /(?:password|secret|token)\s*[:=]\s*['"](?=[^'"]*[a-z])(?=[^'"]*\d)[^'"]{12,}/i },
 ];
 
 /**
