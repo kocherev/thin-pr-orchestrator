@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light dark;
+  --background: light-dark(oklch(0.985 0.002 250), oklch(0.17 0.006 255));
+  --surface: light-dark(oklch(1 0 0), oklch(0.205 0.007 255));
+  --muted: light-dark(oklch(0.965 0.003 250), oklch(0.245 0.008 255));
+  --foreground: light-dark(oklch(0.22 0.01 255), oklch(0.93 0.006 255));
+  --muted-foreground: light-dark(oklch(0.5 0.012 255), oklch(0.69 0.012 255));
+  --border: light-dark(oklch(0.915 0.005 255), oklch(0.29 0.009 255));
+  --primary: light-dark(oklch(0.52 0.14 252), oklch(0.72 0.12 252));
+  --success: light-dark(oklch(0.49 0.12 152), oklch(0.72 0.14 152));
+  --danger: light-dark(oklch(0.52 0.19 25), oklch(0.7 0.16 25));
+  --warning: light-dark(oklch(0.5 0.115 60), oklch(0.79 0.13 75));
+  --diff-add: light-dark(oklch(0.95 0.045 152), oklch(0.3 0.06 152 / 0.55));
+  --diff-remove: light-dark(oklch(0.95 0.035 20), oklch(0.3 0.07 22 / 0.55));
+  --ring: light-dark(oklch(0 0 0 / 0.06), oklch(1 0 0 / 0.08));
+  --ring-hover: light-dark(oklch(0 0 0 / 0.08), oklch(1 0 0 / 0.13));
+  --lift: light-dark(oklch(0 0 0 / 0.06), transparent);
+  --ambient: light-dark(oklch(0 0 0 / 0.04), transparent);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-diff-add: var(--diff-add);
+  --color-diff-remove: var(--diff-remove);
+  --shadow-border: 0 0 0 1px var(--ring), 0 1px 2px -1px var(--lift), 0 2px 4px 0 var(--ambient);
+  --shadow-border-hover: 0 0 0 1px var(--ring-hover), 0 1px 2px -1px var(--lift), 0 2px 4px 0 var(--ambient);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@layer base {
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+}

@@ -19,7 +19,16 @@ const githubClientMessage = "GitHub clients belong in packages/github.";
 
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", "**/.wrangler/**", "**/worker-configuration.d.ts"],
+    ignores: [
+      "**/dist/**",
+      "**/coverage/**",
+      "**/node_modules/**",
+      "**/.wrangler/**",
+      "**/worker-configuration.d.ts",
+      "apps/console/.next/**",
+      "apps/console/out/**",
+      "apps/console/next-env.d.ts",
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
