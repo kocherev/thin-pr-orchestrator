@@ -21,6 +21,14 @@ export type GitHubRest = {
       readonly pull_number: number;
       readonly body: string;
     }): Promise<{ data: { number: number; html_url: string } }>;
+    get(params: { readonly owner: string; readonly repo: string; readonly pull_number: number }): Promise<{
+      data: {
+        number: number;
+        state: string;
+        head: { ref: string; repo: { full_name: string } | null };
+        base: { repo: { full_name: string } };
+      };
+    }>;
   };
   checks: {
     create(params: {
@@ -45,6 +53,15 @@ export type GitHubRest = {
     getRef(params: { readonly owner: string; readonly repo: string; readonly ref: string }): Promise<{
       data: { object: { sha: string } };
     }>;
+    deleteRef(params: { readonly owner: string; readonly repo: string; readonly ref: string }): Promise<unknown>;
+  };
+  reactions: {
+    createForIssueComment(params: {
+      readonly owner: string;
+      readonly repo: string;
+      readonly comment_id: number;
+      readonly content: Reaction;
+    }): Promise<{ data: { user: { login: string } | null } }>;
   };
   issues: {
     createComment(params: {
@@ -59,10 +76,29 @@ export type GitHubRest = {
       readonly comment_id: number;
       readonly body: string;
     }): Promise<unknown>;
+    listComments(params: {
+      readonly owner: string;
+      readonly repo: string;
+      readonly issue_number: number;
+      readonly per_page: number;
+      readonly page: number;
+    }): Promise<{ data: readonly { id: number; body?: string; user: { login: string } | null }[] }>;
+    get(params: { readonly owner: string; readonly repo: string; readonly issue_number: number }): Promise<{
+      data: { number: number; title: string; body?: string | null; labels: readonly (string | { name?: string })[] };
+    }>;
   };
 };
 
 type PullRequest = { readonly number: number; readonly url: string };
+
+/** The reactions a run leaves on a command: seen, done, and refused. */
+export type Reaction = "eyes" | "+1" | "confused";
+
+export type IssueComment = { readonly id: number; readonly author: string | null; readonly body: string };
+
+export type Issue = { readonly number: number; readonly title: string; readonly body: string; readonly labels: readonly string[] };
+
+const COMMENTS_PER_PAGE = 100;
 
 /** `neutral` marks a rule that waits for a person, such as `budget` with `NEEDS_APPROVAL`. */
 type CheckConclusion = "success" | "failure" | "neutral";
@@ -95,6 +131,23 @@ export type GitHubSurface = {
     readonly commentId: number;
     readonly body: string;
   }): Promise<void>;
+  /** Every comment on an issue or pull request, oldest first. */
+  listComments(input: { readonly owner: string; readonly repo: string; readonly issue: number }): Promise<IssueComment[]>;
+  /**
+   * Reacts to an issue comment and returns the login that reacted, which is the token's own account. An
+   * installation token cannot read `GET /user`, and the command flow reacts anyway, so this is how it learns who
+   * it is.
+   */
+  react(input: { readonly owner: string; readonly repo: string; readonly commentId: number; readonly content: Reaction }): Promise<string>;
+  getIssue(input: { readonly owner: string; readonly repo: string; readonly issue: number }): Promise<Issue>;
+  /** The head branch of a pull request, and whether it lives in the same repository. */
+  getPull(input: { readonly owner: string; readonly repo: string; readonly number: number }): Promise<{
+    readonly number: number;
+    readonly open: boolean;
+    readonly branch: string;
+    readonly sameRepo: boolean;
+  }>;
+  deleteBranch(input: { readonly owner: string; readonly repo: string; readonly branch: string }): Promise<void>;
   /** The commit `branch` points at, or null when the branch does not exist. */
   branchHead(input: { readonly owner: string; readonly repo: string; readonly branch: string }): Promise<string | null>;
   /** Open pull requests whose head is `branch` in the same repo. */
@@ -160,6 +213,58 @@ export function createGitHubSurface(octokit: GitHubRest): GitHubSurface {
         body: input.body,
       });
     },
+    async listComments(input) {
+      const comments: IssueComment[] = [];
+      for (let page = 1; ; page += 1) {
+        const { data } = await octokit.issues.listComments({
+          owner: input.owner,
+          repo: input.repo,
+          issue_number: input.issue,
+          per_page: COMMENTS_PER_PAGE,
+          page,
+        });
+        comments.push(...data.map((comment) => ({ id: comment.id, author: comment.user?.login ?? null, body: comment.body ?? "" })));
+        if (data.length < COMMENTS_PER_PAGE) {
+          return comments;
+        }
+      }
+    },
+    async react(input) {
+      const { data } = await octokit.reactions.createForIssueComment({
+        owner: input.owner,
+        repo: input.repo,
+        comment_id: input.commentId,
+        content: input.content,
+      });
+      if (!data.user) {
+        throw new Error("GitHub returned a reaction without a user");
+      }
+      return data.user.login;
+    },
+    async getIssue(input) {
+      const { data } = await octokit.issues.get({ owner: input.owner, repo: input.repo, issue_number: input.issue });
+      return {
+        number: data.number,
+        title: data.title,
+        body: data.body ?? "",
+        labels: data.labels.flatMap((label) => {
+          const name = typeof label === "string" ? label : label.name;
+          return name ? [name] : [];
+        }),
+      };
+    },
+    async getPull(input) {
+      const { data } = await octokit.pulls.get({ owner: input.owner, repo: input.repo, pull_number: input.number });
+      return {
+        number: data.number,
+        open: data.state === "open",
+        branch: data.head.ref,
+        sameRepo: data.head.repo?.full_name === data.base.repo.full_name,
+      };
+    },
+    async deleteBranch(input) {
+      await octokit.git.deleteRef({ owner: input.owner, repo: input.repo, ref: `heads/${input.branch}` });
+    },
     async branchHead(input) {
       try {
         const { data } = await octokit.git.getRef({ owner: input.owner, repo: input.repo, ref: `heads/${input.branch}` });
@@ -202,4 +307,12 @@ export function createGitHubSurface(octokit: GitHubRest): GitHubSurface {
       return { number: data.number, url: data.html_url };
     },
   };
+}
+
+/** The methods only commands and reviews call, for a surface that runs labeled issues alone. Each one throws. */
+export function noReadBack(who: string): Pick<GitHubSurface, "listComments" | "react" | "getIssue" | "getPull" | "deleteBranch"> {
+  const refuse = async (): Promise<never> => {
+    throw new Error(`${who} runs labeled issues only`);
+  };
+  return { listComments: refuse, react: refuse, getIssue: refuse, getPull: refuse, deleteBranch: refuse };
 }

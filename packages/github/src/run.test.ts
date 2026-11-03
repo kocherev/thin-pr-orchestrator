@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,13 +7,13 @@ import { templateForLabel } from "@thin-pr/core";
 import { createAnthropicClient, scriptedUpstream, type ModelSession, type Script } from "@thin-pr/specialists";
 import { createScratchRepo, loadRepoConfig } from "@thin-pr/workspace";
 import { openApprovedDraft, readStoredRun, type StoredRun } from "./approval.js";
+import { git, memoryGitHub, type Call } from "./fake-github.js";
 import { runAction, runLimits, type LabelRunResult } from "./run.js";
 import type { GitHubSurface } from "./surface.js";
 
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const cleanups: (() => void)[] = [];
 
-type Call = { readonly op: string } & Readonly<Record<string, unknown>>;
 
 afterEach(() => {
   for (const cleanup of cleanups.splice(0)) {
@@ -399,12 +398,14 @@ describe("issue label", () => {
   it("points the workflow at the label, the full checkout and a neutral commit identity", () => {
     const workflow = readFileSync(join(root, ".github/workflows/thin-pr.yml"), "utf8");
     expect(workflow).toContain("types: [labeled]");
-    expect(workflow).toContain("github.event.label.name == 'thin-pr'");
+    expect(workflow).toContain("github.event.label.name == 'thin-pr' || startsWith(github.event.label.name, 'thin-pr:')");
+    expect(workflow).toContain("github.event.sender.type != 'Bot'");
+    expect(workflow).toContain(`contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)`);
     expect(workflow).toContain("packages/github/src/action.ts");
     expect(workflow).toContain("actions/checkout@v7");
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("persist-credentials: false");
-    expect(readFileSync(fileURLToPath(new URL("./labeled.ts", import.meta.url)), "utf8")).toContain("pushToken: input.token");
+    expect(readFileSync(fileURLToPath(new URL("./trigger.ts", import.meta.url)), "utf8")).toContain("pushToken: input.token");
     expect(workflow).toContain("GIT_AUTHOR_NAME: thin-pr[bot]");
     expect(workflow).toContain("GIT_COMMITTER_EMAIL: thin-pr@example.invalid");
     expect(workflow).toContain("ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}");
@@ -626,55 +627,6 @@ async function run(
     github,
     model: () => options.model,
   });
-}
-
-/** An in-memory GitHub. Branch heads come from `remote`, the bare repo the run pushes to. */
-function memoryGitHub(options?: { readonly openPull?: { readonly number: number; readonly url: string }; readonly remote?: string }) {
-  const calls: Call[] = [];
-  let nextId = 1;
-  const github: GitHubSurface = {
-    async startCheck(input) {
-      calls.push({ op: "startCheck", ...input });
-      nextId += 1;
-      return nextId - 1;
-    },
-    async finishCheck(input) {
-      calls.push({ op: "finishCheck", ...input });
-    },
-    async createComment(input) {
-      calls.push({ op: "createComment", ...input });
-      nextId += 1;
-      return nextId - 1;
-    },
-    async editComment(input) {
-      calls.push({ op: "editComment", ...input });
-    },
-    async branchHead(input) {
-      calls.push({ op: "branchHead", ...input });
-      if (!options?.remote) {
-        return null;
-      }
-      const refs = git(options.remote, "for-each-ref", "--format=%(objectname)", `refs/heads/${input.branch}`);
-      return refs.length > 0 ? refs : null;
-    },
-    async listPullsForHead(input) {
-      calls.push({ op: "listPullsForHead", ...input });
-      return options?.openPull ? [options.openPull] : [];
-    },
-    async updatePull(input) {
-      calls.push({ op: "updatePull", ...input });
-      return { number: input.number, url: `https://github.com/${input.owner}/${input.repo}/pull/${input.number}` };
-    },
-    async openDraft(input) {
-      calls.push({ op: "openDraft", ...input });
-      return { number: 11, url: `https://github.com/${input.owner}/${input.repo}/pull/11` };
-    },
-  };
-  return { github, calls };
-}
-
-function git(cwd: string, ...args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
 
 function specifiers(source: string): string[] {

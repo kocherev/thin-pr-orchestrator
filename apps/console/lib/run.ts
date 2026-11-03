@@ -74,6 +74,12 @@ export function runOutcome(run: RunRecord): Outcome {
         detail: step ? firstLine(step.summary) : null,
       };
     }
+    case "cancelled":
+      return {
+        short: "Cancelled",
+        headline: "Cancelled while it waited for approval, so its branch was deleted and no draft opened.",
+        detail: null,
+      };
   }
 }
 

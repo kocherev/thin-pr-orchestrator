@@ -10,6 +10,7 @@ const SURFACE: Record<RunRecord["status"], string> = {
   awaiting_approval: "bg-primary/8",
   blocked: "bg-warning/8",
   failed: "bg-danger/6",
+  cancelled: "bg-muted",
 };
 
 /** The answer to "why did this run end this way", above the evidence for it. */

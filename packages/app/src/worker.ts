@@ -87,7 +87,8 @@ export default {
       const job = message.body;
       try {
         const outcome = await dispatch(job, env);
-        console.log(`delivery ${job.deliveryId} for ${job.owner}/${job.repo}#${job.issueNumber}: ${outcome}`);
+        const { repo, issue } = job.trigger;
+        console.log(`delivery ${job.deliveryId} (${job.trigger.kind}) for ${repo.owner}/${repo.name}#${issue.number}: ${outcome}`);
         message.ack();
       } catch (error) {
         console.error(`dispatch failed for delivery ${job.deliveryId}`, error);
@@ -102,10 +103,11 @@ async function dispatch(job: Job, env: Env): Promise<"started" | "left to the Ac
   const installation = await createInstallationToken({
     app: { clientId: env.GITHUB_APP_CLIENT_ID, privateKeyPem: env.GITHUB_APP_PRIVATE_KEY },
     installationId: job.installationId,
-    repository: job.repo,
+    repository: job.trigger.repo.name,
     fetch: fetcher,
   });
-  if (await actionWorkflowEnabled({ owner: job.owner, repo: job.repo, token: installation.token, fetch: fetcher })) {
+  const { repo } = job.trigger;
+  if (await actionWorkflowEnabled({ owner: repo.owner, repo: repo.name, token: installation.token, fetch: fetcher })) {
     return "left to the Action";
   }
   const runner = getContainer(env.RUNNER, job.deliveryId);

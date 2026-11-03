@@ -11,7 +11,7 @@ import { readLabelEvent } from "./event.js";
 import { exportRunRecord, type RunRecord } from "./record.js";
 import { runIssue } from "./run.js";
 import { createRunHandlers } from "./steps.js";
-import type { GitHubSurface } from "./surface.js";
+import { noReadBack, type GitHubSurface } from "./surface.js";
 
 const exec = promisify(execFile);
 
@@ -152,6 +152,7 @@ function localSurface(posted: string[]): GitHubSurface {
       posted.push(body);
       return { number: 0, url: "" };
     },
+    ...noReadBack("a local run"),
   };
 }
 

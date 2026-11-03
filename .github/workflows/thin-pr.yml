@@ -3,16 +3,28 @@ name: Thin PR
 on:
   issues:
     types: [labeled]
+  issue_comment:
+    types: [created]
 
 permissions: {}
 
+# One run at a time per issue, so a command waits for the run it acts on.
 concurrency:
   group: thin-pr-${{ github.event.issue.number }}
   cancel-in-progress: false
 
 jobs:
   orchestrate:
-    if: github.event.label.name == 'thin-pr'
+    # The router in packages/github decides what each event does. This condition only keeps the runner from
+    # starting for events it would ignore: other labels, plain comments, outsiders and bots.
+    if: >-
+      github.event.sender.type != 'Bot' && (
+        (github.event_name == 'issues'
+          && (github.event.label.name == 'thin-pr' || startsWith(github.event.label.name, 'thin-pr:')))
+        || (github.event_name == 'issue_comment'
+          && startsWith(github.event.comment.body, '/thin-pr')
+          && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -41,7 +53,7 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Run labeled issue
+      - name: Run the event
         env:
           GITHUB_TOKEN: ${{ github.token }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

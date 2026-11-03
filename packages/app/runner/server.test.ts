@@ -5,13 +5,12 @@ import { createRunnerServer } from "./server.js";
 const JOB: Job = {
   deliveryId: "72d3162e-cc78-11e3-81ab-4c9367dc0958",
   installationId: 42,
-  owner: "example",
-  repo: "sample-repo",
-  defaultBranch: "main",
-  issueNumber: 7,
-  issueTitle: "Add a flag",
-  issueBody: "",
-  label: "thin-pr",
+  trigger: {
+    kind: "label",
+    repo: { owner: "example", name: "sample-repo", defaultBranch: "main" },
+    issue: { number: 7, title: "Add a flag", body: "" },
+    label: "thin-pr",
+  },
 };
 
 const closers: (() => void)[] = [];
@@ -85,8 +84,8 @@ describe("runner server", () => {
 
   it("rejects a job that does not parse", async () => {
     const base = await start(async () => {});
-    const response = await post(base, { ...JOB, owner: "../etc" });
+    const response = await post(base, { ...JOB, trigger: { ...JOB.trigger, repo: { ...JOB.trigger.repo, owner: "../etc" } } });
     expect(response.status).toBe(400);
-    expect(await response.text()).toBe("owner: Invalid string: must match pattern /^[A-Za-z0-9_.-]+$/");
+    expect(await response.text()).toBe("trigger.repo.owner: Invalid string: must match pattern /^[A-Za-z0-9_.-]+$/");
   });
 });

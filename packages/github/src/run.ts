@@ -60,12 +60,7 @@ const CONTRACTS: Record<StepId, { safeParse(value: unknown): { success: boolean 
   write: prWriterOutput,
 };
 
-/**
- * Runs a labeled-issue payload against the checkout at `checkout`, whose HEAD is `baseSha`. `templates` is the
- * directory of workflow templates. Labels without a template are ignored.
- */
-export async function runAction(input: {
-  readonly payload: unknown;
+type LabelRunInput = {
   readonly templates: string;
   readonly checkout: string;
   readonly baseSha: string;
@@ -77,10 +72,22 @@ export async function runAction(input: {
   /** Reaches only the push. The Action passes GITHUB_TOKEN because its checkout keeps no credentials. */
   readonly pushToken?: string;
   readonly runLink?: string | null;
-}): Promise<LabelRunResult> {
+};
+
+/**
+ * Runs a labeled-issue payload against the checkout at `checkout`, whose HEAD is `baseSha`. `templates` is the
+ * directory of workflow templates. Labels without a template are ignored.
+ */
+export async function runAction(input: LabelRunInput & { readonly payload: unknown }): Promise<LabelRunResult> {
   const event = readLabelEvent(input.payload);
+  return event.action === "labeled" ? runLabel({ ...input, event }) : { status: "ignored" };
+}
+
+/** Runs the template `event.label` names on the issue, or ignores a label without one. */
+export async function runLabel(input: LabelRunInput & { readonly event: LabelEvent }): Promise<LabelRunResult> {
+  const { event } = input;
   const template = templateForLabel(input.templates, event.label);
-  if (event.action !== "labeled" || !template) {
+  if (!template) {
     return { status: "ignored" };
   }
   const config = loadRepoConfig(input.checkout);

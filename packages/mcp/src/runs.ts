@@ -7,7 +7,7 @@ const storedRun = z.looseObject({
   version: z.literal(1),
   runId: z.string().min(1),
   issue: z.looseObject({ title: z.string() }),
-  status: z.enum(["opened", "awaiting_approval", "blocked", "failed"]),
+  status: z.enum(["opened", "awaiting_approval", "blocked", "failed", "cancelled"]),
   gate: z.array(z.looseObject({ rule: z.string(), verdict: z.enum(["PASS", "FAIL", "NEEDS_APPROVAL"]) })),
   totals: z.looseObject({ costUsd: z.number() }),
 });

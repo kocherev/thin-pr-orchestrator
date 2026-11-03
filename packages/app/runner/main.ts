@@ -4,9 +4,8 @@ import { createRunnerServer } from "./server.js";
 const PORT = 8080;
 
 const server = createRunnerServer(async (job) => {
-  const record = await runJob(job, process.env);
   // One JSON line, so the container logs and `wrangler tail` carry the whole record.
-  console.log(JSON.stringify(record ?? { deliveryId: job.deliveryId, status: "ignored", label: job.label }));
+  console.log(JSON.stringify(await runJob(job, process.env)));
 });
 
 server.listen(PORT, "0.0.0.0", () => {

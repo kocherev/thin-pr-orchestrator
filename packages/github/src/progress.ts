@@ -2,7 +2,15 @@ import type { RunEvent, StepId } from "@thin-pr/core";
 import { usd } from "./report.js";
 import type { GitHubSurface } from "./surface.js";
 
-type Row = { status: "pending" | "running" | "done" | "looped" | "failed"; attempt: number; loop: number; costUsd: number };
+// Every body of a run's comment ends with this, so a command can find the latest run on an issue.
+const RUN_COMMENT = "<!-- thin-pr-run-comment -->";
+
+/** True for a run's progress comment or report. Check the author too: anyone can type the marker. */
+export function isRunComment(body: string): boolean {
+  return body.endsWith(RUN_COMMENT);
+}
+
+type Row ={ status: "pending" | "running" | "done" | "looped" | "failed"; attempt: number; loop: number; costUsd: number };
 
 /** The comment a run creates when it starts and edits as each step moves on. Its last body is the run report. */
 export type Progress = {
@@ -45,8 +53,8 @@ export async function startProgress(input: {
   };
 
   const target = { owner: input.owner, repo: input.repo };
-  const commentId = await input.github.createComment({ ...target, issue: input.issue, body: render() });
-  const edit = (body: string) => input.github.editComment({ ...target, commentId, body });
+  const commentId = await input.github.createComment({ ...target, issue: input.issue, body: `${render()}\n\n${RUN_COMMENT}` });
+  const edit = (body: string) => input.github.editComment({ ...target, commentId, body: `${body}\n\n${RUN_COMMENT}` });
 
   return {
     async onEvent(event) {

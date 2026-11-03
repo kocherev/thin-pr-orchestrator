@@ -5,8 +5,11 @@ describe("Octokit surface", () => {
   it("maps check, comment, and pull request calls onto the REST client", async () => {
     const calls: unknown[] = [];
     const pull = { number: 11, html_url: "https://github.com/example/sample-repo/pull/11" };
+    const base = restWith(calls, {});
     const octokit: GitHubRest = {
+      ...base,
       pulls: {
+        ...base.pulls,
         async create(params) {
           calls.push(["pulls.create", params]);
           return { data: pull };
@@ -30,6 +33,7 @@ describe("Octokit surface", () => {
         },
       },
       git: {
+        ...base.git,
         async getRef(params) {
           calls.push(["git.getRef", params]);
           if (params.ref === "heads/thin-pr/7") {
@@ -39,6 +43,7 @@ describe("Octokit surface", () => {
         },
       },
       issues: {
+        ...base.issues,
         async createComment(params) {
           calls.push(["issues.createComment", params]);
           return { data: { id: 99 } };
@@ -90,4 +95,90 @@ describe("Octokit surface", () => {
       ["pulls.create", { ...target, title: "Fix the stub", head: "thin-pr/7", base: "main", body: "## Plan", draft: true }],
     ]);
   });
+
+  it("maps the calls commands make, and pages through comments", async () => {
+    const calls: unknown[] = [];
+    const page = (from: number, size: number) =>
+      Array.from({ length: size }, (_, index) => ({ id: from + index, body: `comment ${from + index}`, user: { login: "octocat" } }));
+    const octokit = restWith(calls, {
+      issues: {
+        async listComments(params) {
+          calls.push(["issues.listComments", params]);
+          return { data: params.page === 1 ? page(1, 100) : [{ id: 101, user: null }] };
+        },
+        async get(params) {
+          calls.push(["issues.get", params]);
+          return { data: { number: 7, title: "Add a flag", body: null, labels: ["thin-pr", { name: "bug" }, {}] } };
+        },
+      },
+    });
+    const github = createGitHubSurface(octokit);
+    const target = { owner: "example", repo: "sample-repo" };
+
+    const comments = await github.listComments({ ...target, issue: 7 });
+    expect(comments).toHaveLength(101);
+    expect(comments.at(-1)).toEqual({ id: 101, author: null, body: "" });
+    await expect(github.react({ ...target, commentId: 5, content: "eyes" })).resolves.toBe("thin-pr[bot]");
+    await expect(github.getIssue({ ...target, issue: 7 })).resolves.toEqual({
+      number: 7,
+      title: "Add a flag",
+      body: "",
+      labels: ["thin-pr", "bug"],
+    });
+    await expect(github.getPull({ ...target, number: 11 })).resolves.toEqual({
+      number: 11,
+      open: true,
+      branch: "thin-pr/7",
+      sameRepo: true,
+    });
+    await github.deleteBranch({ ...target, branch: "thin-pr/7" });
+
+    expect(calls).toEqual([
+      ["issues.listComments", { ...target, issue_number: 7, per_page: 100, page: 1 }],
+      ["issues.listComments", { ...target, issue_number: 7, per_page: 100, page: 2 }],
+      ["reactions.createForIssueComment", { ...target, comment_id: 5, content: "eyes" }],
+      ["issues.get", { ...target, issue_number: 7 }],
+      ["pulls.get", { ...target, pull_number: 11 }],
+      ["git.deleteRef", { ...target, ref: "heads/thin-pr/7" }],
+    ]);
+  });
 });
+
+/** A REST client whose every method records its call. `overrides` replaces methods per namespace. */
+function restWith(calls: unknown[], overrides: { readonly issues?: Partial<GitHubRest["issues"]> }): GitHubRest {
+  const unused = async (): Promise<never> => {
+    throw new Error("not used in this test");
+  };
+  return {
+    pulls: {
+      create: unused,
+      list: unused,
+      update: unused,
+      async get(params) {
+        calls.push(["pulls.get", params]);
+        return {
+          data: {
+            number: 11,
+            state: "open",
+            head: { ref: "thin-pr/7", repo: { full_name: "example/sample-repo" } },
+            base: { repo: { full_name: "example/sample-repo" } },
+          },
+        };
+      },
+    },
+    checks: { create: unused, update: unused },
+    git: {
+      getRef: unused,
+      async deleteRef(params) {
+        calls.push(["git.deleteRef", params]);
+      },
+    },
+    reactions: {
+      async createForIssueComment(params) {
+        calls.push(["reactions.createForIssueComment", params]);
+        return { data: { user: { login: "thin-pr[bot]" } } };
+      },
+    },
+    issues: { createComment: unused, updateComment: unused, listComments: unused, get: unused, ...overrides.issues },
+  };
+}

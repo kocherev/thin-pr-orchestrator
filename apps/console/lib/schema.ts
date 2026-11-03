@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export type { RunRecord };
 
-export const RUN_STATUSES = ["opened", "awaiting_approval", "blocked", "failed"] as const;
+export const RUN_STATUSES = ["opened", "awaiting_approval", "blocked", "failed", "cancelled"] as const;
 
 const VERDICTS = ["opened", "awaiting_approval", "blocked"] as const;
 

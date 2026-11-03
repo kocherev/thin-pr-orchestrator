@@ -3,16 +3,19 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { runLabeledIssue, startTrace, type RunRecord } from "@thin-pr/github";
+import { runResultOf, runTrigger, startTrace, type RunRecord } from "@thin-pr/github";
 import type { Job } from "../src/event.js";
 
 const run = promisify(execFile);
 
 /**
- * Clones the job's repository at the head of its default branch and runs the labeled issue there, as the Action
- * does. Returns the run record, or null when no template matches the label.
+ * Clones the job's repository at the head of its default branch and runs the trigger there, as the Action does.
+ * Returns what happened: the run record when the trigger started a run, otherwise the trigger kind and outcome.
  */
-export async function runJob(job: Job, env: NodeJS.ProcessEnv): Promise<RunRecord | null> {
+export async function runJob(
+  job: Job,
+  env: NodeJS.ProcessEnv,
+): Promise<RunRecord | { readonly deliveryId: string; readonly trigger: string; readonly status: string }> {
   const token = env.GITHUB_TOKEN;
   if (!token) {
     throw new Error("GITHUB_TOKEN is missing");
@@ -23,11 +26,12 @@ export async function runJob(job: Job, env: NodeJS.ProcessEnv): Promise<RunRecor
   const tracing = env.OTEL_EXPORTER_OTLP_ENDPOINT ? startTrace(env) : null;
   try {
     // Full history and every branch, like the Action's checkout, so a second label can push thin-pr/<issue> with a lease.
-    const url = `https://github.com/${job.owner}/${job.repo}.git`;
-    await run("git", ["clone", "--quiet", "--branch", job.defaultBranch, url, checkout], { env: withToken(env, token) });
+    const { repo } = job.trigger;
+    const url = `https://github.com/${repo.owner}/${repo.name}.git`;
+    await run("git", ["clone", "--quiet", "--branch", repo.defaultBranch, url, checkout], { env: withToken(env, token) });
     const { stdout } = await run("git", ["-C", checkout, "rev-parse", "HEAD"], { env });
-    const { result } = await runLabeledIssue({
-      payload: labeledPayload(job),
+    const { outcome } = await runTrigger({
+      trigger: job.trigger,
       checkout,
       baseSha: stdout.trim(),
       token,
@@ -35,7 +39,11 @@ export async function runJob(job: Job, env: NodeJS.ProcessEnv): Promise<RunRecor
       runLink: `App delivery \`${job.deliveryId}\``,
       env,
     });
-    return result.status === "ignored" ? null : result.record;
+    const result = runResultOf(outcome);
+    if (result && result.status !== "ignored") {
+      return result.record;
+    }
+    return { deliveryId: job.deliveryId, trigger: job.trigger.kind, status: result?.status ?? outcome.result.status };
   } finally {
     await rm(parent, { recursive: true, force: true });
     await flush(tracing);
@@ -49,16 +57,6 @@ async function flush(tracing: { stop(): Promise<string | null> } | null): Promis
   } catch (error) {
     console.error("trace export failed:", error instanceof Error ? error.message : error);
   }
-}
-
-// The webhook fields the Action's payload parser reads, rebuilt from the job.
-function labeledPayload(job: Job) {
-  return {
-    action: "labeled",
-    label: { name: job.label },
-    issue: { number: job.issueNumber, title: job.issueTitle, body: job.issueBody },
-    repository: { name: job.repo, default_branch: job.defaultBranch, owner: { login: job.owner } },
-  };
 }
 
 // The token travels as a header from the environment, so it never lands in argv, error text, or .git/config.
