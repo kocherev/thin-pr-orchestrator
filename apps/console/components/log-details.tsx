@@ -5,7 +5,7 @@ type LogDetailsProps = { label: string; text: string; open?: boolean; className?
 
 export function LogDetails({ label, text, open = false, className }: LogDetailsProps) {
   return (
-    <details open={open} className={cn("group", className)}>
+    <details open={open} className={cn("disclosure group", className)}>
       <summary className="relative flex w-fit cursor-pointer list-none items-center gap-1 rounded-sm text-xs font-medium text-muted-foreground transition-[color] duration-150 ease-out select-none after:absolute after:-inset-x-1 after:-inset-y-2 hover:text-foreground [&::-webkit-details-marker]:hidden">
         <ChevronIcon className="size-3.5 transition-[rotate] duration-200 ease-out group-open:rotate-90 motion-reduce:transition-none" />
         {label}

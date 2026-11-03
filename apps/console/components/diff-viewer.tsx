@@ -24,7 +24,7 @@ function Counts({ added, removed }: { added: number; removed: number }) {
 function FileDiff({ file, open }: { file: DiffFile; open: boolean }) {
   const lines = file.hunks.flatMap((hunk) => hunk.lines);
   return (
-    <details open={open} className="group border-b border-border last:border-b-0">
+    <details open={open} className="disclosure group border-b border-border last:border-b-0">
       <summary className="flex cursor-pointer list-none items-center gap-2 bg-muted/60 px-4 py-2 transition-[background-color] duration-150 ease-out select-none group-open:border-b group-open:border-border hover:bg-muted focus-visible:-outline-offset-2 [&::-webkit-details-marker]:hidden">
         <ChevronIcon className="size-3.5 shrink-0 text-muted-foreground transition-[rotate] duration-200 ease-out group-open:rotate-90 motion-reduce:transition-none" />
         <span className="min-w-0 truncate font-mono text-xs font-medium">{file.path}</span>

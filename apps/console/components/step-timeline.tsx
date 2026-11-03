@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { formatDuration, formatTokens, formatUsd } from "@/lib/format";
 import { STEP_LABEL } from "@/lib/labels";
 import { firstLine, stepUsage, timeline, type TimelineRow } from "@/lib/run";
@@ -7,6 +8,19 @@ import { LogDetails } from "./log-details";
 import { Badge } from "./ui/badge";
 
 const columns = "grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[10rem_minmax(0,1fr)_4.5rem]";
+
+/** The bars replay the run on one clock this long, so their growth keeps the real proportions. */
+const REPLAY_MS = 900;
+const REPLAY_START_MS = 250;
+
+function barStyle({ offset, width }: TimelineRow): CSSProperties {
+  return {
+    left: `${offset * 100}%`,
+    width: `${width * 100}%`,
+    "--delay": `${REPLAY_START_MS + offset * REPLAY_MS}ms`,
+    "--duration": `${Math.max(width * REPLAY_MS, 60)}ms`,
+  } as CSSProperties;
+}
 
 function barColor({ step }: TimelineRow): string {
   if (step.outcome === "failed") return "bg-danger";
@@ -59,10 +73,7 @@ export function StepTimeline({ run }: { run: RunRecord }) {
               {row.step.attempt > 1 ? <Badge tone="neutral">attempt {row.step.attempt}</Badge> : null}
             </div>
             <div className="relative col-span-2 h-2 self-center rounded-full bg-muted sm:col-span-1" aria-hidden="true">
-              <div
-                className={cn("absolute inset-y-0 min-w-1 rounded-full", barColor(row))}
-                style={{ left: `${row.offset * 100}%`, width: `${row.width * 100}%` }}
-              />
+              <div className={cn("bar-grow absolute inset-y-0 min-w-1 rounded-full", barColor(row))} style={barStyle(row)} />
             </div>
             <div className="col-start-2 row-start-1 self-center text-right text-xs text-muted-foreground tabular-nums sm:col-start-3">
               {formatDuration(row.step.durationMs)}

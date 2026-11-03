@@ -102,7 +102,7 @@ export function RunsTable({ rows }: { rows: RunRow[] }) {
               </TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
+          <TableBody key={shown} className={cn(filtered && "fade-in")}>
             {visible.map((row) => (
               <TableRow key={row.runId} className="group relative hover:bg-muted/60">
                 <TableCell className="max-w-0 min-w-40 whitespace-normal sm:min-w-64">

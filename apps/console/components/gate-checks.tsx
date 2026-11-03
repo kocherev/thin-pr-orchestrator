@@ -1,6 +1,6 @@
 import { RULE_LABEL, VERDICT_LABEL } from "@/lib/labels";
 import type { GateRuleResult } from "@/lib/schema";
-import { cn } from "@/lib/utils";
+import { cn, staggerDelay } from "@/lib/utils";
 import { FailIcon, PassIcon, WaitIcon } from "./icons";
 
 const VERDICT = {
@@ -12,10 +12,10 @@ const VERDICT = {
 export function GateChecks({ results }: { results: readonly GateRuleResult[] }) {
   return (
     <ul className="divide-y divide-border">
-      {results.map((result) => {
+      {results.map((result, index) => {
         const { Icon, text, row } = VERDICT[result.verdict];
         return (
-          <li key={result.rule} className={cn("flex gap-3 px-4 py-2.5", row)}>
+          <li key={result.rule} className={cn("stagger-item flex gap-3 px-4 py-2.5", row)} style={staggerDelay(index, 150)}>
             <Icon strokeWidth={2} className={cn("mt-0.5 shrink-0", text)} />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <div className="flex items-baseline justify-between gap-3">
