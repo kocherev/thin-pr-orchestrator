@@ -6,6 +6,7 @@ import { runImplementer } from "./implementer.js";
 import { pricedModel, type PricedModel } from "./pricing.js";
 import { PLANNER_SYSTEM, PR_WRITER_SYSTEM, REVIEWER_SYSTEM } from "./prompts.js";
 import { structured, type Effort } from "./structured.js";
+import { structuredWithReads } from "./tools.js";
 import { SpendLimitError } from "./transport.js";
 import type { CheckResult, Workspace } from "./workspace.js";
 
@@ -80,8 +81,10 @@ export function createStepHandlers(session: ModelSession, workspace: Workspace):
       const files = await workspace.listFiles();
       const shown = files.slice(0, MAX_PLANNED_FILES);
       const more = files.length > shown.length ? `\n(${files.length - shown.length} more files not shown)` : "";
-      const input = withFeedback(`Repository files:\n${shown.join("\n")}${more}\n\nPlan the change.`, context.feedback);
-      const output = await structured(client, { ...route("plan", context), system: PLANNER_SYSTEM, input, schema: plannerOutput });
+      const task = "Plan the change. Read each file with read_file before a step names it, and use search to find callers.";
+      const input = withFeedback(`Repository files:\n${shown.join("\n")}${more}\n\n${task}`, context.feedback);
+      const request = { ...route("plan", context), system: PLANNER_SYSTEM, input, schema: plannerOutput, workspace };
+      const output = await structuredWithReads(client, request);
       return { outcome: "done", output };
     }),
     implement: metered(async (context) => {

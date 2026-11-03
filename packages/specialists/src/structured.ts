@@ -93,7 +93,8 @@ export async function structured<T>(client: Anthropic, request: StructuredReques
   throw new TruncatedOutputError(request.specialist, MAX_TOKENS[1]);
 }
 
-function parseReply<T>(request: StructuredRequest<T>, message: Anthropic.Beta.Messages.BetaMessage): T {
+/** The reply text parsed as JSON and checked against `request.schema`. */
+export function parseReply<T>(request: Pick<StructuredRequest<T>, "specialist" | "schema">, message: Anthropic.Beta.Messages.BetaMessage): T {
   const text = message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
   let json: unknown;
   try {

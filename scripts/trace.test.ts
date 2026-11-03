@@ -16,6 +16,8 @@ const steps = ["plan", "implement", "verify", "review", "write"] as const;
 const expected = [
   "thin-pr.run",
   ...steps.map((step) => `thin-pr.${step}`),
+  // One tool runner for the planner, which may read files, and one for the implementer.
+  "anthropic.messages.tool_runner",
   "anthropic.messages.tool_runner",
   "anthropic.custom_tool_use read_file",
   "anthropic.custom_tool_use replace",

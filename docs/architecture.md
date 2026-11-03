@@ -82,11 +82,11 @@ The gate is not a step. `runIssue` evaluates it after `write` finishes. `runIssu
 
 Each model step takes its model and effort from the template step, or from the specialist default when the step names none. Every request sets `thinking` to adaptive and an explicit `output_config.effort`. It omits `temperature`, `top_p`, and `top_k`. Opus 5.5 and Sonnet 5.5 requests opt into the server-side fallback.
 
-The planner, reviewer, and pr-writer are structured-output calls built from their `.strict()` Zod schemas. A reply that still fails the schema throws `SpecialistSchemaError` with the specialist, the phase, and the path of the first issue. A refusal fails the step with its category. A reply cut off at `max_tokens` is retried once with twice the room.
+The planner, reviewer, and pr-writer are structured-output calls built from their `.strict()` Zod schemas. The planner's call also carries `read_file` and `search`, so it can read the files it is about to name. Its tool loop stops after 8 turns. A reply that still fails the schema throws `SpecialistSchemaError` with the specialist, the phase, and the path of the first issue. A refusal fails the step with its category. A reviewer or pr-writer reply cut off at `max_tokens` is retried once with twice the room. A cut-off planner reply fails the attempt, and the step retries.
 
-The implementer runs in the SDK tool runner with six strict tools: `list_files`, `read_file`, `search`, `replace`, `create_file`, and `run_check`. It stops when the model stops asking for tools, and fails after 25 turns. A model never reports which files changed. The `files` field comes from `git diff`.
+The implementer runs in the SDK tool runner with six strict tools: `list_files`, `read_file`, `search`, `replace`, `create_file`, and `run_check`. It stops when the model stops asking for tools, and fails after 60 turns. A feature can touch 12 files, and reading, editing, and checking that many took more than the old 25. The run's `spend_usd` caps what a long loop costs. The request turns on context editing with `clear_tool_uses_20250919`: past 60,000 input tokens the API clears old tool results, keeps the 6 most recent tool calls, and clears at least 20,000 tokens at a time, since each clear invalidates the cached prefix. The API does this on its side, so the tool runner keeps the full history unchanged. A model never reports which files changed. The `files` field comes from `git diff`.
 
-The planner reads the issue and the repository's tracked paths, up to 500 of them, so each step names a real file.
+The planner reads the issue and the repository's tracked paths, up to 500 of them, and can read and search files, so each step names a real file.
 
 An attempt that fails after a model call throws `StepError` with that call's usage. Core keeps it on the `failed` event, so the run totals count refused and retried calls.
 
@@ -114,5 +114,5 @@ The draft body and the issue comment come from one function, `formatRunReport` i
 
 - CI and `pnpm eval` do not call a live model. They replay cassettes.
 - The run pushes only after the gate passes, and only to `thin-pr/<issue>`. It does not merge, request reviewers, or close the issue.
-- There is no chat UI, no second orchestrator, and no open-ended agent loop. The implementer's loop is capped at 25 turns, and its tools reach only the workspace. There is no shell tool.
+- There is no chat UI, no second orchestrator, and no open-ended agent loop. The implementer's loop is capped at 60 turns and the planner's at 8, and their tools reach only the workspace. There is no shell tool.
 - `packages/core` does not grow a model SDK import or a GitHub client import. `.agents/skills/core-boundary` is the list.

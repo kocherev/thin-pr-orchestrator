@@ -20,7 +20,7 @@ The implementer edits code only through six tools over the `Workspace` interface
 - `replace` edits an existing file, and its old text must match exactly once. It does not check `paths`. The `paths` rule fails the run when the edited file is denied. `docs/gate.md` shows the eval case.
 - `create_file` refuses a path that `paths.deny` matches or that no `paths.allow` glob matches, and refuses a file that exists.
 - `run_check` takes only `typecheck` or `test` and runs the command `.thin-pr.yml` sets for it. The model cannot pass a command.
-- The tool loop fails after 25 turns.
+- The implementer's tool loop fails after 60 turns, and the planner's after 8. The planner has only `read_file` and `search`.
 
 ## Check environment
 

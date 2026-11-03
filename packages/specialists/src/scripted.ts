@@ -7,10 +7,12 @@ export type ScriptedTurn = readonly { readonly name: string; readonly input: Jso
 
 /**
  * What each specialist answers. A structured specialist takes its replies in call order and repeats the last one.
+ * The planner may first play `plannerReads`, tool turns of `read_file` and `search`, before each reply.
  * The implementer plays its turns on the first pass, then ends each pass with the summary.
  */
 export type Script = {
   readonly planner: readonly [Json, ...Json[]];
+  readonly plannerReads?: readonly ScriptedTurn[];
   readonly implementer: { readonly turns: readonly ScriptedTurn[]; readonly summary: string };
   readonly reviewer: readonly [Json, ...Json[]];
   readonly "pr-writer": readonly [Json, ...Json[]];
@@ -35,14 +37,25 @@ export function scriptedUpstream(script: Script): typeof fetch {
     const text = String(init?.body);
     const body = request.parse(JSON.parse(text));
     const specialist = specialistOf(body);
-    const call = calls[specialist] ?? 0;
-    calls[specialist] = call + 1;
+    const turn = body.messages.filter((message) => message.role === "assistant").length;
+    const toolUse = (prefix: string, scripted: ScriptedTurn) =>
+      reply(
+        body.model,
+        text,
+        "tool_use",
+        scripted.map((tool, index) => ({ type: "tool_use", id: `toolu_${prefix}_${turn}_${index}`, name: tool.name, input: tool.input })),
+      );
 
     if (specialist !== "implementer") {
+      const reads = specialist === "planner" ? script.plannerReads?.[turn] : undefined;
+      if (reads) {
+        return toolUse("plan", reads);
+      }
+      const call = calls[specialist] ?? 0;
+      calls[specialist] = call + 1;
       const replies = script[specialist];
       return reply(body.model, text, "end_turn", [{ type: "text", text: JSON.stringify(replies[Math.min(call, replies.length - 1)]) }]);
     }
-    const turn = body.messages.filter((message) => message.role === "assistant").length;
     if (turn === 0) {
       implementerPasses += 1;
     }
@@ -50,24 +63,17 @@ export function scriptedUpstream(script: Script): typeof fetch {
     if (!scripted) {
       return reply(body.model, text, "end_turn", [{ type: "text", text: script.implementer.summary }]);
     }
-    const blocks = scripted.map((tool, index) => ({
-      type: "tool_use",
-      id: `toolu_${implementerPasses}_${turn}_${index}`,
-      name: tool.name,
-      input: tool.input,
-    }));
-    return reply(body.model, text, "tool_use", blocks);
+    return toolUse(String(implementerPasses), scripted);
   };
 }
 
+// The planner sends read tools and an output schema, so the schema decides first.
 function specialistOf(body: z.infer<typeof request>): SpecialistName {
-  if (body.tools) {
-    return "implementer";
-  }
   const properties = body.output_config?.format?.schema.properties ?? {};
   if ("verdict" in properties) return "reviewer";
   if ("title" in properties) return "pr-writer";
   if ("steps" in properties) return "planner";
+  if (body.tools) return "implementer";
   throw new Error("scripted upstream cannot tell which specialist sent this request");
 }
 

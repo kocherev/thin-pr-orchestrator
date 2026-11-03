@@ -78,8 +78,8 @@ The cassettes and the judge batch have no live recording yet, so the costs are t
 
 | Step | Model | Effort | Why |
 | --- | --- | --- | --- |
-| plan | `claude-sonnet-5-5` | medium | One structured reply. The prompt asks for one to five steps, each naming the file it changes. |
-| implement | `claude-opus-5-5` | high | The only step that writes code. It runs a tool loop of up to 25 turns and runs the checks itself. |
+| plan | `claude-sonnet-5-5` | medium | One structured reply. It may first read and search files, up to 8 turns, so each step names a file it has seen. |
+| implement | `claude-opus-5-5` | high | The only step that writes code. It runs a tool loop of up to 60 turns, clears old tool results on the API side, and runs the checks itself. |
 | verify | none | none | Runs `typecheck` and `test` from `.thin-pr.yml`. |
 | review | `claude-sonnet-5-5` | high | Reads the patch and the check logs. Its verdict is a gate rule. |
 | write | `claude-haiku-5-5` | low | Writes the draft title. Code builds the body. |

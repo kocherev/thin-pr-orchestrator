@@ -29,7 +29,8 @@ export {
   type AnthropicClientOptions,
   type ModelSession,
 } from "./client.js";
-export { runImplementer, TurnLimitError } from "./implementer.js";
+export { runImplementer } from "./implementer.js";
+export { TurnLimitError } from "./tools.js";
 export { costOf, type PricedModel } from "./pricing.js";
 export { scriptedBatchUpstream, scriptedUpstream, type Script, type ScriptedTurn } from "./scripted.js";
 export {
