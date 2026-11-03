@@ -21,7 +21,7 @@ import {
 } from "@thin-pr/specialists";
 import { loadRepoConfig, openWorkspace, type GitWorkspace, type RepoConfig } from "@thin-pr/workspace";
 import { storedRunMarker, toStoredRun, type StoredRun } from "./approval.js";
-import { createCheckRuns } from "./checks.js";
+import { postRuleChecks } from "./checks.js";
 import { readLabelEvent, type LabelEvent } from "./event.js";
 import { toRunRecord, type RunRecord, type TimedEvent } from "./record.js";
 import { startProgress, type Progress } from "./progress.js";
@@ -223,7 +223,6 @@ export async function gatedRun<R>(
 ): Promise<R> {
   const { event, workspace, github } = deps;
   const target = { owner: event.owner, repo: event.repo };
-  const checkRuns = createCheckRuns(github, target);
   const limits = runLimits(deps.template, deps.config);
   const timeline: TimedEvent[] = [];
   let diff: Diff | null = null;
@@ -274,7 +273,6 @@ export async function gatedRun<R>(
       log: deps.log,
       async onEvent(runEvent) {
         timeline.push({ event: runEvent, at: new Date() });
-        await checkRuns.onEvent(runEvent, workspace.baseSha);
         await comment.onEvent(runEvent);
       },
     });
@@ -298,7 +296,6 @@ export async function gatedRun<R>(
     gate = evaluate(evidence);
     const decision = decide(evidence);
     if (decision === "fail") {
-      await checkRuns.postRules(gate, workspace.baseSha);
       const failed = gate.filter((result) => result.verdict === "FAIL").map((result) => result.rule);
       return await stop("blocked", `gate failed: ${failed.join(", ")}`);
     }
@@ -308,7 +305,7 @@ export async function gatedRun<R>(
       record,
       postRules: async (sha) => {
         try {
-          await checkRuns.postRules(gate, sha);
+          await postRuleChecks(github, target, gate, sha);
           return "";
         } catch (error) {
           const reason = error instanceof Error ? error.message : "unknown error";
@@ -318,13 +315,7 @@ export async function gatedRun<R>(
       finish,
     });
   } catch (error) {
-    let message = error instanceof Error && error.message.length > 0 ? error.message : "run failed";
-    try {
-      await checkRuns.abort(message);
-    } catch (checkError) {
-      message = `${message}; check update failed: ${checkError instanceof Error ? checkError.message : "unknown"}`;
-    }
-    return stop("failed", message);
+    return stop("failed", error instanceof Error && error.message.length > 0 ? error.message : "run failed");
   }
 }
 

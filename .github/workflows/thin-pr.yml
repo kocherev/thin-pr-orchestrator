@@ -39,7 +39,7 @@ jobs:
       )
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # contents: push the branch, and delete it on cancel. checks: one check per step and rule. issues: the progress
+    # contents: push the branch, and delete it on cancel. checks: one check per gate rule on the pushed commit. issues: the progress
     # comment and command replies. pull-requests: open or update the draft, read reviews, reply on the draft.
     permissions:
       # actions: start the repo's CI on the pushed branch (the ci-workflow input).

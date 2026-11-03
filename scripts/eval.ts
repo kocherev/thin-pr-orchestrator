@@ -381,11 +381,6 @@ export function staleReportFiles(workspace: string, files: ReadonlyMap<string, s
 export function replayGitHub(): GitHubSurface {
   let nextId = 1;
   return {
-    async startCheck() {
-      nextId += 1;
-      return nextId - 1;
-    },
-    async finishCheck() {},
     async postCheck() {},
     async createComment() {
       nextId += 1;

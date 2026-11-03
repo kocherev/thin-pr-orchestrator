@@ -70,15 +70,6 @@ describe("Octokit surface", () => {
           return { data: pull };
         },
       },
-      checks: {
-        async create(params) {
-          calls.push(["checks.create", params]);
-          return { data: { id: 42 } };
-        },
-        async update(params) {
-          calls.push(["checks.update", params]);
-        },
-      },
       git: {
         ...base.git,
         async getRef(params) {
@@ -103,8 +94,6 @@ describe("Octokit surface", () => {
     const github = createGitHubSurface(octokit);
     const target = { owner: "example", repo: "sample-repo" };
 
-    await expect(github.startCheck({ ...target, name: "thin-pr / plan", sha: "sha-1" })).resolves.toBe(42);
-    await github.finishCheck({ ...target, checkRunId: 42, conclusion: "failure", summary: "gate failed" });
     await expect(github.createComment({ ...target, issue: 7, body: "## Running" })).resolves.toBe(99);
     await github.editComment({ ...target, commentId: 99, body: "## Run report" });
     await expect(github.branchHead({ ...target, branch: "thin-pr/7" })).resolves.toBe("sha-7");
@@ -118,21 +107,6 @@ describe("Octokit surface", () => {
     ).resolves.toEqual({ number: 11, url: pull.html_url });
 
     expect(calls).toEqual([
-      [
-        "checks.create",
-        { ...target, name: "thin-pr / plan", head_sha: "sha-1", status: "in_progress", started_at: expect.any(String) },
-      ],
-      [
-        "checks.update",
-        {
-          ...target,
-          check_run_id: 42,
-          status: "completed",
-          conclusion: "failure",
-          completed_at: expect.any(String),
-          output: { title: "Failed", summary: "gate failed" },
-        },
-      ],
       ["issues.createComment", { ...target, issue_number: 7, body: "## Running" }],
       ["issues.updateComment", { ...target, comment_id: 99, body: "## Run report" }],
       ["git.getRef", { ...target, ref: "heads/thin-pr/7" }],
@@ -242,7 +216,7 @@ function restWith(calls: unknown[], overrides: { readonly issues?: Partial<GitHu
         };
       },
     },
-    checks: { create: unused, update: unused },
+    checks: { create: unused },
     git: {
       getRef: unused,
       async deleteRef(params) {

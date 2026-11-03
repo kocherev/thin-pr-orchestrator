@@ -103,7 +103,7 @@ Two scans look for credentials.
 The three workflows set `permissions: {}` at the top and grant each job only what it needs. Every job sets `timeout-minutes`.
 
 - `ci.yml`: the `check` job reads contents. The `secrets` job reads contents and pull requests. `ci.yml` never sets `ANTHROPIC_API_KEY`, and a test in `packages/github/src/run.test.ts` fails if it does.
-- `thin-pr.yml`: one job handles labels, commands, and reviews. It writes contents to push and delete `thin-pr/<issue>`, checks for the step and rule checks, issues for the progress comment and replies, and pull requests to open the draft, read reviews, and reply on the draft. Each kind of event needs most of the four, so one job keeps them.
+- `thin-pr.yml`: one job handles labels, commands, and reviews. It writes contents to push and delete `thin-pr/<issue>`, checks for the gate rule checks on the pushed commit, issues for the progress comment and replies, and pull requests to open the draft, read reviews, and reply on the draft. Each kind of event needs most of the four, so one job keeps them.
 - `nightly-eval.yml`: the job reads contents and pushes nothing. It is the only workflow besides `thin-pr.yml` that gets `ANTHROPIC_API_KEY`.
 
 ## Spend cap

@@ -21,7 +21,7 @@ The gate decides whether a run opens a draft, waits for a person to approve it, 
 | --- | --- | --- | --- |
 | `pass` | All nine rules pass. | Pushes `thin-pr/<issue>`, posts one check per rule on the new commit, and opens a draft or updates the open one. | `opened` |
 | `needs_approval` | `budget` is `NEEDS_APPROVAL` and the other eight pass. | Pushes `thin-pr/<issue>` and posts the rule checks on the new commit, with `budget` as a neutral check. Opens no draft. Comments the run report with the changed files and the command to approve. | `awaiting_approval` |
-| `fail` | Any rule fails. | Posts the rule checks on the base commit, comments the run report, and pushes nothing. | `blocked` |
+| `fail` | Any rule fails. | Comments the run report and pushes nothing. It posts no checks, because the only commit to put them on is the default branch's head. The Action job still passes with a notice: the gate said no, and thin-pr did not break. | `blocked` |
 
 A run that stops before the gate, such as a step that runs out of retries or a model call that could pass `spend_usd`, has status `failed` and no gate results.
 
