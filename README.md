@@ -45,7 +45,7 @@ Only owners, members, and collaborators can give a command or start a revise run
 
 ## Quickstart
 
-You need Node.js 22.13 or later and pnpm 10.33.4. `pnpm trace` needs Node.js 22.15 or later.
+You need Node.js 22.15 or later, pnpm 10.33.4, git 2.28 or later, and Python 3.10 or later as `python3`. `pnpm trace` needs that Node.js version, the tests and the eval create scratch git repos, and the Python eval cases run `python3`.
 
 ```bash
 git clone https://github.com/kocherev/thin-pr-orchestrator.git

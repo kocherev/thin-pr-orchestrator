@@ -4,7 +4,7 @@ Thin PR Orchestrator. Read this before changing the repo. It is enough to instal
 
 ## Requirements
 
-- Node.js 22.13 or later. `.nvmrc` contains `22`.
+- Node.js 22.15 or later, as `engines` in `package.json` says. `pnpm trace` needs it. `.nvmrc` contains `22`, and `@types/node` is on the 22 line to match.
 - pnpm 10.33.4, from the `packageManager` field in `package.json`. Do not switch to another major version.
 - A checkout of this repo.
 - git 2.28 or later. The tests, `pnpm eval`, and `pnpm trace` create scratch git repos.
