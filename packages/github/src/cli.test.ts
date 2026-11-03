@@ -19,7 +19,7 @@ afterEach(() => {
 
 describe("thin-pr run", () => {
   // tsc and vitest run for real on the sample package.
-  it("replays an eval case on a local checkout and leaves the change on a local branch", { timeout: 60_000 }, async () => {
+  it("replays an eval case on a local checkout and leaves the change on a local branch", async () => {
     const repo = sampleRepo();
     const issueFile = join(repo.dir, "..", "issue.md");
     writeFileSync(issueFile, "# Clamp decrement at zero\n\ndecrement in src/counter.ts should not return a negative count.\n");
@@ -29,8 +29,8 @@ describe("thin-pr run", () => {
     });
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("## Run report");
-    expect(result.stdout).toContain("- gate/tests: success. PASS: Tests passed: vitest run");
+    expect(result.stdout).toMatch(/^\*\*Gate passed\.\*\* All 9 rules passed for #1\./);
+    expect(result.stdout).toContain("| `tests` | PASS | Tests passed: vitest run ");
     expect(result.stdout).toContain("Status: opened\nBranch: thin-pr/local-1\n");
     expect(git(repo.dir, "log", "--format=%s", "thin-pr/local-1")).toBe("Apply thin-pr/#1\nBase");
     expect(git(repo.dir, "diff", "--name-only", "main", "thin-pr/local-1")).toBe("src/counter.ts");

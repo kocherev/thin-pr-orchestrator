@@ -1,6 +1,6 @@
 # Working notes
 
-Thin PR Orchestrator. Read this before changing the repo. It is enough to install and run the four checks below. The public overview is `README.md`. The why is `docs/design.md`.
+Thin PR Orchestrator. Read this before changing the repo. It is enough to install and run the six checks below. The public overview is `README.md`. The design is in `docs/architecture.md`, `docs/gate.md`, and `docs/security.md`.
 
 ## Requirements
 
@@ -36,7 +36,7 @@ Run these from the repo root, in this order, after `pnpm install`. Each one exit
 
 Runs `eslint .`, then `node --experimental-strip-types scripts/check-core-boundary.ts`.
 
-ESLint bans model-client imports and GitHub client imports in `packages/core`. It also bans GitHub client imports in `packages/specialists`, `packages/gate`, and `scripts`. The script scans `packages/core` for `require()` and dynamic `import()` of the same model clients. Either failure exits non-zero. The banned names are listed in `.agents/skills/core-boundary`.
+ESLint bans model-client imports and GitHub client imports in `packages/core`. It also bans GitHub client imports in `packages/specialists`, `packages/gate`, `packages/workspace`, `packages/mcp`, and `scripts`. The script scans `packages/core` for `require()` and dynamic `import()` of the same model clients. Either failure exits non-zero. The banned names are listed in `.agents/skills/core-boundary`.
 
 ### pnpm typecheck
 
@@ -44,7 +44,7 @@ Runs `tsc -b --pretty false`. This is the same compiler pass as `pnpm build`. `p
 
 ### pnpm test
 
-Runs `vitest run`. The config is `vitest.config.ts`, with two projects. The `node` project runs `packages/*/src/**/*.test.ts`, `packages/app/runner/*.test.ts` and `scripts/**/*.test.ts`; its workers get `--experimental-sqlite` and `--disable-warning=ExperimentalWarning`. The second project is `packages/app/vitest.config.ts`, which runs the Worker tests in the Workers runtime.
+Runs `vitest run`. The config is `vitest.config.ts`, with two projects. The `node` project runs `packages/*/src/**/*.test.ts`, `packages/app/runner/*.test.ts`, `scripts/**/*.test.ts`, and `apps/console/lib/**/*.test.ts`. Its workers get `--experimental-sqlite` and `--disable-warning=ExperimentalWarning`, and each test and hook gets 60 seconds. The second project is `packages/app/vitest.config.ts`, which runs the Worker tests in the Workers runtime.
 
 Useful single files:
 
@@ -57,7 +57,7 @@ pnpm exec vitest run scripts/eval.test.ts
 
 `packages/core/src/run.test.ts` writes a SQLite log for a run that loops once, reopens it, and expects `replay` to rebuild the same outputs, loops, and usage. `packages/github/src/run.test.ts` runs `fixtures/sample-issue-labeled.json` against a scratch git checkout with an in-memory GitHub client. `packages/specialists/src/client.test.ts` records and replays model calls against a fake API and checks pricing, the spend limit, and refusals. `packages/workspace/src/git.test.ts` edits, diffs, checks, and pushes a scratch checkout. `scripts/eval.test.ts` runs the eval, expects 18/18, and checks that the committed report matches the run. `scripts/record.test.ts` records a case through the scripted upstream and checks the spend limit. `scripts/judge.test.ts` checks the human labels and records and replays a judge batch through the scripted upstream. `scripts/trace.test.ts` expects 15 spans in one trace, with the GenAI attributes, the parent links, request costs that match the pricing, and no prompt or file text. It also sends the spans to a local OTLP receiver.
 
-The eval and judge tests run `tsc` and `vitest` in scratch repos, so each takes tens of seconds. They set their own timeouts.
+`scripts/eval.test.ts`, `scripts/record.test.ts`, and the replay test in `packages/mcp/src/server.test.ts` run `tsc` and `vitest` in scratch repos for several cases. They set longer timeouts of their own.
 
 ### pnpm eval
 
@@ -76,7 +76,7 @@ p50 step latency: 3195 ms
 
 The command then prints the totals by model, the baseline, the gate rules some case fails, and one line per case: id, `opened` or `blocked`, `ok` or `MISMATCH`, file count, line count, and the failed rules or the step error. Each case runs on a scratch git copy of `evals/sample-repo`, with this repo's `node_modules/.bin` on `PATH` for `tsc` and `vitest`. Exit 0 means the verdict accuracy is at least `evals/baseline.json` and `evals/report.json` and `evals/runs/` match the run.
 
-When you change a case, a cassette, or anything a run records, run `pnpm eval -- --write` and commit `evals/report.json` and `evals/runs/` in the same change. Do not lower `evals/baseline.json`, and do not edit `scripts/eval.test.ts`, to turn a red eval green. Update the README table when a case changes.
+When you change a case, a cassette, or anything a run records, run `pnpm eval -- --write` and commit `evals/report.json` and `evals/runs/` in the same change. Do not lower `evals/baseline.json`, and do not edit `scripts/eval.test.ts`, to turn a red eval green. Update the case table in `evals/README.md` when a case changes, and the results table in `README.md` when the printed numbers change.
 
 ### pnpm eval:record
 
@@ -88,7 +88,7 @@ Runs `node --disable-warning=ExperimentalWarning --import tsx scripts/record.ts`
 
 Runs `node --disable-warning=ExperimentalWarning --import tsx scripts/judge.ts`.
 
-The command replays `evals/judge-cassette.jsonl` over the replayed eval and compares each grade with `evals/cases/<id>/judge.json`. Exit 0 means the agreement is at least `evals/judge-baseline.json`. The cassette is not recorded yet, so on the committed cases the command prints `judge cassette: not recorded.` and exits 0. `pnpm eval:judge -- --record` grades the runs in one Message Batches request and needs `ANTHROPIC_API_KEY`.
+The command replays `evals/judge-cassette.jsonl` over the replayed eval and compares each grade with `evals/cases/<id>/judge.json`. Exit 0 means the agreement is at least `evals/judge-baseline.json`. The cassette is not recorded yet, so on the committed cases the command prints `judge cassette: not recorded.` and exits 0. `pnpm eval:judge -- --record` grades the runs in one message batch, with one request per case, and needs `ANTHROPIC_API_KEY`.
 
 ### pnpm trace
 
@@ -100,7 +100,7 @@ The command replays run `run-7` on a scratch checkout and exports OTLP JSON. Set
 
 `packages/core` is the control plane. It runs the template, appends each step event to SQLite, and does not call a model. `packages/specialists` holds planner, implementer, reviewer, and pr-writer as step handlers, the `Workspace` interface, and `createAnthropicClient`. `THIN_PR_MODEL` is `live`, `record`, or `replay`. `replay` is the default, except in the labeled-issue Action, which defaults to `live` and fails the run when `ANTHROPIC_API_KEY` is missing. `record` and `replay` read the cassette path from `THIN_PR_CASSETTE`. `packages/workspace` is the git checkout a run edits: file tools, the check runner with a scrubbed environment and a timeout, `git diff` against the base, commit and push, and `.thin-pr.yml`. `packages/gate` evaluates plan, contracts, diff, budget, paths, secrets, typecheck, tests, and review. Each rule returns `PASS` or `FAIL` and a reason. `packages/github` is the only package that calls GitHub. It runs `verify`, posts the checks, and pushes `thin-pr/<issue>` and opens or updates a draft pull request when every gate rule passes. A failure comments the run report and pushes nothing. Specialists do not import it.
 
-`pnpm thin-pr run` and the MCP server in `packages/mcp` run issues against a local checkout. See `docs/mcp.md`.
+`pnpm thin-pr run` and the MCP server in `packages/mcp` run issues against a local checkout. See `docs/mcp.md`. `packages/app` is the GitHub App on Cloudflare. See `docs/deploy.md`. `apps/console` is the static console over `evals/runs/` and `evals/report.json`. `pnpm console:build` writes it to `apps/console/out`.
 
 The YAML templates under `templates/` are data. A step names its id, optional model and effort, retry limit, and optional loop. The labeled-issue entry loads the template whose `label` matches the issue label.
 

@@ -164,8 +164,8 @@ function expectRunTrace(document: unknown): void {
 }
 
 describe("run trace", () => {
-  // A child process keeps the OpenTelemetry SDK global out of this worker. Spawning pnpm and a git repo takes seconds.
-  it("writes an OTLP JSON file with run, step, and model request spans", { timeout: 60_000 }, async () => {
+  // A child process keeps the OpenTelemetry SDK global out of this worker.
+  it("writes an OTLP JSON file with run, step, and model request spans", async () => {
     const path = join(scratch(), "trace.json");
     const { stdout } = await run("pnpm", ["trace"], {
       cwd: root,
@@ -181,7 +181,7 @@ describe("run trace", () => {
     expectRunTrace(JSON.parse(readFileSync(path, "utf8")) as unknown);
   });
 
-  it("sends the spans to the OTLP endpoint with its headers", { timeout: 60_000 }, async () => {
+  it("sends the spans to the OTLP endpoint with its headers", async () => {
     const received: { path: string; header: string | undefined; body: string }[] = [];
     const server = createServer((request, response) => {
       const chunks: Buffer[] = [];

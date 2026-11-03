@@ -1,0 +1,116 @@
+# Architecture
+
+How a labeled issue becomes a draft pull request, which package owns each part, and what the system refuses to do.
+
+## Flow
+
+```mermaid
+flowchart TD
+  label["Issue labeled thin-pr"] --> action["GitHub Action<br/>.github/workflows/thin-pr.yml"]
+  label --> app["GitHub App<br/>packages/app"]
+  local["pnpm thin-pr run<br/>MCP start_run"] --> runLocal["runLocal<br/>packages/github"]
+  action --> labeled["runLabeledIssue<br/>packages/github"]
+  app --> labeled
+  labeled --> runIssue["runIssue<br/>packages/github"]
+  runLocal --> runIssue
+  runIssue --> workspace["Git checkout at the base commit<br/>packages/workspace"]
+  workspace --> steps
+  subgraph steps["Template steps, run by packages/core"]
+    plan --> implement --> verify --> review --> write
+    verify -. failed check .-> implement
+    review -. changes requested .-> implement
+  end
+  steps --> gate["Nine gate rules<br/>packages/gate"]
+  gate -->|every rule passes| draft["Push thin-pr/&lt;issue&gt;<br/>open or update the draft"]
+  gate -->|a rule fails| comment["Comment the run report<br/>push nothing"]
+```
+
+The Action and the App answer the same label. The App defers to an enabled thin-pr workflow, so only one of them runs. `docs/deploy.md` has the rule and the App setup. The command line and the MCP server run the same `runIssue` against a local checkout and never push. `docs/mcp.md` covers them.
+
+## Packages
+
+| Package | Owns | Does not |
+| --- | --- | --- |
+| `packages/core` | Template loading, the step machine with retries and bounded loops, the SQLite run log, `replay`, run and step spans. | Import a model client or a GitHub client. `pnpm lint` fails on either. |
+| `packages/specialists` | The Zod output contracts, the system prompts, `createAnthropicClient` with replay, record, and the spend meter, the planner, implementer, reviewer, and pr-writer handlers, and the judge. The `Workspace` interface lives here. | Import `packages/github`. |
+| `packages/workspace` | The git checkout a run edits: file tools, the check runner, `git diff` against the base, commit and push, and `.thin-pr.yml`. `createMemoryWorkspace` is the in-memory version for tests. | Call a model. |
+| `packages/gate` | Nine pure rules over the run evidence. `evaluate` returns a verdict and a reason per rule. `decide` returns `pass` only when all nine pass. | Read the model's own claims about the change. |
+| `packages/github` | The only GitHub client. It parses the webhook payload, runs `verify`, posts check runs, builds the RunRecord, writes the draft body and the run report, pushes, and opens the draft. It also holds the Action entry, `runLocal`, and the CLI. | Live inside `packages/core`. |
+| `packages/app` | A Cloudflare Worker that verifies the webhook, queues the job, mints an installation token, and starts a container that calls `runLabeledIssue`. | Run the workflow itself. |
+| `packages/mcp` | A stdio MCP server with `list_runs`, `get_run`, `replay_case`, and `start_run`. | Push or call GitHub. |
+| `apps/console` | A static Next.js export of the RunRecords in `evals/runs/` and the report in `evals/report.json`. | Call an API at runtime. |
+
+## Step model
+
+A loop that keeps calling a model until it decides it is done hides three decisions: which step runs next, how many times a step may retry, and whether a pull request opens. Here the template decides the first two, and the gate decides the third. The template is YAML, and the gate is nine pure functions.
+
+A template is YAML data under `templates/`. Its `label` selects it, and each step names its id, an optional model and effort, a retry count, and an optional loop. `templates/README.md` lists the three templates.
+
+```yaml
+id: small-feature
+label: thin-pr
+steps:
+  - { id: plan,      model: claude-sonnet-5-5, effort: medium, retries: 1 }
+  - { id: implement, model: claude-opus-5-5,   effort: high,   retries: 1 }
+  - { id: verify,    retries: 0, loop: { back_to: implement, max: 2 } }
+  - { id: review,    model: claude-sonnet-5-5, effort: high,   retries: 1, loop: { back_to: implement, max: 2 } }
+  - { id: write,     model: claude-haiku-5-5,  effort: low,    retries: 1 }
+```
+
+`runWorkflow` in `packages/core` calls one handler per step and appends every event to the log.
+
+- `retries` is the number of extra attempts after a failed one. Each retry gets the previous error as feedback.
+- A handler may return `loop` with feedback. The run goes back to `loop.back_to`. `loop.max` caps those loops for the whole run, and core fails the run when a step asks for one more.
+- `verify` and `review` stop asking for a loop on their last allowed pass and finish instead. The gate then names the failed check or the review verdict, so core does not fail the run at the cap.
+- A template that names a step twice, gives `verify` a model, or loops to a step that is not earlier fails to load with `TemplateError` and the file line.
+
+The five steps:
+
+| Step | Handler | Model | Output |
+| --- | --- | --- | --- |
+| `plan` | planner | structured output | `summary` and at least one entry in `steps` |
+| `implement` | implementer | tool runner over the workspace | `summary`, and `files` from `workspace.diff()` |
+| `verify` | `createVerifyHandler` in `packages/github` | none | `summary` and the `typecheck` and `test` results |
+| `review` | reviewer | structured output | `verdict`, `approve` or `changes_requested`, and `notes` |
+| `write` | pr-writer | structured output | `title`, `body`, and `summary` |
+
+The gate is not a step. `runIssue` evaluates it after `write` finishes. `runIssue` lives in `packages/github` because it posts checks and pushes. Moving it into `packages/core` would put a GitHub client there, which `pnpm lint` forbids.
+
+## Specialists
+
+Each model step takes its model and effort from the template step, or from the specialist default when the step names none. Every request sets `thinking` to adaptive and an explicit `output_config.effort`. It omits `temperature`, `top_p`, and `top_k`. Opus 5.5 and Sonnet 5.5 requests opt into the server-side fallback.
+
+The planner, reviewer, and pr-writer are structured-output calls built from their `.strict()` Zod schemas. A reply that still fails the schema throws `SpecialistSchemaError` with the specialist, the phase, and the path of the first issue. A refusal fails the step with its category. A reply cut off at `max_tokens` is retried once with twice the room.
+
+The implementer runs in the SDK tool runner with six strict tools: `list_files`, `read_file`, `search`, `replace`, `create_file`, and `run_check`. It stops when the model stops asking for tools, and fails after 25 turns. A model never reports which files changed. The `files` field comes from `git diff`.
+
+The planner reads the issue and the repository's tracked paths, up to 500 of them, so each step names a real file.
+
+An attempt that fails after a model call throws `StepError` with that call's usage. Core keeps it on the `failed` event, so the run totals count refused and retried calls.
+
+The reviewer reads the plan, the workspace patch, and the verify results. `changes_requested` loops back to implement with the notes as feedback while the template allows another loop.
+
+## Data flow
+
+1. `runIssue` runs `install` from `.thin-pr.yml` once, when the file sets one. A failed install fails the run with its log tail.
+2. `runWorkflow` runs the template. Each event goes to the SQLite log with its full JSON output and model usage. `onEvent` opens and closes one check run per step, named `thin-pr / <step>`, on the base commit.
+3. After the run, `runIssue` measures `workspace.diff()` and reads the last verify output. Those two values and the parsed plan and review are the gate's evidence.
+4. When every rule passes, `runIssue` commits the checkout and force-pushes `thin-pr/<issue>` with a lease. It posts one check per rule, named `thin-pr / gate / <rule>`, on the new commit, then opens a draft or updates the open one.
+5. When a rule fails, `runIssue` posts the rule checks on the base commit and comments the run report on the issue. Nothing is pushed.
+
+The draft body and the issue comment come from one function, `formatRunReport` in `packages/github/src/report.ts`. Each starts with a one-line outcome and the gate table, failing rules first. Then come the cost, the tokens, and the duration for the run and for each model. Collapsible sections hold the plan, each check's exit code and log tail, the review verdict and notes, and one row per step attempt with its loop count. The pr-writer `title` becomes the draft title, or `thin-pr #<issue>` when the title is missing. Its `body` field is not used. The gate and the body read the parsed outputs from the run, never the model text a second time.
+
+`replay(events)` folds a stored log back into the final state: outputs, loops, and usage. `packages/core/src/run.test.ts` checks that it matches what `runWorkflow` returned. `toRunRecord` turns the timed events into a RunRecord, the JSON shape the MCP server, the evals, and `evals/runs/` use.
+
+`runWorkflow` also opens a span for the run and one for each pass over a step. The Anthropic SDK's request spans nest under the step spans. A process that never starts the OpenTelemetry SDK records nothing. `docs/telemetry.md` has the span tree and the attributes.
+
+## Evals and the judge
+
+`pnpm eval` replays 18 labeled issues against `evals/sample-repo` with real `tsc` and `vitest`, and `pnpm eval:judge` grades the replayed runs against human labels. `evals/README.md` describes both, the cases, and the nightly live run. `docs/gate.md` lists the case that trips each rule.
+
+## Non-goals
+
+- CI and `pnpm eval` do not call a live model. They replay cassettes.
+- The run pushes only after the gate passes, and only to `thin-pr/<issue>`. It does not merge, request reviewers, or close the issue.
+- There is no chat UI, no second orchestrator, and no open-ended agent loop. The implementer's loop is capped at 25 turns, and its tools reach only the workspace. There is no shell tool.
+- `packages/core` does not grow a model SDK import or a GitHub client import. `.agents/skills/core-boundary` is the list.

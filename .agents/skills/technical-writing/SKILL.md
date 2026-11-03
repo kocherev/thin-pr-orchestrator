@@ -14,7 +14,7 @@ One document has one job.
 - A tutorial shows the steps and the result the reader should see. The fork section in `README.md` is this.
 - A how-to is a task for someone who already has the checkout. `AGENTS.md` is this.
 - A reference lists facts, names, and limits, with no pitch. The eval table and the package list are this.
-- An explanation says why, on one bounded topic. `docs/design.md` is this.
+- An explanation says why, on one bounded topic. `docs/architecture.md` is this.
 
 Do not teach inside a reference table, and do not argue inside a how-to. Link to the other document.
 

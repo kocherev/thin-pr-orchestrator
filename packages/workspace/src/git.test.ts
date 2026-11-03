@@ -96,7 +96,7 @@ describe("GitWorkspace", () => {
 
   it("hides credential variables from a check", async () => {
     const value = randomUUID();
-    const names = ["THIN_PR_TEST_TOKEN", "THIN_PR_API_KEY", "GITHUB_ACTOR", "ANTHROPIC_BASE_URL", "THIN_PR_VISIBLE"];
+    const names = ["THIN_PR_TEST_TOKEN", "THIN_PR_API_KEY", "GITHUB_ACTOR", "ANTHROPIC_BASE_URL", "OTEL_EXPORTER_OTLP_HEADERS", "THIN_PR_VISIBLE"];
     for (const name of names) {
       process.env[name] = value;
       cleanups.push(() => delete process.env[name]);
@@ -109,6 +109,7 @@ describe("GitWorkspace", () => {
       "THIN_PR_API_KEY=",
       "GITHUB_ACTOR=",
       "ANTHROPIC_BASE_URL=",
+      "OTEL_EXPORTER_OTLP_HEADERS=",
       `THIN_PR_VISIBLE=${value}`,
     ]);
   });

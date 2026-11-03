@@ -2,7 +2,8 @@ import { spawn } from "node:child_process";
 
 const LOG_TAIL_CHARS = 4096;
 const SECRET_NAME = /TOKEN|KEY|SECRET|PASSWORD/i;
-const SECRET_PREFIX = /^(GITHUB|ANTHROPIC)_/i;
+// OTEL_EXPORTER_OTLP_HEADERS carries a trace backend's API key under a name the pattern above misses.
+const SECRET_PREFIX = /^(GITHUB|ANTHROPIC|OTEL)_/i;
 
 /** The environment a check sees: the parent's, minus anything that looks like a credential. */
 export function scrubEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
