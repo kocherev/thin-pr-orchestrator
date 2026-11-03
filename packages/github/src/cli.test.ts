@@ -31,7 +31,7 @@ describe("thin-pr run", () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("## Run report");
     expect(result.stdout).toContain("- gate/tests: success. PASS: Tests passed: vitest run");
-    expect(result.stdout).toContain("Status: opened\nBranch: thin-pr/local-1\n");
+    expect(result.stdout).toMatch(/^Status: opened\nCost: \$\d+\.\d{4} · \d+\.\ds · [\d,]+ tokens\nBranch: thin-pr\/local-1\n/m);
     expect(git(repo.dir, "log", "--format=%s", "thin-pr/local-1")).toBe("Apply thin-pr/#1\nBase");
     expect(git(repo.dir, "diff", "--name-only", "main", "thin-pr/local-1")).toBe("src/counter.ts");
     // The checkout is untouched, the temporary worktree is gone, and nothing reached origin.
@@ -53,6 +53,10 @@ describe("thin-pr run", () => {
     });
     expect(record.gate.every((rule) => rule.verdict === "PASS")).toBe(true);
     expect(record.totals.costUsd).toBeGreaterThan(0);
+    const { costUsd, durationMs, inputTokens, outputTokens } = record.totals;
+    expect(result.stdout).toContain(
+      `Cost: $${costUsd.toFixed(4)} · ${(durationMs / 1000).toFixed(1)}s · ${(inputTokens + outputTokens).toLocaleString("en-US")} tokens\n`,
+    );
   });
 
   it("prints the usage and exits 2 without a repo", async () => {
