@@ -24,6 +24,7 @@ import { storedRunMarker, toStoredRun, type StoredRun } from "./approval.js";
 import { createCheckRuns } from "./checks.js";
 import { readLabelEvent, type LabelEvent } from "./event.js";
 import { toRunRecord, type RunRecord, type TimedEvent } from "./record.js";
+import { startProgress, type Progress } from "./progress.js";
 import { formatRunReport } from "./report.js";
 import { createRunHandlers } from "./steps.js";
 import type { GitHubSurface } from "./surface.js";
@@ -75,6 +76,7 @@ export async function runAction(input: {
   readonly model: () => ModelSession;
   /** Reaches only the push. The Action passes GITHUB_TOKEN because its checkout keeps no credentials. */
   readonly pushToken?: string;
+  readonly runLink?: string | null;
 }): Promise<LabelRunResult> {
   const event = readLabelEvent(input.payload);
   const template = templateForLabel(input.templates, event.label);
@@ -95,6 +97,7 @@ export async function runAction(input: {
       log,
       runId: input.runId,
       pushToken: input.pushToken,
+      runLink: input.runLink ?? null,
     });
   } finally {
     log.close();
@@ -102,10 +105,11 @@ export async function runAction(input: {
 }
 
 /**
- * Runs the template with a check per step, then evaluates the gate over the workspace. A pass commits the change,
- * force-pushes `thin-pr/<issue>` from the base, and opens a draft or updates the open one. A diff over the budget
- * that passes every other rule is pushed the same way, but opens no draft: the issue comment says how to approve it
- * and stores the run for `openApprovedDraft`. Anything else comments the run report and pushes nothing.
+ * Runs the template with a check per step, then evaluates the gate over the workspace. One issue comment shows the
+ * progress and ends as the run report. A pass commits the change, force-pushes `thin-pr/<issue>` from the base, and
+ * opens a draft or updates the open one. A diff over the budget that passes every other rule is pushed the same way,
+ * but opens no draft: the report says how to approve it and stores the run for `openApprovedDraft`. Anything else
+ * ends with the report and pushes nothing.
  */
 export async function runIssue(deps: {
   readonly event: LabelEvent;
@@ -123,6 +127,8 @@ export async function runIssue(deps: {
   readonly pushToken?: string;
   /** Defaults to `thin-pr/<issue>`. */
   readonly branch?: string;
+  /** Markdown that links to where the run executes, for the progress comment. */
+  readonly runLink?: string | null;
 }): Promise<LabelRunResult> {
   const { event, workspace, github } = deps;
   const target = { owner: event.owner, repo: event.repo };
@@ -138,13 +144,31 @@ export async function runIssue(deps: {
   const record = (status: RunRecord["status"], pullRequest: RunRecord["pullRequest"] = null): RunRecord =>
     toRunRecord({ runId: deps.runId, event, template: deps.template.id, status, timeline, gate, diff, checks, pullRequest });
 
+  let progress: Progress | null = null;
+  const finish = async (body: string): Promise<void> => {
+    if (progress) {
+      return progress.finish(body);
+    }
+    await github.createComment({ ...target, issue: event.issue.number, body });
+  };
+
   const stop = async (status: "blocked" | "failed", error: string): Promise<LabelRunResult> => {
     const result = record(status);
-    await github.comment({ ...target, issue: event.issue.number, body: formatRunReport({ record: result, outputs, branch, error }) });
+    await finish(formatRunReport({ record: result, outputs, branch, error }));
     return { status, record: result, error };
   };
 
   try {
+    const comment = await startProgress({
+      github,
+      ...target,
+      issue: event.issue.number,
+      title: `Running the ${deps.template.id} template on #${event.issue.number}.`,
+      steps: deps.template.steps.map((step) => step.id),
+      runId: deps.runId,
+      runLink: deps.runLink ?? null,
+    });
+    progress = comment;
     const handlers = deps.handlers(limits);
     // Before the workflow, so the implementer's run_check already has the dependencies.
     const install = await workspace.install();
@@ -160,6 +184,7 @@ export async function runIssue(deps: {
       async onEvent(runEvent) {
         timeline.push({ event: runEvent, at: new Date() });
         await checkRuns.onEvent(runEvent, workspace.baseSha);
+        await comment.onEvent(runEvent);
       },
     });
     outputs = state.outputs;
@@ -168,6 +193,7 @@ export async function runIssue(deps: {
     if (state.status !== "completed") {
       return await stop("failed", timeline.at(-1)?.event.error ?? "run failed");
     }
+    await comment.gating();
 
     const evidence = {
       plan: state.outputs.plan,
@@ -199,7 +225,7 @@ export async function runIssue(deps: {
         review: reviewerOutput.safeParse(outputs.review).data ?? null,
       });
       const report = formatRunReport({ record: waiting, outputs, branch, error: null });
-      await github.comment({ ...target, issue: event.issue.number, body: `${report}\n\n${storedRunMarker(stored)}` });
+      await finish(`${report}\n\n${storedRunMarker(stored)}`);
       // A draft from an earlier run already shows the pushed branch, so its body must stop saying the gate passed.
       const [open] = await github.listPullsForHead({ ...target, branch });
       if (open) {
@@ -209,7 +235,9 @@ export async function runIssue(deps: {
     }
     const body = formatRunReport({ record: record("opened"), outputs, branch, error: null });
     const pullRequest = await publishDraft(github, event, branch, outputs, body);
-    return { status: "opened", record: record("opened", pullRequest) };
+    const opened = record("opened", pullRequest);
+    await finish(formatRunReport({ record: opened, outputs, branch, error: null }));
+    return { status: "opened", record: opened };
   } catch (error) {
     let message = error instanceof Error && error.message.length > 0 ? error.message : "run failed";
     try {

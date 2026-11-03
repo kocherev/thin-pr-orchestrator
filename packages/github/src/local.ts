@@ -131,7 +131,12 @@ function localSurface(posted: string[]): GitHubSurface {
       return nextCheck - 1;
     },
     async finishCheck() {},
-    async comment({ body }) {
+    async createComment({ body }) {
+      posted.push(body);
+      return posted.length;
+    },
+    // The last body is what the issue would show, so an edit adds to the list.
+    async editComment({ body }) {
       posted.push(body);
     },
     async branchHead() {

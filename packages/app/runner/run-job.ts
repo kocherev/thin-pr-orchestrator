@@ -32,6 +32,7 @@ export async function runJob(job: Job, env: NodeJS.ProcessEnv): Promise<RunRecor
       baseSha: stdout.trim(),
       token,
       runId: `app-${job.deliveryId}`,
+      runLink: `App delivery \`${job.deliveryId}\``,
       env,
     });
     return result.status === "ignored" ? null : result.record;

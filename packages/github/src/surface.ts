@@ -52,6 +52,12 @@ export type GitHubRest = {
       readonly repo: string;
       readonly issue_number: number;
       readonly body: string;
+    }): Promise<{ data: { id: number } }>;
+    updateComment(params: {
+      readonly owner: string;
+      readonly repo: string;
+      readonly comment_id: number;
+      readonly body: string;
     }): Promise<unknown>;
   };
 };
@@ -76,10 +82,17 @@ export type GitHubSurface = {
     readonly summary: string;
     readonly title?: string;
   }): Promise<void>;
-  comment(input: {
+  /** Comments on an issue or pull request and returns the comment id. */
+  createComment(input: {
     readonly owner: string;
     readonly repo: string;
     readonly issue: number;
+    readonly body: string;
+  }): Promise<number>;
+  editComment(input: {
+    readonly owner: string;
+    readonly repo: string;
+    readonly commentId: number;
     readonly body: string;
   }): Promise<void>;
   /** The commit `branch` points at, or null when the branch does not exist. */
@@ -130,11 +143,20 @@ export function createGitHubSurface(octokit: GitHubRest): GitHubSurface {
         },
       });
     },
-    async comment(input) {
-      await octokit.issues.createComment({
+    async createComment(input) {
+      const { data } = await octokit.issues.createComment({
         owner: input.owner,
         repo: input.repo,
         issue_number: input.issue,
+        body: input.body,
+      });
+      return data.id;
+    },
+    async editComment(input) {
+      await octokit.issues.updateComment({
+        owner: input.owner,
+        repo: input.repo,
+        comment_id: input.commentId,
         body: input.body,
       });
     },

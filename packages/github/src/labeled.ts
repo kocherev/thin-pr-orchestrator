@@ -23,6 +23,8 @@ export async function runLabeledIssue(input: {
   readonly baseSha: string;
   readonly token: string;
   readonly runId: string;
+  /** Markdown that links to where the run executes, for the progress comment. */
+  readonly runLink: string | null;
   readonly env: Readonly<Record<string, string | undefined>>;
 }): Promise<LabeledIssueRun> {
   const env: Readonly<Record<string, string | undefined>> = {
@@ -38,6 +40,7 @@ export async function runLabeledIssue(input: {
     baseSha: input.baseSha,
     pushToken: input.token,
     runId: input.runId,
+    runLink: input.runLink,
     logPath: join(tmpdir(), `thin-pr-${input.runId}.sqlite`),
     // GitHub Actions sets GITHUB_API_URL. Elsewhere it is unset and Octokit uses api.github.com.
     github: createGitHubSurface(new Octokit({ auth: input.token, baseUrl: env.GITHUB_API_URL })),

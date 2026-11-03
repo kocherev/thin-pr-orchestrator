@@ -25,6 +25,7 @@ async function main(): Promise<void> {
       baseSha: github.context.sha,
       token,
       runId,
+      runLink: actionsRunLink(process.env),
       env: process.env,
     });
     if (spentUsd !== null) {
@@ -72,6 +73,11 @@ async function main(): Promise<void> {
   if (failure.length > 0) {
     core.setFailed(failure);
   }
+}
+
+function actionsRunLink(env: NodeJS.ProcessEnv): string | null {
+  const { GITHUB_SERVER_URL: server, GITHUB_REPOSITORY: repository, GITHUB_RUN_ID: runId } = env;
+  return server && repository && runId ? `[Actions run ${runId}](${server}/${repository}/actions/runs/${runId})` : null;
 }
 
 function isDirectRun(): boolean {

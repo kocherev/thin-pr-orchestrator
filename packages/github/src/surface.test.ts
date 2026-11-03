@@ -41,6 +41,10 @@ describe("Octokit surface", () => {
       issues: {
         async createComment(params) {
           calls.push(["issues.createComment", params]);
+          return { data: { id: 99 } };
+        },
+        async updateComment(params) {
+          calls.push(["issues.updateComment", params]);
         },
       },
     };
@@ -49,7 +53,8 @@ describe("Octokit surface", () => {
 
     await expect(github.startCheck({ ...target, name: "thin-pr / plan", sha: "sha-1" })).resolves.toBe(42);
     await github.finishCheck({ ...target, checkRunId: 42, conclusion: "failure", summary: "gate failed" });
-    await github.comment({ ...target, issue: 7, body: "## Run report" });
+    await expect(github.createComment({ ...target, issue: 7, body: "## Running" })).resolves.toBe(99);
+    await github.editComment({ ...target, commentId: 99, body: "## Run report" });
     await expect(github.branchHead({ ...target, branch: "thin-pr/7" })).resolves.toBe("sha-7");
     await expect(github.branchHead({ ...target, branch: "thin-pr/8" })).resolves.toBeNull();
     await expect(github.listPullsForHead({ ...target, branch: "thin-pr/7" })).resolves.toEqual([
@@ -76,7 +81,8 @@ describe("Octokit surface", () => {
           output: { title: "Failed", summary: "gate failed" },
         },
       ],
-      ["issues.createComment", { ...target, issue_number: 7, body: "## Run report" }],
+      ["issues.createComment", { ...target, issue_number: 7, body: "## Running" }],
+      ["issues.updateComment", { ...target, comment_id: 99, body: "## Run report" }],
       ["git.getRef", { ...target, ref: "heads/thin-pr/7" }],
       ["git.getRef", { ...target, ref: "heads/thin-pr/8" }],
       ["pulls.list", { ...target, head: "example:thin-pr/7", state: "open" }],

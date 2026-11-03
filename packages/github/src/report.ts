@@ -40,10 +40,13 @@ function outcome(record: RunRecord, error: string | null, branch: string, approv
   const budget = record.gate.find((rule) => rule.verdict === "NEEDS_APPROVAL");
   const others = `The other ${record.gate.length - 1} rules passed`;
   switch (record.status) {
-    case "opened":
+    case "opened": {
+      // The draft body is written before the draft exists. The issue comment links to it.
+      const draft = record.pullRequest?.url ? ` Draft: ${record.pullRequest.url}` : "";
       return budget
-        ? `**Gate passed with approval.** ${budget.reason} ${approvedBy ?? "A user with write access"} approved it. ${others} for #${record.issue.number}.`
-        : `**Gate passed.** All ${record.gate.length} rules passed for #${record.issue.number}.`;
+        ? `**Gate passed with approval.** ${budget.reason} ${approvedBy ?? "A user with write access"} approved it. ${others} for #${record.issue.number}.${draft}`
+        : `**Gate passed.** All ${record.gate.length} rules passed for #${record.issue.number}.${draft}`;
+    }
     case "awaiting_approval":
       return [
         `**Waiting for approval.** ${budget?.reason ?? "The diff is over the budget."} ${others}. \`${branch}\` is pushed, and no draft is open.`,
@@ -170,7 +173,7 @@ function count(n: number, noun: string, plural = `${noun}s`): string {
   return `${n} ${n === 1 ? noun : plural}`;
 }
 
-function usd(value: number): string {
+export function usd(value: number): string {
   return `${value.toFixed(6)} USD`;
 }
 
