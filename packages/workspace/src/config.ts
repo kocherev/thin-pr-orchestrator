@@ -35,8 +35,8 @@ export type RepoConfig = z.infer<typeof repoConfigSchema>;
 export const DEFAULT_CONFIG: RepoConfig = repoConfigSchema.parse({});
 
 /** Reads `.thin-pr.yml` at the root of `dir`. A missing or empty file gives the defaults. */
-export function loadRepoConfig(dir: string): RepoConfig {
-  const path = join(dir, ".thin-pr.yml");
+/** Reads `.thin-pr.yml` from the checkout, or from `path` when a caller keeps it outside. */
+export function loadRepoConfig(dir: string, path = join(dir, ".thin-pr.yml")): RepoConfig {
   if (!existsSync(path)) {
     return DEFAULT_CONFIG;
   }

@@ -39,6 +39,10 @@ export async function runLocal(input: {
   readonly issue: string;
   readonly model: () => ModelSession;
   readonly runsDir?: string;
+  /** A `.thin-pr.yml` outside the checkout, so trying thin-pr on a repo adds nothing to it. */
+  readonly configPath?: string;
+  /** The issue label that picks the template, `thin-pr` by default. */
+  readonly label?: string;
 }): Promise<LocalRunResult> {
   const repo = resolve(input.repo);
   const [heading = "", ...rest] = input.issue.trim().split("\n");
@@ -46,9 +50,10 @@ export async function runLocal(input: {
   if (title.length === 0) {
     throw new Error("issue text is empty");
   }
-  const template = templateForLabel(TEMPLATES, "thin-pr");
+  const label = input.label ?? "thin-pr";
+  const template = templateForLabel(TEMPLATES, label);
   if (!template) {
-    throw new Error("no template has the label thin-pr");
+    throw new Error(`no template has the label ${label}`);
   }
 
   const baseSha = (await git(repo, ["rev-parse", "--verify", "HEAD^{commit}"])).trim();
@@ -58,7 +63,7 @@ export async function runLocal(input: {
   const runsDir = input.runsDir ?? join(resolve(repo, (await git(repo, ["rev-parse", "--git-common-dir"])).trim()), "thin-pr", "runs");
   const payload = {
     action: "labeled",
-    label: { name: "thin-pr" },
+    label: { name: label },
     issue: { number, title, body: rest.join("\n").trim() },
     repository: { name: basename(repo), default_branch: "HEAD", owner: { login: "local" } },
   };
@@ -71,7 +76,7 @@ export async function runLocal(input: {
   await git(repo, ["worktree", "add", "--quiet", "--detach", dir, baseSha]);
   const log = openEventLog(join(scratch, "events.sqlite"));
   try {
-    const config = loadRepoConfig(dir);
+    const config = loadRepoConfig(dir, input.configPath === undefined ? undefined : resolve(input.configPath));
     const checkout = await openWorkspace({ dir, baseSha, config });
     const workspace: GitWorkspace = {
       ...checkout,
