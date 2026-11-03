@@ -60,7 +60,7 @@ If every rule passes, the orchestrator commits the checkout and runs `git push -
 
 `pnpm eval` does not call a live model and does not call GitHub. For each directory in `evals/cases` it copies `evals/sample-repo` into a scratch git repo with a bare `origin`, replays the model calls from the case's `cassette.jsonl`, lets the recorded tool calls edit the files through the workspace, and copies `hidden/*.test.ts` into `test/hidden/` right before verify. `.git/info/exclude` keeps the hidden tests out of the diff and the commit. The checks are the real `tsc --noEmit` and `vitest run`, found on `PATH` in this repo's `node_modules/.bin`.
 
-Each case has an `expected.json` with the verdict and, for most blocked cases, the gate rules that must fail. Eight cases open a draft. Nine are blocked: one per rule from `diff` to `review`, a second budget case, and `10-empty-plan`, which fails at the plan step. The floor in `evals/baseline.json` is 100% verdict accuracy. The process exits 1 when the accuracy is lower.
+Each case has an `expected.json` with the verdict and, for most blocked cases, the gate rules that must fail. Nine cases open a draft. `18-live-edit` among them fails its hidden test once and loops back to implement. Nine are blocked: one per rule from `diff` to `review`, a second budget case, and `10-empty-plan`, which fails at the plan step. The floor in `evals/baseline.json` is 100% verdict accuracy. The process exits 1 when the accuracy is lower.
 
 CI runs `pnpm eval` after the tests. Lowering `evals/baseline.json` to make a red run green hides the regression the file is there to catch.
 
@@ -68,7 +68,7 @@ CI runs `pnpm eval` after the tests. Lowering `evals/baseline.json` to make a re
 
 `runWorkflow` opens a span for the run and one for each pass over a step with `@opentelemetry/api`. A process that never starts the SDK records nothing. `packages/github` starts the SDK for `pnpm trace` and for the labeled-issue Action. The Anthropic SDK's own request spans nest under the step spans, so the repo does not reimplement the GenAI attributes. The transport middleware runs inside each request span and adds the specialist and the cost the spend meter computed. The sample is `docs/demo/trace.json`, and `docs/telemetry.md` lists the attributes.
 
-The judge scores a finished replay. `decide()` still chooses the draft. `pnpm eval:judge` replays the 17 cases and applies the rubric in `packages/specialists/src/judge.ts` to each run's step outputs, diff, and check results. The live judge in that package runs when `THIN_PR_JUDGE` and `THIN_PR_MODEL` are both `live` and `ANTHROPIC_API_KEY` is set.
+The judge grades a finished replay. `decide()` still chooses the draft. The gate's rules check what code can see. `claude-sonnet-5-5` grades what it cannot: plan relevance, a minimal diff, test adequacy, and review quality. Live grading goes through the Message Batches API at half price, and CI replays the recorded batch. The judge is only useful when it agrees with a person, so every case carries human labels in `judge.json`, and the floor is on agreement, not on pass rate.
 
 ## Non-goals
 

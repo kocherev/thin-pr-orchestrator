@@ -1,0 +1,7 @@
+{
+  "plan_relevance": "pass",
+  "minimal_diff": "pass",
+  "test_adequacy": "pass",
+  "review_quality": "fail",
+  "note": "Creating src/client.ts with requestHeaders fits the issue, but the header holds a hardcoded API key. The review approved it."
+}

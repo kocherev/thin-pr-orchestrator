@@ -71,9 +71,60 @@ function specialistOf(body: z.infer<typeof request>): SpecialistName {
   throw new Error("scripted upstream cannot tell which specialist sent this request");
 }
 
-// Token counts are estimates at four characters a token, plus a little thinking.
+/**
+ * A stand-in for the Message Batches API. Each request gets `replies[custom_id]` as its JSON text, and a request with
+ * no reply errors. The batch is in progress when it is created and has ended by the first poll.
+ */
+export function scriptedBatchUpstream(replies: Readonly<Record<string, Json>>): typeof fetch {
+  const batches = z.object({ requests: z.array(z.object({ custom_id: z.string(), params: z.looseObject({ model: z.string() }) })) });
+  let lines: string[] = [];
+  const batch = (ended: boolean) => {
+    const base = "https://api.anthropic.com/v1/messages/batches/msgbatch_scripted";
+    return Response.json({
+      id: "msgbatch_scripted",
+      type: "message_batch",
+      processing_status: ended ? "ended" : "in_progress",
+      request_counts: { processing: ended ? 0 : lines.length, succeeded: 0, errored: 0, canceled: 0, expired: 0 },
+      results_url: ended ? `${base}/results` : null,
+      created_at: "2026-11-02T00:00:00Z",
+      ended_at: ended ? "2026-11-02T00:01:00Z" : null,
+      expires_at: "2026-11-03T00:00:00Z",
+      archived_at: null,
+      cancel_initiated_at: null,
+    });
+  };
+
+  return async (url, init) => {
+    const path = new URL(String(url)).pathname;
+    if (path === "/v1/messages/batches" && init?.method === "POST") {
+      const sent = batches.parse(JSON.parse(String(init.body)));
+      lines = sent.requests.map(({ custom_id, params }) => {
+        const answer = replies[custom_id];
+        const result =
+          answer === undefined
+            ? { type: "errored", error: { type: "error", error: { type: "invalid_request_error", message: `no scripted reply for ${custom_id}` } } }
+            : { type: "succeeded", message: message(params.model, JSON.stringify(params), "end_turn", [{ type: "text", text: JSON.stringify(answer) }]) };
+        return JSON.stringify({ custom_id, result });
+      });
+      return batch(false);
+    }
+    if (path === "/v1/messages/batches/msgbatch_scripted") {
+      return batch(true);
+    }
+    if (path === "/v1/messages/batches/msgbatch_scripted/results") {
+      return new Response(`${lines.join("\n")}\n`, { headers: { "content-type": "application/binary" } });
+    }
+    return Response.json({ type: "error", error: { type: "not_found_error", message: path } }, { status: 404 });
+  };
+}
+
 function reply(model: string, sent: string, stopReason: string, content: readonly Json[]): Response {
-  return Response.json({
+  return Response.json(message(model, sent, stopReason, content));
+}
+
+// Token counts are estimates at four characters a token, plus a little thinking.
+function message(model: string, sent: string, stopReason: string, content: readonly Json[]) {
+  return {
     id: `msg_${Math.ceil(sent.length / 7)}`,
     type: "message",
     role: "assistant",
@@ -88,5 +139,5 @@ function reply(model: string, sent: string, stopReason: string, content: readonl
       cache_read_input_tokens: 0,
       cache_creation_input_tokens: 0,
     },
-  });
+  };
 }

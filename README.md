@@ -114,15 +114,19 @@ Plan the stub change.
 
 ## Replay evals
 
-`pnpm eval` replays 17 labeled issues through `templates/small-feature.yaml` and the gate. Each case copies `evals/sample-repo` into a scratch git repo, replays the model calls from the case's `cassette.jsonl`, copies the case's hidden tests in before `verify`, and runs `tsc --noEmit` and `vitest run` for real. The implementer's recorded tool calls edit the files through the workspace. A case is correct when its verdict matches `expected.json` and, when `expected.json` lists failed rules, the gate failed exactly those. The floor in `evals/baseline.json` is 100% verdict accuracy. `scripts/eval.test.ts` locks this report.
+`pnpm eval` replays 18 labeled issues through `templates/small-feature.yaml` and the gate. Each case copies `evals/sample-repo` into a scratch git repo, replays the model calls from the case's `cassette.jsonl`, copies the case's hidden tests in before `verify`, and runs `tsc --noEmit` and `vitest run` for real. A case is correct when its verdict matches `expected.json` and, when `expected.json` lists failed rules, the gate failed exactly those. The floor in `evals/baseline.json` is 100% verdict accuracy. `evals/README.md` describes each case.
 
 | Stat | Value |
 | --- | --- |
-| Cases | 17 |
-| Verdict accuracy | 17/17, 100.0% |
-| Opened good | 8/8 |
+| Cases | 18 |
+| Verdict accuracy | 18/18, 100.0% |
+| Resolve rate | 9/9, 100.0% |
 | Blocked bad | 9/9 |
+| Cost per resolved case | 0.029992 USD |
+| p50 step latency | 3195 ms |
 | Diff budget | 2 files, 16 lines |
+
+The costs and latencies come from cassettes whose token counts and durations are estimates. No case has a live recording yet. `pnpm eval:record` records the good cases against the live API.
 
 | Case | Issue | Verdict | Files | Lines | Failed |
 | --- | --- | --- | --- | --- | --- |
@@ -135,7 +139,7 @@ Plan the stub change.
 | 07-format-label | Add an uppercase label | opened | 1 | 4 | |
 | 08-reject-empty-notes | Reject empty note text | opened | 1 | 3 | |
 | 09-failing-hidden-test | Match uppercase true | blocked | 1 | 2 | tests |
-| 10-empty-plan | Rename the helpers | blocked | 0 | 0 | plan step |
+| 10-empty-plan | Rename the helpers | failed | 0 | 0 | plan step |
 | 11-wide-touch | Mark every helper | blocked | 4 | 4 | budget |
 | 12-long-readme | Rewrite the readme | blocked | 1 | 31 | budget |
 | 13-type-error | Add a percent formatter | blocked | 1 | 5 | typecheck |
@@ -143,8 +147,9 @@ Plan the stub change.
 | 15-planted-secret | Add request headers | blocked | 1 | 3 | secrets |
 | 16-whitespace-only | Tidy the counter | blocked | 1 | 4 | diff |
 | 17-review-notes | Add decrementBy | blocked | 1 | 4 | review |
+| 18-live-edit | Show large counts in compact form | opened | 2 | 11 | |
 
-`09-failing-hidden-test` passes the visible tests and fails the hidden one. Verify loops back to implement twice, the recorded implementer makes no further edit, and the last pass hands the failure to the gate. `13-type-error` passes `vitest run` and fails `tsc --noEmit`. `10-empty-plan` replays `steps: []`, so the plan step fails its schema twice and the run stops before the gate. No case fails the `plan` or `contracts` rule. Each model step parses its output with the same schema those rules use, so a run that reaches the gate passes both.
+`18-live-edit` fails its hidden test on the first attempt, loops back to implement once, and opens on the second attempt. `pnpm eval -- --write` writes `evals/report.json` and one RunRecord per case under `evals/runs/`. A plain `pnpm eval` fails when those committed files differ from a fresh run.
 
 ## Traces
 
@@ -160,17 +165,15 @@ The labeled-issue workflow sets `THIN_PR_TRACE_PATH` to `artifacts/trace.json` a
 
 ## Judge
 
-`pnpm eval:judge` replays the 17 eval cases and scores each run with the rubric in `packages/specialists/src/judge.ts`. The judge reads each run's step outputs, the measured diff, and the check results. The rules are `plan`, `files`, `tests`, and `review`. A case passes when every rule passes. The command prints a verdict and a reason for each rule. It exits non-zero when the pass rate is below `evals/judge-baseline.json`.
+The judge grades what the gate's rules cannot see: plan relevance, a minimal diff, the adequacy of any added tests, and review quality. Each criterion is `pass` or `fail` with a reason. The judge is `claude-sonnet-5-5` at medium effort with a structured output. `pnpm eval:judge -- --record` sends every case in one Message Batches request at half price and writes `evals/judge-cassette.jsonl`. `pnpm eval:judge` replays that cassette offline.
 
-On the committed cases the rate is 12/17, printed as 70.6%. `09-failing-hidden-test` through `13-type-error` fail the judge. The rubric does not read paths, secrets, or whitespace, so `14-denied-path`, `15-planted-secret`, `16-whitespace-only`, and `17-review-notes` pass the judge and fail the gate. The rubric report is `docs/demo/judge-report.txt`.
+Each case has a human label per criterion in `evals/cases/<id>/judge.json`. The report prints the judge's agreement with those labels. The floor in `evals/judge-baseline.json` is 90%. A judge that passes everything would agree on 61 of 72 labels, 84.7%.
 
-CI runs `pnpm eval:judge` with `THIN_PR_JUDGE` and `THIN_PR_MODEL` unset. Unset means the rubric.
-
-The live judge runs when `THIN_PR_JUDGE` is `live`, `THIN_PR_MODEL` is `live`, and `ANTHROPIC_API_KEY` is set. `createJudge` sends the same rubric to `claude-haiku-5-5` as a structured-output request, with `thinking` set to `{ "type": "adaptive" }` and `output_config.effort` set to `low`. The request omits `temperature`, `top_p`, and `top_k`. `docs/demo/judge-live.txt` is one live run of the earlier set of 12 cases, before the checks ran for real. The pass rate is 9/12. The spend line is `live spend: 0.002965 USD`.
+The judge cassette is not recorded yet. Until it is, `pnpm eval:judge` prints `judge cassette: not recorded.` and exits 0.
 
 ## Actions
 
-GitHub Actions is the runtime for this repo. `.github/workflows/thin-pr.yml` on the default branch starts a run when an issue is labeled `thin-pr`. `.github/workflows/ci.yml` runs lint, typecheck, test, `pnpm eval`, `pnpm eval:judge`, and `pnpm trace` on pull requests and on pushes to `main`. CI uploads `judge-report` and `thin-pr-trace`.
+GitHub Actions is the runtime for this repo. `.github/workflows/thin-pr.yml` on the default branch starts a run when an issue is labeled `thin-pr`. `.github/workflows/ci.yml` runs lint, typecheck, test, `pnpm eval`, `pnpm eval:judge`, and `pnpm trace` on pull requests and on pushes to `main`. CI uploads `judge-report` and `thin-pr-trace`. `.github/workflows/nightly-eval.yml` records the good cases live, writes the report, and runs the batch judge every night. It uploads the results and pushes nothing.
 
 [Run 41337742137](https://github.com/kocherev/thin-pr-orchestrator/actions/runs/41337742137) is the green CI run for this branch. It executed lint, typecheck, test, `pnpm eval`, `pnpm eval:judge`, and `pnpm trace`, and it uploaded `judge-report` and `thin-pr-trace`. The Actions list has no completed run of the Thin PR workflow. That workflow runs from the default branch.
 
@@ -194,8 +197,9 @@ corepack prepare pnpm@10.33.4 --activate
 - `pnpm lint` runs ESLint, then `scripts/check-core-boundary.ts`.
 - `pnpm typecheck` runs `tsc -b`.
 - `pnpm test` runs Vitest.
-- `pnpm eval` replays `evals/` and prints the report above. It exits non-zero when the verdict accuracy is below `evals/baseline.json`.
-- `pnpm eval:judge` scores the same 17 cases with the judge rubric. It exits non-zero when the pass rate is below `evals/judge-baseline.json`.
+- `pnpm eval` replays `evals/` and prints the report above. It exits non-zero when the verdict accuracy is below `evals/baseline.json` or the committed report is stale. `pnpm eval -- --write` rewrites the report.
+- `pnpm eval:record <case|--all>` records cases against the live API. It needs `ANTHROPIC_API_KEY`.
+- `pnpm eval:judge` replays the judge over the same 18 cases. It exits non-zero when the agreement with the human labels is below `evals/judge-baseline.json`.
 - `pnpm trace` writes an OTLP JSON trace for the `run-7` replay. Set `THIN_PR_TRACE_PATH` to choose the file.
 - `pnpm build` runs `tsc -b` and writes `dist/` in each project.
 - `pnpm thin-pr run --repo <path> --issue <file | text>` runs an issue against a local checkout without GitHub. `docs/mcp.md` covers it and the MCP server.
@@ -224,7 +228,7 @@ The core replay test writes a SQLite log, closes it, opens it again, and expects
 
 ## Replay and live
 
-`pnpm test`, `pnpm eval`, and `.github/workflows/ci.yml` replay cassettes. They do not call a model API. A cassette is one JSON line per model call: the specialist, the model id, the messages sent, and the response. Replay hands out the calls in order per specialist and fails when a request asks for a different model or runs past the end. The eval cassettes and `fixtures/gate-*.jsonl` were converted from earlier recorded replies, so their usage numbers are estimates and each line says `"source":"converted"`.
+`pnpm test`, `pnpm eval`, and `.github/workflows/ci.yml` replay cassettes. They do not call a model API. A cassette is one JSON line per model call: the specialist, the model id, the messages sent, and the response. Replay hands out the calls in order per specialist and fails when a request asks for a different model or runs past the end. The eval cassettes and `fixtures/gate-*.jsonl` were converted from earlier recorded replies or written through the scripted upstream, so their usage numbers are estimates and each line says `"source":"converted"` or `"source":"scripted"`.
 
 `THIN_PR_MODEL` is `live`, `record`, or `replay`, and `replay` is the default. `record` and `replay` read the cassette path from `THIN_PR_CASSETTE`. Live and record calls stop before a request that could pass `THIN_PR_SPEND_LIMIT_USD`, 25 by default. The labeled-issue Action defaults to `live` instead. Without the `ANTHROPIC_API_KEY` secret it fails the run, and the issue comment says the key is missing. CI does not set either variable.
 
@@ -248,7 +252,7 @@ That image is a still of the live draft diff. It is not a screen recording of th
 
 ## CI
 
-`.github/workflows/ci.yml` runs lint, typecheck, test, `pnpm eval`, `pnpm eval:judge`, and `pnpm trace` on pull requests and on pushes to `main`. Eval fails when the verdict accuracy drops below `evals/baseline.json`. The judge fails when its pass rate drops below `evals/judge-baseline.json`. The trace step writes `artifacts/trace.json` and uploads it.
+`.github/workflows/ci.yml` runs lint, typecheck, test, `pnpm eval`, `pnpm eval:judge`, and `pnpm trace` on pull requests and on pushes to `main`. Eval fails when the verdict accuracy drops below `evals/baseline.json` or the committed report is stale. The judge fails when its agreement drops below `evals/judge-baseline.json`. The trace step writes `artifacts/trace.json` and uploads it.
 
 ## Working notes
 
@@ -256,8 +260,8 @@ See `AGENTS.md` and `.agents/skills/` before changing the repo. The import ban f
 
 - `packages/core` runs a template, appends every step event to SQLite, and imports no model client. `pnpm lint` fails when that package imports one. `packages/core/src/run.test.ts` expects `replay` to match `runWorkflow`.
 - `packages/github` opens a draft pull request only when every gate rule passes. A failed rule comments `## Run report` on the issue and does not open a pull request. The check is `packages/github/src/run.test.ts`.
-- `pnpm eval` replays 17 labeled issues offline with real checks. The floor in `evals/baseline.json` is 100%, and the report prints `verdict accuracy: 17/17 (100.0%)`.
-- `pnpm eval:judge` prints `judge pass rate: 12/17 (70.6%)` on those cases. The rubric report is `docs/demo/judge-report.txt`. The live run is `docs/demo/judge-live.txt`.
+- `pnpm eval` replays 18 labeled issues offline with real checks. The floor in `evals/baseline.json` is 100%, and the report prints `verdict accuracy: 18/18 (100.0%)`.
+- `pnpm eval:judge` compares the judge with the human labels in `evals/cases/<id>/judge.json`. The judge cassette is not recorded yet.
 - `docs/demo/trace.json` is the OTLP JSON from one `pnpm trace` of run `run-7`.
 
 ## License

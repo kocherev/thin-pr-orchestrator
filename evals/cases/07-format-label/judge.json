@@ -1,0 +1,7 @@
+{
+  "plan_relevance": "pass",
+  "minimal_diff": "pass",
+  "test_adequacy": "pass",
+  "review_quality": "pass",
+  "note": "formatLabel upper-cases its input as the title asks. No tests were added. The approval fits."
+}

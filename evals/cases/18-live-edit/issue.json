@@ -1,0 +1,18 @@
+{
+  "action": "labeled",
+  "label": {
+    "name": "thin-pr"
+  },
+  "issue": {
+    "number": 18,
+    "title": "Show large counts in compact form",
+    "body": "formatCount in src/format.ts should render counts of 1000 or more in compact form, like 1.2k and 3.4M. Keep one decimal and drop a trailing .0."
+  },
+  "repository": {
+    "name": "sample-repo",
+    "default_branch": "main",
+    "owner": {
+      "login": "example"
+    }
+  }
+}

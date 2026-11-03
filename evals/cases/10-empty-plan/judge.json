@@ -1,0 +1,7 @@
+{
+  "plan_relevance": "fail",
+  "minimal_diff": "pass",
+  "test_adequacy": "pass",
+  "review_quality": "fail",
+  "note": "The plan has no steps, so the run stopped at plan. There is no diff to judge for size and no tests. There is no review."
+}

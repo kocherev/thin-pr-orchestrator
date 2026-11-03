@@ -1,0 +1,255 @@
+{
+  "version": 1,
+  "runId": "eval-09-failing-hidden-test",
+  "repo": "example/sample-repo",
+  "issue": {
+    "number": 9,
+    "title": "Match uppercase true",
+    "url": "https://github.com/example/sample-repo/issues/9"
+  },
+  "template": "small-feature",
+  "status": "blocked",
+  "steps": [
+    {
+      "id": "plan",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:40:44.000Z",
+      "durationMs": 3195,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 318,
+          "outputTokens": 153,
+          "cacheReadTokens": 0,
+          "costUsd": 0.002166,
+          "durationMs": 3195
+        }
+      ],
+      "summary": "Accept TRUE in parseFlag."
+    },
+    {
+      "id": "implement",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:40:47.195Z",
+      "durationMs": 9375,
+      "usage": [
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 794,
+          "outputTokens": 143,
+          "cacheReadTokens": 0,
+          "costUsd": 0.006036,
+          "durationMs": 3045
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 893,
+          "outputTokens": 168,
+          "cacheReadTokens": 0,
+          "costUsd": 0.006932,
+          "durationMs": 3420
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 980,
+          "outputTokens": 134,
+          "cacheReadTokens": 0,
+          "costUsd": 0.0066,
+          "durationMs": 2910
+        }
+      ],
+      "summary": "Accept a capitalized true."
+    },
+    {
+      "id": "verify",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "looped",
+      "startedAt": "2026-11-02T16:40:56.570Z",
+      "durationMs": 0,
+      "usage": [],
+      "summary": "test failed (exit 1): vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1\n\n RUN  v5.0.5 .\n\n ❯ test/hidden/parse.test.ts (1 test | 1 failed)\n   × reads TRUE as true\n\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  test/hidden/parse.test.ts > reads TRUE as true\nAssertionError: expected null to be true // Object.is equality\n\n- Expected:\ntrue\n\n+ Received:\nnull\n\n ❯ test/hidden/parse.test.ts:5:29\n      3|\n      4| it(\"reads TRUE as true\", () => {\n      5|   expect(parseFlag(\"TRUE\")).toBe(true);\n       |                             ^\n      6|   expect(parseFlag(\"true\")).toBe(true);\n      7| });\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n\n Test Files  1 failed | 4 passed (5)\n      Tests  1 failed | 4 passed (5)\n\n"
+    },
+    {
+      "id": "implement",
+      "attempt": 1,
+      "loop": 1,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:40:56.570Z",
+      "durationMs": 2910,
+      "usage": [
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1022,
+          "outputTokens": 134,
+          "cacheReadTokens": 0,
+          "costUsd": 0.006768,
+          "durationMs": 2910
+        }
+      ],
+      "summary": "Accept a capitalized true."
+    },
+    {
+      "id": "verify",
+      "attempt": 1,
+      "loop": 1,
+      "outcome": "looped",
+      "startedAt": "2026-11-02T16:40:59.480Z",
+      "durationMs": 0,
+      "usage": [],
+      "summary": "test failed (exit 1): vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1\n\n RUN  v5.0.5 .\n\n ❯ test/hidden/parse.test.ts (1 test | 1 failed)\n   × reads TRUE as true\n\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  test/hidden/parse.test.ts > reads TRUE as true\nAssertionError: expected null to be true // Object.is equality\n\n- Expected:\ntrue\n\n+ Received:\nnull\n\n ❯ test/hidden/parse.test.ts:5:29\n      3|\n      4| it(\"reads TRUE as true\", () => {\n      5|   expect(parseFlag(\"TRUE\")).toBe(true);\n       |                             ^\n      6|   expect(parseFlag(\"true\")).toBe(true);\n      7| });\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n\n Test Files  1 failed | 4 passed (5)\n      Tests  1 failed | 4 passed (5)\n\n"
+    },
+    {
+      "id": "implement",
+      "attempt": 1,
+      "loop": 2,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:40:59.480Z",
+      "durationMs": 2910,
+      "usage": [
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1022,
+          "outputTokens": 134,
+          "cacheReadTokens": 0,
+          "costUsd": 0.006768,
+          "durationMs": 2910
+        }
+      ],
+      "summary": "Accept a capitalized true."
+    },
+    {
+      "id": "verify",
+      "attempt": 1,
+      "loop": 2,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:41:02.390Z",
+      "durationMs": 0,
+      "usage": [],
+      "summary": "typecheck passed; test failed (exit 1)."
+    },
+    {
+      "id": "review",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:41:02.390Z",
+      "durationMs": 3120,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 667,
+          "outputTokens": 148,
+          "cacheReadTokens": 0,
+          "costUsd": 0.002814,
+          "durationMs": 3120
+        }
+      ],
+      "summary": "Lowercase true still parses."
+    },
+    {
+      "id": "write",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:41:05.510Z",
+      "durationMs": 3210,
+      "usage": [
+        {
+          "model": "claude-haiku-5-5",
+          "inputTokens": 336,
+          "outputTokens": 154,
+          "cacheReadTokens": 0,
+          "costUsd": 0.00011059999999999999,
+          "durationMs": 3210
+        }
+      ],
+      "summary": "pass"
+    }
+  ],
+  "gate": [
+    {
+      "rule": "plan",
+      "verdict": "PASS",
+      "reason": "Plan is present (1 step)."
+    },
+    {
+      "rule": "contracts",
+      "verdict": "PASS",
+      "reason": "Step outputs match their contracts."
+    },
+    {
+      "rule": "diff",
+      "verdict": "PASS",
+      "reason": "Diff is present (1 file, 2 lines)."
+    },
+    {
+      "rule": "budget",
+      "verdict": "PASS",
+      "reason": "Diff is within the budget (1 file, 2 lines; limit 2 files, 16 lines)."
+    },
+    {
+      "rule": "paths",
+      "verdict": "PASS",
+      "reason": "Every changed path is allowed."
+    },
+    {
+      "rule": "secrets",
+      "verdict": "PASS",
+      "reason": "No added line looks like a secret."
+    },
+    {
+      "rule": "typecheck",
+      "verdict": "PASS",
+      "reason": "Typecheck passed: tsc --noEmit"
+    },
+    {
+      "rule": "tests",
+      "verdict": "FAIL",
+      "reason": "Tests failed (exit 1): vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1"
+    },
+    {
+      "rule": "review",
+      "verdict": "PASS",
+      "reason": "Reviewer approved."
+    }
+  ],
+  "diff": {
+    "files": [
+      {
+        "path": "src/parse.ts",
+        "added": 1,
+        "removed": 1
+      }
+    ],
+    "meaningful": true,
+    "patch": "diff --git a/src/parse.ts b/src/parse.ts\nindex 9b0460c..6d532e8 100644\n--- a/src/parse.ts\n+++ b/src/parse.ts\n@@ -1,5 +1,5 @@\n export function parseFlag(text: string): boolean | null {\n-  if (text === \"true\") {\n+  if (text === \"true\" || text === \"True\") {\n     return true;\n   }\n   if (text === \"false\") {\n"
+  },
+  "checks": [
+    {
+      "name": "typecheck",
+      "command": "tsc --noEmit",
+      "exitCode": 0,
+      "durationMs": 0,
+      "logTail": ""
+    },
+    {
+      "name": "test",
+      "command": "vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1",
+      "exitCode": 1,
+      "durationMs": 0,
+      "logTail": "\n RUN  v5.0.5 .\n\n ❯ test/hidden/parse.test.ts (1 test | 1 failed)\n   × reads TRUE as true\n\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  test/hidden/parse.test.ts > reads TRUE as true\nAssertionError: expected null to be true // Object.is equality\n\n- Expected:\ntrue\n\n+ Received:\nnull\n\n ❯ test/hidden/parse.test.ts:5:29\n      3|\n      4| it(\"reads TRUE as true\", () => {\n      5|   expect(parseFlag(\"TRUE\")).toBe(true);\n       |                             ^\n      6|   expect(parseFlag(\"true\")).toBe(true);\n      7| });\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n\n Test Files  1 failed | 4 passed (5)\n      Tests  1 failed | 4 passed (5)\n\n"
+    }
+  ],
+  "pullRequest": null,
+  "totals": {
+    "costUsd": 0.038194599999999995,
+    "durationMs": 24720,
+    "inputTokens": 6032,
+    "outputTokens": 1168
+  }
+}

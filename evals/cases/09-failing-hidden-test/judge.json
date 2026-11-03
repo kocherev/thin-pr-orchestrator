@@ -1,0 +1,7 @@
+{
+  "plan_relevance": "pass",
+  "minimal_diff": "pass",
+  "test_adequacy": "pass",
+  "review_quality": "fail",
+  "note": "The plan targets the right function and the diff is small, but it accepts True instead of TRUE. The test check failed and the review still approved."
+}

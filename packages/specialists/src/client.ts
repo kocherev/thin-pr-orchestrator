@@ -62,14 +62,15 @@ export function clientOptionsFromEnv(env: Record<string, string | undefined> = p
   return { mode, cassettePath };
 }
 
-function requireKey(key: string | undefined): string {
+export function requireKey(key: string | undefined): string {
   if (!key) {
     throw new Error("ANTHROPIC_API_KEY is missing");
   }
   return key;
 }
 
-function spendLimitFrom(env: Record<string, string | undefined>): number {
+/** `THIN_PR_SPEND_LIMIT_USD`, or 25 when it is unset. */
+export function spendLimitFrom(env: Record<string, string | undefined>): number {
   const raw = env.THIN_PR_SPEND_LIMIT_USD;
   if (raw === undefined || raw === "") {
     return DEFAULT_SPEND_LIMIT_USD;

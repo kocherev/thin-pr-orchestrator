@@ -1,0 +1,212 @@
+{
+  "version": 1,
+  "runId": "eval-11-wide-touch",
+  "repo": "example/sample-repo",
+  "issue": {
+    "number": 11,
+    "title": "Mark every helper",
+    "url": "https://github.com/example/sample-repo/issues/11"
+  },
+  "template": "small-feature",
+  "status": "blocked",
+  "steps": [
+    {
+      "id": "plan",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:40:44.000Z",
+      "durationMs": 3180,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 314,
+          "outputTokens": 152,
+          "cacheReadTokens": 0,
+          "costUsd": 0.002148,
+          "durationMs": 3180
+        }
+      ],
+      "summary": "Mark each helper file."
+    },
+    {
+      "id": "implement",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:40:47.180Z",
+      "durationMs": 13620,
+      "usage": [
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 788,
+          "outputTokens": 211,
+          "cacheReadTokens": 0,
+          "costUsd": 0.007372,
+          "durationMs": 4065
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1085,
+          "outputTokens": 384,
+          "cacheReadTokens": 0,
+          "costUsd": 0.01202,
+          "durationMs": 6660
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1462,
+          "outputTokens": 133,
+          "cacheReadTokens": 0,
+          "costUsd": 0.008508,
+          "durationMs": 2895
+        }
+      ],
+      "summary": "Mark the helper files."
+    },
+    {
+      "id": "verify",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:41:00.800Z",
+      "durationMs": 0,
+      "usage": [],
+      "summary": "typecheck passed; test passed."
+    },
+    {
+      "id": "review",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:41:00.800Z",
+      "durationMs": 3090,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 699,
+          "outputTokens": 146,
+          "cacheReadTokens": 0,
+          "costUsd": 0.002858,
+          "durationMs": 3090
+        }
+      ],
+      "summary": "Behavior is unchanged."
+    },
+    {
+      "id": "write",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-02T16:41:03.890Z",
+      "durationMs": 3195,
+      "usage": [
+        {
+          "model": "claude-haiku-5-5",
+          "inputTokens": 340,
+          "outputTokens": 153,
+          "cacheReadTokens": 0,
+          "costUsd": 0.0001105,
+          "durationMs": 3195
+        }
+      ],
+      "summary": "pass"
+    }
+  ],
+  "gate": [
+    {
+      "rule": "plan",
+      "verdict": "PASS",
+      "reason": "Plan is present (1 step)."
+    },
+    {
+      "rule": "contracts",
+      "verdict": "PASS",
+      "reason": "Step outputs match their contracts."
+    },
+    {
+      "rule": "diff",
+      "verdict": "PASS",
+      "reason": "Diff is present (4 files, 4 lines)."
+    },
+    {
+      "rule": "budget",
+      "verdict": "FAIL",
+      "reason": "Diff exceeds the budget (4 files, 4 lines; limit 2 files, 16 lines)."
+    },
+    {
+      "rule": "paths",
+      "verdict": "PASS",
+      "reason": "Every changed path is allowed."
+    },
+    {
+      "rule": "secrets",
+      "verdict": "PASS",
+      "reason": "No added line looks like a secret."
+    },
+    {
+      "rule": "typecheck",
+      "verdict": "PASS",
+      "reason": "Typecheck passed: tsc --noEmit"
+    },
+    {
+      "rule": "tests",
+      "verdict": "PASS",
+      "reason": "Tests passed: vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1"
+    },
+    {
+      "rule": "review",
+      "verdict": "PASS",
+      "reason": "Reviewer approved."
+    }
+  ],
+  "diff": {
+    "files": [
+      {
+        "path": "src/counter.ts",
+        "added": 1,
+        "removed": 0
+      },
+      {
+        "path": "src/format.ts",
+        "added": 1,
+        "removed": 0
+      },
+      {
+        "path": "src/notes.ts",
+        "added": 1,
+        "removed": 0
+      },
+      {
+        "path": "src/parse.ts",
+        "added": 1,
+        "removed": 0
+      }
+    ],
+    "meaningful": true,
+    "patch": "diff --git a/src/counter.ts b/src/counter.ts\nindex d36f7d7..5579335 100644\n--- a/src/counter.ts\n+++ b/src/counter.ts\n@@ -1,3 +1,4 @@\n+// Keep this helper in the sample tree.\n export function increment(value: number): number {\n   return value + 1;\n }\ndiff --git a/src/format.ts b/src/format.ts\nindex c4cc2f1..1a0ee37 100644\n--- a/src/format.ts\n+++ b/src/format.ts\n@@ -1,3 +1,4 @@\n+// Keep this helper in the sample tree.\n export function formatCount(value: number): string {\n   return String(value);\n }\ndiff --git a/src/notes.ts b/src/notes.ts\nindex db28111..6862138 100644\n--- a/src/notes.ts\n+++ b/src/notes.ts\n@@ -1,3 +1,4 @@\n+// Keep this helper in the sample tree.\n export function splitNotes(text: string): string[] {\n   return text.split(\"\\n\");\n }\ndiff --git a/src/parse.ts b/src/parse.ts\nindex 9b0460c..961e817 100644\n--- a/src/parse.ts\n+++ b/src/parse.ts\n@@ -1,3 +1,4 @@\n+// Keep this helper in the sample tree.\n export function parseFlag(text: string): boolean | null {\n   if (text === \"true\") {\n     return true;\n"
+  },
+  "checks": [
+    {
+      "name": "typecheck",
+      "command": "tsc --noEmit",
+      "exitCode": 0,
+      "durationMs": 0,
+      "logTail": ""
+    },
+    {
+      "name": "test",
+      "command": "vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1",
+      "exitCode": 0,
+      "durationMs": 0,
+      "logTail": "\n RUN  v5.0.5 .\n\n\n Test Files  4 passed (4)\n      Tests  4 passed (4)\n\n"
+    }
+  ],
+  "pullRequest": null,
+  "totals": {
+    "costUsd": 0.0330165,
+    "durationMs": 23085,
+    "inputTokens": 4688,
+    "outputTokens": 1179
+  }
+}

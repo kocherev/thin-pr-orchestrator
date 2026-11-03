@@ -1,165 +1,135 @@
 import { describe, expect, it } from "vitest";
 import {
-  createJudge,
-  judgePrompt,
-  judgeReplay,
+  costOf,
   JUDGE_EFFORT,
   JUDGE_MODEL,
-  parseJudgeText,
-  type CheckResult,
+  judgeRequest,
+  readJudgeResult,
+  runJudgeBatch,
+  scriptedBatchUpstream,
+  SpendLimitError,
   type JudgeSubject,
+  type JudgeVerdict,
 } from "./index.js";
 
-describe("judge rubric", () => {
-  it("fails an empty plan", () => {
-    const verdict = judgeReplay(
-      subject({
-        plan: { summary: "Rename the helpers.", steps: [] },
-        review: { summary: "No behavior changed.", verdict: "approve", notes: [] },
-      }),
-    );
-    expect(verdict.verdict).toBe("fail");
-    expect(verdict.reasons.map((reason) => reason.rule)).toEqual(["plan", "files", "tests", "review"]);
-    expect(verdict.reasons[0]).toMatchObject({ verdict: "fail", reason: "Plan has no steps." });
-    expect(verdict.reasons[2]).toMatchObject({ verdict: "fail", reason: "Checks passed without a plan." });
-    expect(verdict.reasons[3]).toMatchObject({ verdict: "fail", reason: "Review has no notes for an empty plan." });
-  });
+describe("batch judge", () => {
+  it("sends every run in one batch, polls until it ends, and reads a verdict per case", async () => {
+    const sent: { method: string; path: string; beta: string | null; body: string }[] = [];
+    const upstream = scriptedBatchUpstream({ "01-clamp-decrement": passing(), "09-failing-hidden-test": failingReview() });
+    const fetchImpl: typeof fetch = async (url, init) => {
+      const headers = new Headers(init?.headers);
+      sent.push({ method: init?.method ?? "GET", path: new URL(String(url)).pathname, beta: headers.get("anthropic-beta"), body: String(init?.body ?? "") });
+      return upstream(url, init);
+    };
+    const polls: string[] = [];
 
-  it("fails a review that ignores an over-budget diff", () => {
-    const verdict = judgeReplay(
-      subject({
-        files: 4,
-        lines: 4,
-        changes: ["src/counter.ts", "src/format.ts", "src/notes.ts", "src/parse.ts"],
-        implement: {
-          summary: "Mark the helper files.",
-          files: ["src/counter.ts", "src/format.ts", "src/notes.ts", "src/parse.ts"],
-        },
-      }),
-    );
-    expect(verdict.verdict).toBe("fail");
-    expect(verdict.reasons[3]).toMatchObject({
-      verdict: "fail",
-      reason: "Review has no notes for a diff over the budget (4 files, 4 lines).",
+    const results = await runJudgeBatch([judgeRequest(subject("01-clamp-decrement")), judgeRequest(subject("09-failing-hidden-test"))], {
+      apiKey: "test-key",
+      spendLimitUsd: 25,
+      pollMs: 0,
+      fetch: fetchImpl,
+      onPoll: (batch) => polls.push(batch.processing_status),
     });
+
+    expect(sent.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "POST /v1/messages/batches",
+      "GET /v1/messages/batches/msgbatch_scripted",
+      "GET /v1/messages/batches/msgbatch_scripted",
+      "GET /v1/messages/batches/msgbatch_scripted/results",
+    ]);
+    expect(polls).toEqual(["in_progress"]);
+    expect(sent[0]?.beta).toContain("message-batches-2024-09-24");
+    const body = JSON.parse(sent[0]?.body ?? "{}") as { requests: { custom_id: string; params: Record<string, unknown> }[] };
+    expect(body.requests.map((request) => request.custom_id)).toEqual(["01-clamp-decrement", "09-failing-hidden-test"]);
+    const params = body.requests[0]?.params ?? {};
+    expect(params).toMatchObject({
+      model: "claude-sonnet-5-5",
+      thinking: { type: "adaptive" },
+      output_config: { effort: "medium", format: { type: "json_schema" } },
+    });
+    expect(params).not.toHaveProperty("temperature");
+    expect(params).not.toHaveProperty("top_p");
+    expect(params).not.toHaveProperty("top_k");
+    expect(JSON.stringify(params.messages)).toContain("<issue>\\nClamp decrement at zero");
+    expect(JSON.stringify(params)).not.toContain("test-key");
+
+    const read = results.map((result) => ({ id: result.custom_id, ...readJudgeResult(result.result) }));
+    expect(read.map((result) => (result.outcome === "graded" ? result.verdict.review_quality.verdict : result.error))).toEqual(["pass", "fail"]);
+    const usage = results[0]?.result.type === "succeeded" ? results[0].result.message.usage : null;
+    if (!usage) throw new Error("no usage");
+    // Batch requests cost half the standard rate.
+    expect(read[0]?.costUsd).toBeCloseTo(costOf(JUDGE_MODEL, usage) / 2, 12);
+    expect(JUDGE_EFFORT).toBe("medium");
   });
 
-  it("passes when a check fails and the review notes it", () => {
-    const verdict = judgeReplay(
-      subject({
-        checks: [check("typecheck", 0), check("test", 1)],
-        review: {
-          summary: "The check is case-sensitive.",
-          verdict: "changes_requested",
-          notes: ["The recorded tests did not pass."],
-        },
-      }),
-    );
-    expect(verdict.verdict).toBe("pass");
-    expect(verdict.reasons.map((reason) => reason.verdict)).toEqual(["pass", "pass", "pass", "pass"]);
-    expect(verdict.reasons[2]?.reason).toBe("Checks did not pass and the review notes say so.");
+  it("reports a missing reply, a refusal, a cut-off reply and a reply off the schema as errors", async () => {
+    const results = await runJudgeBatch([judgeRequest(subject("01-clamp-decrement")), judgeRequest(subject("02-thousands-separator"))], {
+      apiKey: "test-key",
+      spendLimitUsd: 25,
+      pollMs: 0,
+      fetch: scriptedBatchUpstream({ "01-clamp-decrement": { plan_relevance: { verdict: "pass", reason: "Only one." } } }),
+    });
+    expect(results.map((result) => readJudgeResult(result.result))).toEqual([
+      expect.objectContaining({ outcome: "error", error: expect.stringContaining("judge output invalid at minimal_diff") }),
+      { outcome: "error", error: "the request errored: invalid_request_error: no scripted reply for 02-thousands-separator", costUsd: 0 },
+    ]);
+
+    const message = (stop_reason: string, text: string, category: string | null = null) => ({
+      type: "succeeded",
+      message: {
+        model: JUDGE_MODEL,
+        stop_reason,
+        stop_details: category ? { type: "refusal", category } : null,
+        content: [{ type: "text", text }],
+        usage: { input_tokens: 1000, output_tokens: 100 },
+      },
+    });
+    expect(readJudgeResult(message("refusal", "", "cyber"))).toMatchObject({
+      outcome: "error",
+      error: "judge request was refused by claude-sonnet-5-5 (category: cyber)",
+    });
+    expect(readJudgeResult(message("max_tokens", "{"))).toMatchObject({ outcome: "error", error: "judge reply was cut off at max_tokens 16000" });
+    expect(readJudgeResult(message("end_turn", "not json"))).toMatchObject({ outcome: "error", error: "judge output invalid at (root): reply is not JSON" });
+    expect(readJudgeResult({ type: "expired" })).toEqual({ outcome: "error", error: "the request expired", costUsd: 0 });
+    expect(readJudgeResult({ nope: true })).toEqual({ outcome: "error", error: "the result is not a message batch result", costUsd: 0 });
+    expect(readJudgeResult(message("end_turn", JSON.stringify(passing())))).toMatchObject({ outcome: "graded", verdict: passing() });
   });
 
-  it("fails failed checks that the review does not mention", () => {
-    const verdict = judgeReplay(subject({ checks: [check("typecheck", 2), check("test", 0)] }));
-    expect(verdict.reasons[2]).toMatchObject({ verdict: "fail", reason: "Checks did not pass and the review has no notes." });
-    expect(verdict.reasons[3]).toMatchObject({ verdict: "fail", reason: "Review has no notes for failed checks." });
-  });
-
-  it("stays on the rubric unless the live flags and a key are set", async () => {
+  it("refuses a batch whose largest output could pass the spend limit", async () => {
     const fetchImpl: typeof fetch = async () => {
       throw new Error("fetch should not run");
     };
-    await expect(createJudge({}, fetchImpl).judge(subject({}))).resolves.toMatchObject({ verdict: "pass" });
-    expect(createJudge({ THIN_PR_JUDGE: "replay", ANTHROPIC_API_KEY: "test-key" }, fetchImpl).spentUsd()).toBeNull();
-    expect(() => createJudge({ THIN_PR_JUDGE: "live", ANTHROPIC_API_KEY: "test-key" }, fetchImpl)).toThrow(
-      "THIN_PR_JUDGE=live requires THIN_PR_MODEL=live",
-    );
-    expect(() => createJudge({ THIN_PR_JUDGE: "live", THIN_PR_MODEL: "live" }, fetchImpl)).toThrow(
+    const requests = Array.from({ length: 4 }, (_, index) => judgeRequest(subject(`case-${index}`)));
+    // Four requests at 16,000 output tokens and half the Sonnet rate can cost 0.32 USD.
+    await expect(runJudgeBatch(requests, { apiKey: "test-key", spendLimitUsd: 0.3, pollMs: 0, fetch: fetchImpl })).rejects.toThrow(SpendLimitError);
+    await expect(runJudgeBatch(requests, { apiKey: undefined, spendLimitUsd: 25, pollMs: 0, fetch: fetchImpl })).rejects.toThrow(
       "ANTHROPIC_API_KEY is missing",
     );
   });
-
-  it("sends the rubric to claude-haiku-5-5 without sampling parameters", async () => {
-    let body = "";
-    const session = createJudge(
-      { THIN_PR_JUDGE: "live", THIN_PR_MODEL: "live", ANTHROPIC_API_KEY: "test-key" },
-      async (_url, init) => {
-        body = String(init?.body ?? "");
-        return Response.json({
-          id: "msg_1",
-          type: "message",
-          role: "assistant",
-          model: JUDGE_MODEL,
-          stop_reason: "end_turn",
-          stop_details: null,
-          content: [
-            { type: "thinking", thinking: "", signature: "sig" },
-            { type: "text", text: JSON.stringify(passingText()) },
-          ],
-          usage: { input_tokens: 100, output_tokens: 50 },
-        });
-      },
-    );
-
-    await expect(session.judge(subject({}))).resolves.toMatchObject({ verdict: "pass" });
-    const payload = JSON.parse(body) as Record<string, unknown>;
-    expect(payload.model).toBe(JUDGE_MODEL);
-    expect(payload.thinking).toEqual({ type: "adaptive" });
-    expect(payload.output_config).toMatchObject({ effort: JUDGE_EFFORT, format: { type: "json_schema" } });
-    expect(payload).not.toHaveProperty("temperature");
-    expect(payload).not.toHaveProperty("top_p");
-    expect(payload).not.toHaveProperty("top_k");
-    expect(JSON.stringify(payload.messages)).toContain("plan:");
-    expect(JSON.stringify(payload.messages)).not.toContain("test-key");
-    expect(judgePrompt(subject({}))).toContain("verdict is pass only when every rule is pass.");
-    expect(session.spentUsd()).toBeCloseTo((100 * 0.1 + 50 * 0.5) / 1_000_000);
-  });
-
-  it("rejects a verdict that disagrees with the rules", () => {
-    const text = JSON.stringify({
-      verdict: "pass",
-      reasons: [
-        { rule: "plan", verdict: "fail", reason: "Plan has no steps." },
-        { rule: "files", verdict: "pass", reason: "Files match." },
-        { rule: "tests", verdict: "pass", reason: "Tests passed." },
-        { rule: "review", verdict: "pass", reason: "Review is empty." },
-      ],
-    });
-    expect(() => parseJudgeText(text)).toThrow("judge verdict does not match the rules");
-  });
 });
 
-function passingText(): unknown {
+function passing(): JudgeVerdict {
   return {
-    verdict: "pass",
-    reasons: [
-      { rule: "plan", verdict: "pass", reason: "Plan has 1 step." },
-      { rule: "files", verdict: "pass", reason: "Files match." },
-      { rule: "tests", verdict: "pass", reason: "Checks passed." },
-      { rule: "review", verdict: "pass", reason: "Review notes are empty on a passing run." },
-    ],
+    plan_relevance: { verdict: "pass", reason: "The plan changes decrement only." },
+    minimal_diff: { verdict: "pass", reason: "One line changes." },
+    test_adequacy: { verdict: "pass", reason: "No tests were added." },
+    review_quality: { verdict: "pass", reason: "The approval matches a correct change." },
   };
 }
 
-function check(name: CheckResult["name"], exitCode: number): CheckResult {
-  return { name, command: name === "typecheck" ? "tsc --noEmit" : "vitest run", exitCode, durationMs: 400, logTail: "" };
+function failingReview(): JudgeVerdict {
+  return { ...passing(), review_quality: { verdict: "fail", reason: "The review approves a failing test." } };
 }
 
-function subject(overrides: Partial<JudgeSubject>): JudgeSubject {
+function subject(caseId: string): JudgeSubject {
   return {
-    id: "01-clamp-decrement",
-    issueTitle: "Clamp decrement at zero",
-    issueBody: "decrement in src/counter.ts should not return a negative count.",
+    caseId,
+    issue: "Clamp decrement at zero\n\ndecrement in src/counter.ts should not return a negative count.",
+    status: "opened",
+    error: null,
     plan: { summary: "Stop decrement from going below zero.", steps: ["Change decrement in src/counter.ts"] },
-    implement: { summary: "Clamp decrement at zero.", files: ["src/counter.ts"] },
-    checks: [check("typecheck", 0), check("test", 0)],
+    patch: "-  return value - 1;\n+  return Math.max(0, value - 1);",
+    checks: [{ name: "test", command: "vitest run", exitCode: 0, durationMs: 0, logTail: "" }],
     review: { summary: "The clamp matches the issue.", verdict: "approve", notes: [] },
-    changes: ["src/counter.ts"],
-    files: 1,
-    lines: 2,
-    maxFiles: 2,
-    maxLines: 16,
-    ...overrides,
   };
 }

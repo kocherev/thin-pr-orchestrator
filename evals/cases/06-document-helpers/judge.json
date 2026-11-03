@@ -1,0 +1,7 @@
+{
+  "plan_relevance": "pass",
+  "minimal_diff": "pass",
+  "test_adequacy": "pass",
+  "review_quality": "fail",
+  "note": "The plan and the one README line do what the issue asks. This case starts from the base sample repo, which exports no reset, so the line documents a missing function. The review says the bullet matches the helper, which is false."
+}

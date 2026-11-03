@@ -1,0 +1,68 @@
+name: Nightly eval
+
+# Records the good cases against the live API, writes the report, and grades the runs with the batch judge.
+# Nothing is pushed. The results are artifacts. CI on pull requests and main never waits on this workflow.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: nightly-eval
+  cancel-in-progress: false
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # Each command stops before a request that could pass this many USD.
+      THIN_PR_SPEND_LIMIT_USD: "15"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Record live cassettes
+        run: pnpm eval:record --all
+
+      - name: Write the report
+        run: pnpm eval -- --write
+
+      - name: Judge in one batch
+        if: ${{ !cancelled() }}
+        env:
+          THIN_PR_JUDGE_REPORT: artifacts/judge-report.txt
+        run: pnpm eval:judge -- --record
+
+      - name: Upload results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-eval
+          path: |
+            evals/report.json
+            evals/runs/
+            evals/cases/*/cassette.jsonl
+            evals/judge-cassette.jsonl
+            artifacts/judge-report.txt
+          if-no-files-found: warn
+          retention-days: 30

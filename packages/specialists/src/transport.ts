@@ -19,8 +19,10 @@ export type TransportOptions =
 
 const cassetteEntry = z
   .object({
-    // "live" came from the API. "converted" was rebuilt from an older recording, with estimated usage.
-    source: z.enum(["live", "converted"]),
+    // "live" came from the API. "converted" was rebuilt from an older recording and "scripted" was written by hand
+    // through the scripted upstream. Both carry estimated usage.
+    source: z.enum(["live", "converted", "scripted"]),
+    recordedAt: z.iso.datetime().optional(),
     specialist: z.string().min(1),
     model: z.string().min(1),
     durationMs: z.number().nonnegative(),
@@ -152,7 +154,8 @@ export function createTransport(options: TransportOptions): { middleware: Middle
     if (write) {
       const contentType = upstream.headers.get("content-type") ?? "application/json";
       const stored = contentType.includes("json") ? z.json().parse(JSON.parse(text)) : text;
-      const entry = { source: "live", specialist, model, durationMs, request: { messages: sent.messages } } as const;
+      const recordedAt = new Date().toISOString();
+      const entry = { source: "live", recordedAt, specialist, model, durationMs, request: { messages: sent.messages } } as const;
       write({ ...entry, response: { contentType, body: stored } });
     }
     return response;
