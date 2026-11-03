@@ -11,6 +11,6 @@ A template is data. `label` is the issue label that selects it. `budget` has `ma
 | `docs.yaml` | `thin-pr:docs` | 8 files, 400 lines | 1 USD | Smaller models. Verify does not loop. Review loops back to implement at most once. |
 | `revise.yaml` | `thin-pr:revise` | 6 files, 250 lines | 2 USD | Runs on a review of a thin-pr draft, not on a label. The plan is the review, one step per comment, with no model call. Verify loops back to implement at most twice, review at most once. The budget measures the new commit only. |
 
-The budgets and spend limits are placeholders. The real-repo eval will measure what size of change lands reliably and what a run costs, and these values will be set from that data.
+The first real-repo eval, ten issues on kb-copilot in `evals/kb-copilot`, changed 2 to 6 files and 3 to 123 lines per issue, and a run cost $0.03 to $0.71. Every change fit its budget. Ten runs are too few to tighten the values, so they stay until more real runs come in.
 
 The gate is not a step. `packages/github` evaluates it after `write`. A diff over the budget that passes every other rule pushes the branch and waits for `/thin-pr approve`. A model call that could pass `spend_usd` is not sent, and the run fails with a report. `docs/gate.md` has the details.

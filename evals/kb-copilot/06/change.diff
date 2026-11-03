@@ -1,0 +1,25 @@
+diff --git a/.env.example b/.env.example
+index a2f6dea..024af87 100644
+--- a/.env.example
++++ b/.env.example
+@@ -71,7 +71,6 @@ LIVEKIT_API_SECRET=replace-me
+ # https://aistudio.google.com/apikey. The worker refuses to start without it.
+ # `make eval-answers` and `python -m kb_agent.selfcheck` read it too.
+ GOOGLE_API_KEY=replace-me
+-KB_VOICE=Puck
+ # The agent says goodbye and closes the session after this many seconds.
+ AGENT_MAX_SESSION_SECONDS=600
+ 
+diff --git a/skills/livekit-agent/SKILL.md b/skills/livekit-agent/SKILL.md
+index 571f914..382ef5f 100644
+--- a/skills/livekit-agent/SKILL.md
++++ b/skills/livekit-agent/SKILL.md
+@@ -51,7 +51,7 @@ A 404, 409, 503, or an unreachable API means no card. The tool tells the model t
+ 
+ ## Voice
+ 
+-`session.build_session` creates one `google.realtime.RealtimeModel`: model `gemini-3.8-live-extended-thinking`, voice from `KB_VOICE` (default `Puck`), thinking level `low`, medium media resolution. It needs `GOOGLE_API_KEY`. LiveKit Inference is not used, because it does not pass video to realtime models. See `docs/decisions/0003-voice-model.md`.
++`session.build_session` creates one `google.realtime.RealtimeModel`: model `gemini-3.8-live-extended-thinking`, voice stored on the product (default `Sulafat`), thinking level `low`, medium media resolution. It needs `GOOGLE_API_KEY`. LiveKit Inference is not used, because it does not pass video to realtime models. See `docs/decisions/0003-voice-model.md`.
+ 
+ `config.require_settings` stops the worker at start when `GOOGLE_API_KEY` or a LiveKit setting is empty or `replace-me`. In a job, a failure to load the product, to start the session, or a model session that closes on an error is published as `agent-error`. `AGENT_MAX_SESSION_SECONDS` (default 600) makes the agent say goodbye and close.
+ 

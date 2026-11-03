@@ -1,0 +1,162 @@
+diff --git a/services/api/src/kb_api/escalations.py b/services/api/src/kb_api/escalations.py
+index 34b5a8a..5d10701 100644
+--- a/services/api/src/kb_api/escalations.py
++++ b/services/api/src/kb_api/escalations.py
+@@ -1,6 +1,7 @@
+ """Handoffs the agent proposes. A user approves one before Linear sees it."""
+ 
+ import logging
++from datetime import datetime, timedelta
+ from typing import Annotated
+ from uuid import UUID
+ 
+@@ -37,6 +38,8 @@ log = logging.getLogger(__name__)
+ 
+ TITLE_LIMIT = 120
+ AGENT = "agent"
++# A creating row this old was left by a request that died, so approve may claim it.
++LEASE = timedelta(minutes=2)
+ 
+ NOT_CONNECTED: dict[int | str, dict[str, object]] = {
+     409: {"model": ErrorBody, "description": "Linear is not connected for this org"}
+@@ -144,16 +147,29 @@ async def propose_escalation(
+ 
+ 
+ async def move(
+-    db: AsyncSession, row: EscalationRow, was: str, to: str, **values: str
++    db: AsyncSession,
++    row: EscalationRow,
++    was: str,
++    to: str,
++    *,
++    stale_before: datetime | None = None,
++    **values: str,
+ ) -> bool:
+     """Move the row from `was` to `to`. False when another request moved it first.
+ 
++    With `stale_before`, move it only if it has not changed since then.
+     The caller commits, so an audit row can join the same transaction."""
++    conditions = [EscalationRow.id == row.id, EscalationRow.status == was]
++    if stale_before is not None:
++        conditions.append(EscalationRow.updated_at < stale_before)
+     moved = await db.execute(
+         update(EscalationRow)
+-        .where(EscalationRow.id == row.id, EscalationRow.status == was)
++        .where(*conditions)
+         .values(status=to, updated_at=utcnow(), **values)
+         .returning(EscalationRow.id)
++        # The refresh below reloads the row, and SQLite hands back naive datetimes
++        # that the in-Python evaluation cannot compare with stale_before.
++        .execution_options(synchronize_session=False)
+     )
+     changed = moved.scalar_one_or_none() is not None
+     await db.refresh(row)
+@@ -184,7 +200,10 @@ async def approve_escalation(
+     if row.status == "created":
+         return Escalation.model_validate(row)
+     # Only one request wins the claim, so a double click creates one issue.
+-    claimed = await move(db, row, "proposed", "creating")
++    # A creating row past its lease is reclaimed, and the claim renews the lease.
++    claimed = await move(db, row, "proposed", "creating") or await move(
++        db, row, "creating", "creating", stale_before=utcnow() - LEASE
++    )
+     await db.commit()
+     if not claimed:
+         if row.status == "created":
+@@ -199,8 +218,6 @@ async def approve_escalation(
+             http, authorization, connection.team_id, row.title, row.body
+         )
+     except (HTTPException, LinearError) as exc:
+-        # ponytail: a crash between the claim and this line leaves the row
+-        # creating, and approve answers 409 for it. Add a lease timeout if that happens.
+         await move(db, row, "creating", "proposed")
+         if isinstance(exc, LinearError):
+             log.warning("Linear issueCreate failed for %s: %s", row.id, exc)
+diff --git a/services/api/tests/test_linear.py b/services/api/tests/test_linear.py
+index aaaf83c..5bc7fe0 100644
+--- a/services/api/tests/test_linear.py
++++ b/services/api/tests/test_linear.py
+@@ -1,18 +1,19 @@
+ import base64
+ import json
+ from collections.abc import Callable
++from datetime import timedelta
+ from urllib.parse import parse_qs, parse_qsl, urlparse
+ from uuid import UUID, uuid4
+ 
+ import httpx
+ import pytest
+ from fastapi.testclient import TestClient
+-from kb_api.db import LiveSessionRow
++from kb_api.db import EscalationRow, LiveSessionRow, utcnow
+ from kb_api.linear import GRAPHQL_URL, REVOKE_URL, TOKEN_URL, get_linear_http
+ from kb_api.linear_secrets import STATE_TTL_SECONDS
+ from kb_api.sessions import get_clock
+ from kb_api.settings import load_settings
+-from sqlalchemy import Engine
++from sqlalchemy import Engine, update
+ from sqlalchemy.orm import Session
+ 
+ KEY = base64.b64encode(bytes(range(32))).decode()
+@@ -517,6 +518,61 @@ def test_a_failed_issue_create_can_be_retried(
+     assert "escalation.approve_failed" in actions
+ 
+ 
++def leave_creating(sync_engine: Engine, id: str, age: timedelta) -> None:
++    """Leave the row as an approve that died after its claim would."""
++    with Session(sync_engine) as db:
++        db.execute(
++            update(EscalationRow)
++            .where(EscalationRow.id == UUID(id))
++            .values(status="creating", updated_at=utcnow() - age)
++        )
++        db.commit()
++
++
++def test_a_stuck_creating_escalation_is_reclaimed_once(
++    http: TestClient,
++    linear: FakeLinear,
++    room: str,
++    as_user: Headers,
++    sync_engine: Engine,
++    rows,
++) -> None:
++    connect(http, as_user())
++    escalation = propose(http, room).json()
++    leave_creating(sync_engine, escalation["id"], timedelta(minutes=3))
++    url = f"/escalations/{escalation['id']}/approve"
++
++    first = http.post(url, headers=as_user())
++    second = http.post(url, headers=as_user())
++
++    assert first.status_code == second.status_code == 200
++    assert first.json()["status"] == "created"
++    assert first.json()["issue_identifier"] == "ENG-1"
++    assert second.json() == first.json()
++    assert len(linear.issues) == 1
++    assert rows("escalations")[0]["status"] == "created"
++
++
++def test_a_recently_claimed_escalation_is_still_in_progress(
++    http: TestClient,
++    linear: FakeLinear,
++    room: str,
++    as_user: Headers,
++    sync_engine: Engine,
++    rows,
++) -> None:
++    connect(http, as_user())
++    escalation = propose(http, room).json()
++    leave_creating(sync_engine, escalation["id"], timedelta(seconds=10))
++
++    response = http.post(f"/escalations/{escalation['id']}/approve", headers=as_user())
++
++    assert response.status_code == 409
++    assert response.json() == {"detail": "the escalation is creating"}
++    assert linear.issues == []
++    assert rows("escalations")[0]["status"] == "creating"
++
++
+ def test_approve_after_disconnect_is_a_409_and_stays_proposed(
+     http: TestClient, linear: FakeLinear, room: str, as_user: Headers, rows
+ ) -> None:

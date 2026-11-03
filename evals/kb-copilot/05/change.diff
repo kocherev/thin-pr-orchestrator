@@ -1,0 +1,95 @@
+diff --git a/apps/desktop/README.md b/apps/desktop/README.md
+index bba91f8..fbdf918 100644
+--- a/apps/desktop/README.md
++++ b/apps/desktop/README.md
+@@ -51,7 +51,7 @@ It answers five RPC methods, and only from a participant of kind agent. A call f
+ | `desktop.click` | `{"x", "y", "button": "left" or "right", "double": bool}` | `{"ok": true}` |
+ | `desktop.type` | `{"text"}`, 1 to 500 characters | `{"ok": true}` |
+ | `desktop.key` | `{"keys": ["cmd", "shift", "t"]}`, modifiers plus one key | `{"ok": true}` |
+-| `desktop.scroll` | `{"x", "y", "dy", "dx"}`, lines from -50 to 50, positive is down and right | `{"ok": true}` |
++| `desktop.scroll` | `{"x", "y", "dy", "dx"}`, lines from -50 to 50, positive is down and right, at least one of `dy` and `dx` non-zero | `{"ok": true}` |
+ 
+ It runs one action at a time.
+ 
+diff --git a/apps/desktop/src/kb_desktop/actions.py b/apps/desktop/src/kb_desktop/actions.py
+index 0e8c331..51ea1d1 100644
+--- a/apps/desktop/src/kb_desktop/actions.py
++++ b/apps/desktop/src/kb_desktop/actions.py
+@@ -8,7 +8,14 @@ from collections.abc import Callable
+ from dataclasses import asdict, dataclass
+ from typing import Literal
+ 
+-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
++from pydantic import (
++    BaseModel,
++    ConfigDict,
++    Field,
++    ValidationError,
++    field_validator,
++    model_validator,
++)
+ 
+ # Gemini Computer Use describes points on a 1000 by 1000 grid, 0 to 999.
+ GRID = 1000
+@@ -97,6 +104,12 @@ class Scroll(Pointer):
+     dy: int = Field(default=0, ge=-50, le=50)
+     dx: int = Field(default=0, ge=-50, le=50)
+ 
++    @model_validator(mode="after")
++    def _moves(self) -> "Scroll":
++        if self.dy == 0 and self.dx == 0:
++            raise ValueError("give a non-zero dy or dx")
++        return self
++
+ 
+ Action = Click | TypeText | Key | Scroll
+ Executor = Callable[[Action, Display], None]
+diff --git a/apps/desktop/tests/test_actions.py b/apps/desktop/tests/test_actions.py
+index cd4c73f..0ffa4c1 100644
+--- a/apps/desktop/tests/test_actions.py
++++ b/apps/desktop/tests/test_actions.py
+@@ -40,7 +40,8 @@ def test_the_grid_maps_to_logical_points_not_pixels(
+ ) -> None:
+     assert Click(x=x, y=y).at(RETINA) == point
+     # The same grid on a screen that is not scaled lands on its own width.
+-    assert Scroll(x=x, y=y).at(Display(width=1000, height=1000, scale=1.0)) == (x, y)
++    unscaled = Display(width=1000, height=1000, scale=1.0)
++    assert Scroll(x=x, y=y, dy=1).at(unscaled) == (x, y)
+ 
+ 
+ def test_a_click_reaches_the_executor_with_the_display_to_map_it() -> None:
+@@ -63,6 +64,12 @@ def test_a_scroll_reaches_the_executor() -> None:
+     ]
+ 
+ 
++def test_a_sideways_scroll_reaches_the_executor() -> None:
++    assert run("desktop.scroll", '{"x": 0, "y": 0, "dx": -2}') == [
++        Scroll(x=0, y=0, dy=0, dx=-2)
++    ]
++
++
+ def test_info_reports_the_display_and_does_nothing() -> None:
+     done: list[Action] = []
+ 
+@@ -110,6 +117,8 @@ def test_type_and_key_pass_through() -> None:
+         ),
+         ("desktop.scroll", '{"x": 0, "y": 0, "dy": 51}', "dy: "),
+         ("desktop.scroll", '{"x": 0, "y": 0, "dx": -51}', "dx: "),
++        ("desktop.scroll", '{"x": 0, "y": 0}', "non-zero"),
++        ("desktop.scroll", '{"x": 0, "y": 0, "dy": 0, "dx": 0}', "non-zero"),
+         ("desktop.info", '{"x": 1}', "x: "),
+     ],
+ )
+diff --git a/docs/decisions/0004-desktop-actions.md b/docs/decisions/0004-desktop-actions.md
+index 4fad5c1..311ef10 100644
+--- a/docs/decisions/0004-desktop-actions.md
++++ b/docs/decisions/0004-desktop-actions.md
+@@ -39,7 +39,7 @@ Coordinates are on the 0..999 grid used by Gemini Computer Use. The helper maps
+ | `desktop.click` | `{"x", "y", "button": "left" or "right", "double": bool}` | `{"ok": true}` |
+ | `desktop.type` | `{"text"}`, 1 to 500 characters | `{"ok": true}` |
+ | `desktop.key` | `{"keys": ["cmd", "shift", "t"]}`, modifiers plus one key | `{"ok": true}` |
+-| `desktop.scroll` | `{"x", "y", "dy", "dx"}`, lines from -50 to 50, positive is down and right | `{"ok": true}` |
++| `desktop.scroll` | `{"x", "y", "dy", "dx"}`, lines from -50 to 50, positive is down and right, at least one of `dy` and `dx` non-zero | `{"ok": true}` |
+ 
+ Errors are RPC errors. Code 4000 is a bad payload, 4001 is a caller that is not the agent, and 4002 is a failure while acting. The message says what to fix.
+ 

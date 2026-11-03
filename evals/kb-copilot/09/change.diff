@@ -1,0 +1,186 @@
+diff --git a/apps/web/src/app/sign-in/page.tsx b/apps/web/src/app/sign-in/page.tsx
+index 996584c..e5415f2 100644
+--- a/apps/web/src/app/sign-in/page.tsx
++++ b/apps/web/src/app/sign-in/page.tsx
+@@ -1,5 +1,24 @@
++import { Suspense } from "react";
++
+ import { AuthForm } from "@/components/auth-form";
+ 
+-export default function Page() {
+-  return <AuthForm mode="sign-in" />;
++export default function Page({ searchParams }: PageProps<"/sign-in">) {
++  return (
++    <Suspense
++      fallback={
++        <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col px-6 py-16 text-sm leading-6 text-muted-foreground">
++          Loading sign in.
++        </main>
++      }
++    >
++      <SignInRoute searchParams={searchParams} />
++    </Suspense>
++  );
++}
++
++async function SignInRoute({
++  searchParams,
++}: Pick<PageProps<"/sign-in">, "searchParams">) {
++  const { next } = await searchParams;
++  return <AuthForm mode="sign-in" next={typeof next === "string" ? next : undefined} />;
+ }
+diff --git a/apps/web/src/app/sign-up/page.tsx b/apps/web/src/app/sign-up/page.tsx
+index 3a4db1f..01dae8f 100644
+--- a/apps/web/src/app/sign-up/page.tsx
++++ b/apps/web/src/app/sign-up/page.tsx
+@@ -1,5 +1,24 @@
++import { Suspense } from "react";
++
+ import { AuthForm } from "@/components/auth-form";
+ 
+-export default function Page() {
+-  return <AuthForm mode="sign-up" />;
++export default function Page({ searchParams }: PageProps<"/sign-up">) {
++  return (
++    <Suspense
++      fallback={
++        <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col px-6 py-16 text-sm leading-6 text-muted-foreground">
++          Loading sign up.
++        </main>
++      }
++    >
++      <SignUpRoute searchParams={searchParams} />
++    </Suspense>
++  );
++}
++
++async function SignUpRoute({
++  searchParams,
++}: Pick<PageProps<"/sign-up">, "searchParams">) {
++  const { next } = await searchParams;
++  return <AuthForm mode="sign-up" next={typeof next === "string" ? next : undefined} />;
+ }
+diff --git a/apps/web/src/components/auth-form.test.tsx b/apps/web/src/components/auth-form.test.tsx
+index 3f31781..dd8a08a 100644
+--- a/apps/web/src/components/auth-form.test.tsx
++++ b/apps/web/src/components/auth-form.test.tsx
+@@ -64,3 +64,36 @@ test("sign-up sends the name and opens the app", async () => {
+   });
+   expect(screen.queryByRole("alert")).toBeNull();
+ });
++
++function signIn() {
++  fill("Email", "ada@example.com");
++  fill("Password", "correct-horse");
++  fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
++}
++
++test("sign-in returns to a safe next path and the link keeps it", async () => {
++  auth.signIn.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
++  render(<AuthForm mode="sign-in" next="/products/abc?x=1" />);
++
++  expect(screen.getByRole("link", { name: "Create an account" }).getAttribute("href")).toBe(
++    `/sign-up?next=${encodeURIComponent("/products/abc?x=1")}`,
++  );
++  signIn();
++
++  await vi.waitFor(() => expect(auth.replace).toHaveBeenCalledWith("/products/abc?x=1"));
++});
++
++test.each(["//evil.example", "https://evil.example", "/\\evil.example"])(
++  "sign-in ignores the unsafe next %s",
++  async (next) => {
++    auth.signIn.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
++    render(<AuthForm mode="sign-in" next={next} />);
++
++    expect(screen.getByRole("link", { name: "Create an account" }).getAttribute("href")).toBe(
++      "/sign-up",
++    );
++    signIn();
++
++    await vi.waitFor(() => expect(auth.replace).toHaveBeenCalledWith("/"));
++  },
++);
+diff --git a/apps/web/src/components/auth-form.tsx b/apps/web/src/components/auth-form.tsx
+index dcf1319..f2af201 100644
+--- a/apps/web/src/components/auth-form.tsx
++++ b/apps/web/src/components/auth-form.tsx
+@@ -7,6 +7,7 @@ import { useState, type FormEvent } from "react";
+ import { Button } from "@/components/ui/button";
+ import { Input } from "@/components/ui/input";
+ import { authClient } from "@/lib/auth-client";
++import { safeNext } from "@/lib/utils";
+ 
+ const linkClass =
+   "text-sm underline underline-offset-4 focus-visible:[outline:var(--hui-focus-ring)] focus-visible:outline-offset-[var(--hui-focus-ring-offset-accent)]";
+@@ -28,11 +29,14 @@ const copy: Record<Mode, { title: string; submit: string; other: string; href: s
+   },
+ };
+ 
+-export function AuthForm({ mode }: { mode: Mode }) {
++export function AuthForm({ mode, next }: { mode: Mode; next?: string }) {
+   const router = useRouter();
+   const [error, setError] = useState<string | null>(null);
+   const [pending, setPending] = useState(false);
+   const text = copy[mode];
++  const target = safeNext(next);
++  const otherHref =
++    target === "/" ? text.href : `${text.href}?next=${encodeURIComponent(target)}`;
+ 
+   async function onSubmit(event: FormEvent<HTMLFormElement>) {
+     event.preventDefault();
+@@ -54,7 +58,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
+         setError(result.error.message ?? "Could not sign in.");
+         return;
+       }
+-      router.replace("/");
++      router.replace(target);
+       router.refresh();
+     } catch {
+       setError("Could not sign in.");
+@@ -95,7 +99,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
+           {text.submit}
+         </Button>
+       </form>
+-      <Link className={linkClass} href={text.href}>
++      <Link className={linkClass} href={otherHref}>
+         {text.other}
+       </Link>
+     </main>
+diff --git a/apps/web/src/lib/utils.ts b/apps/web/src/lib/utils.ts
+index bd0c391..710999c 100644
+--- a/apps/web/src/lib/utils.ts
++++ b/apps/web/src/lib/utils.ts
+@@ -4,3 +4,14 @@ import { twMerge } from "tailwind-merge"
+ export function cn(...inputs: ClassValue[]) {
+   return twMerge(clsx(inputs))
+ }
++
++// A redirect target is used only when it is a path on this site. A leading
++// "//" or "/\" and any backslash or control character could reach another
++// host, so those fall back to "/".
++export function safeNext(value: unknown): string {
++  if (typeof value !== "string") return "/"
++  if (!value.startsWith("/") || value.startsWith("//")) return "/"
++  if (value.includes("\\")) return "/"
++  if (/[\u0000-\u001f\u007f]/.test(value)) return "/"
++  return value
++}
+diff --git a/apps/web/src/proxy.ts b/apps/web/src/proxy.ts
+index c64f528..7ef9cec 100644
+--- a/apps/web/src/proxy.ts
++++ b/apps/web/src/proxy.ts
+@@ -6,7 +6,12 @@ export function proxy(request: NextRequest) {
+   if (getSessionCookie(request)) {
+     return NextResponse.next();
+   }
+-  return NextResponse.redirect(new URL("/sign-in", request.url));
++  const signIn = new URL("/sign-in", request.url);
++  const next = request.nextUrl.pathname + request.nextUrl.search;
++  if (next !== "/") {
++    signIn.searchParams.set("next", next);
++  }
++  return NextResponse.redirect(signIn);
+ }
+ 
+ export const config = {

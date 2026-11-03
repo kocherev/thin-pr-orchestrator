@@ -55,7 +55,7 @@ The rule counts changed files and added plus removed lines from `--numstat`. It 
 
 `21-document-every-helper` changes 13 files, one more than the `feature` budget allows, and passes every other rule. It ends `awaiting_approval`. `11-wide-touch` adds one line to each of four files, and `12-long-readme` changes 31 lines in one file. Both fit the budget and open a draft.
 
-The template budgets are placeholders: `feature` 12 files and 600 lines, `bugfix` 6 and 250, `docs` 8 and 400. The real-repo eval will measure what size of change lands reliably, and the defaults will be set from that data.
+The template budgets are `feature` 12 files and 600 lines, `bugfix` 6 and 250, `docs` 8 and 400. The first real-repo eval, ten issues on kb-copilot in `evals/kb-copilot`, changed 2 to 6 files and 3 to 123 lines per issue, and a run cost $0.03 to $0.71. Every change fit its budget. Ten runs are too few to tighten the values, so they stay until more real runs come in.
 
 ### Approving a run
 
