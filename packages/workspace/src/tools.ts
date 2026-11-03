@@ -16,6 +16,15 @@ export function fileTools(
   store: FileStore,
   paths: RepoConfig["paths"],
 ): Pick<Workspace, "listFiles" | "readFile" | "search" | "replace" | "createFile"> {
+  // The tool runner runs a turn's tool calls at once, so two edits to one file would read the same original
+  // and the second write would drop the first. Edits run one at a time.
+  let edits: Promise<unknown> = Promise.resolve();
+  const inTurn = <T>(edit: () => Promise<T>): Promise<T> => {
+    const done = edits.then(edit);
+    edits = done.catch(() => undefined);
+    return done;
+  };
+
   return {
     listFiles: () => store.list(),
     readFile: async (path) => store.read(repoPath(path)),
@@ -35,7 +44,7 @@ export function fileTools(
       }
       return results;
     },
-    async replace(path, oldText, newText) {
+    replace: (path, oldText, newText) => inTurn(async () => {
       const target = repoPath(path);
       const content = await store.read(target);
       if (content === null) {
@@ -49,8 +58,8 @@ export function fileTools(
         throw new Error(`replace: oldText matches ${count} times in ${target}; it must match exactly once`);
       }
       await store.write(target, content.replace(oldText, () => newText), "overwrite");
-    },
-    async createFile(path, content) {
+    }),
+    createFile: (path, content) => inTurn(async () => {
       const target = repoPath(path);
       const verdict = classifyPath(paths, target);
       if (verdict !== "allowed") {
@@ -60,7 +69,7 @@ export function fileTools(
         throw new Error(`createFile: ${target} already exists`);
       }
       await store.write(target, content, "create");
-    },
+    }),
   };
 }
 
