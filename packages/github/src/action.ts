@@ -42,6 +42,8 @@ async function main(): Promise<void> {
       failure = result.error;
     } else if (result.status === "opened") {
       core.info(`Draft pull request ${result.record.pullRequest?.url ?? "opened"}`);
+    } else if (result.status === "awaiting_approval") {
+      core.info(`Pushed ${result.stored.branch.name}. The diff is over the budget and waits for approval on the issue.`);
     }
   } catch (error) {
     failure = error instanceof Error ? error.message : "run failed";

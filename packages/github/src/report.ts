@@ -5,21 +5,29 @@ import type { RunRecord } from "./record.js";
 
 const CELL_CHARS = 160;
 
+/** What a user with write access comments on the issue to open the draft of a run that waits for approval. */
+export const APPROVE_COMMAND = "/thin-pr approve";
+
 /**
  * The draft pull request body when the gate passes, and the issue comment otherwise. Both lead with the outcome
  * and the gate table, then the usage, then collapsible sections for the plan, the checks, the review, and the steps.
+ * A run over the budget also lists the changed files, since their size is what a person approves.
  */
 export function formatRunReport(run: {
   readonly record: RunRecord;
   readonly outputs: Readonly<Partial<Record<StepId, Json>>>;
   readonly branch: string;
   readonly error: string | null;
+  /** The login that approved a run over the budget, for the draft that approval opens. */
+  readonly approvedBy?: string;
 }): string {
   const { record } = run;
+  const overBudget = record.gate.some((rule) => rule.verdict === "NEEDS_APPROVAL");
   return [
-    outcome(record, run.error),
+    outcome(record, run.error, run.branch, run.approvedBy),
     gateTable(record.gate),
     usage(record),
+    ...(overBudget ? [diffSection(record)] : []),
     planSection(run.outputs.plan),
     checksSection(record.checks),
     reviewSection(run.outputs.review),
@@ -27,11 +35,20 @@ export function formatRunReport(run: {
   ].join("\n\n");
 }
 
-function outcome(record: RunRecord, error: string | null): string {
+function outcome(record: RunRecord, error: string | null, branch: string, approvedBy: string | undefined): string {
   const failed = record.gate.filter((rule) => rule.verdict === "FAIL").map((rule) => `\`${rule.rule}\``);
+  const budget = record.gate.find((rule) => rule.verdict === "NEEDS_APPROVAL");
+  const others = `The other ${record.gate.length - 1} rules passed`;
   switch (record.status) {
     case "opened":
-      return `**Gate passed.** All ${record.gate.length} rules passed for #${record.issue.number}.`;
+      return budget
+        ? `**Gate passed with approval.** ${budget.reason} ${approvedBy ?? "A user with write access"} approved it. ${others} for #${record.issue.number}.`
+        : `**Gate passed.** All ${record.gate.length} rules passed for #${record.issue.number}.`;
+    case "awaiting_approval":
+      return [
+        `**Waiting for approval.** ${budget?.reason ?? "The diff is over the budget."} ${others}. \`${branch}\` is pushed, and no draft is open.`,
+        `To open the draft, a user with write access comments \`${APPROVE_COMMAND}\` on this issue. The budget keeps a draft small enough to review in one sitting, so approve when this change should land as one pull request. To keep drafts small instead, split the issue and label each part.`,
+      ].join("\n\n");
     case "blocked":
       return `**Gate failed.** ${failed.length} of ${record.gate.length} rules failed: ${failed.join(", ")}. Nothing was pushed.`;
     case "failed": {
@@ -43,15 +60,27 @@ function outcome(record: RunRecord, error: string | null): string {
   }
 }
 
+const VERDICT_ORDER = { FAIL: 0, NEEDS_APPROVAL: 1, PASS: 2 } as const;
+
 // Failing rules come first, so a reviewer reads the reason before the passes.
 function gateTable(gate: readonly GateRuleResult[]): string {
   if (gate.length === 0) {
     return "The gate did not run.";
   }
   const rows = [...gate]
-    .sort((a, b) => Number(a.verdict === "PASS") - Number(b.verdict === "PASS"))
-    .map((rule) => `| \`${rule.rule}\` | ${rule.verdict === "FAIL" ? "**FAIL**" : "PASS"} | ${cell(rule.reason)} |`);
+    .sort((a, b) => VERDICT_ORDER[a.verdict] - VERDICT_ORDER[b.verdict])
+    .map((rule) => `| \`${rule.rule}\` | ${rule.verdict === "PASS" ? "PASS" : `**${rule.verdict}**`} | ${cell(rule.reason)} |`);
   return ["| Rule | Verdict | Reason |", "| --- | --- | --- |", ...rows].join("\n");
+}
+
+// Open by default: the file list is what the approver weighs.
+function diffSection(record: RunRecord): string {
+  const files = record.diff?.files ?? [];
+  const added = files.reduce((sum, file) => sum + file.added, 0);
+  const removed = files.reduce((sum, file) => sum + file.removed, 0);
+  const rows = files.map((file) => `| \`${cell(file.path)}\` | ${file.added} | ${file.removed} |`);
+  const table = ["| File | Added | Removed |", "| --- | --- | --- |", ...rows].join("\n");
+  return details(`Diff: ${count(files.length, "file")}, ${added} added, ${removed} removed`, table, true);
 }
 
 function usage(record: RunRecord): string {

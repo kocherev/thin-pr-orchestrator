@@ -33,7 +33,7 @@ const BATCH_DISCOUNT = 0.5;
 export type JudgeSubject = {
   readonly caseId: string;
   readonly issue: string;
-  readonly status: "opened" | "blocked" | "failed";
+  readonly status: "opened" | "awaiting_approval" | "blocked" | "failed";
   readonly error: string | null;
   readonly plan: Json | null;
   readonly patch: string;

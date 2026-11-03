@@ -7,8 +7,8 @@ const storedRun = z.looseObject({
   version: z.literal(1),
   runId: z.string().min(1),
   issue: z.looseObject({ title: z.string() }),
-  status: z.enum(["opened", "blocked", "failed"]),
-  gate: z.array(z.looseObject({ rule: z.string(), verdict: z.enum(["PASS", "FAIL"]) })),
+  status: z.enum(["opened", "awaiting_approval", "blocked", "failed"]),
+  gate: z.array(z.looseObject({ rule: z.string(), verdict: z.enum(["PASS", "FAIL", "NEEDS_APPROVAL"]) })),
   totals: z.looseObject({ costUsd: z.number() }),
 });
 
@@ -60,7 +60,11 @@ function gateSummary(gate: StoredRun["gate"]): string {
     return "not evaluated";
   }
   const failed = gate.filter((rule) => rule.verdict === "FAIL").map((rule) => rule.rule);
-  return failed.length === 0 ? `passed ${gate.length}/${gate.length}` : `failed: ${failed.join(", ")}`;
+  const waiting = gate.filter((rule) => rule.verdict === "NEEDS_APPROVAL").map((rule) => rule.rule);
+  if (failed.length > 0) {
+    return `failed: ${failed.join(", ")}`;
+  }
+  return waiting.length > 0 ? `needs approval: ${waiting.join(", ")}` : `passed ${gate.length}/${gate.length}`;
 }
 
 function parseJson(text: string): unknown {

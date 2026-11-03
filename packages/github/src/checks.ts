@@ -3,6 +3,8 @@ import type { GateRuleResult } from "@thin-pr/gate";
 import { summaryOf } from "@thin-pr/specialists";
 import type { GitHubSurface } from "./surface.js";
 
+const CONCLUSIONS = { PASS: "success", FAIL: "failure", NEEDS_APPROVAL: "neutral" } as const;
+
 type CheckRuns = {
   /** Opens a check when a step starts and closes it when the step finishes, loops, or the run fails. */
   onEvent(event: RunEvent, sha: string): Promise<void>;
@@ -61,7 +63,7 @@ export function createCheckRuns(
           owner: target.owner,
           repo: target.repo,
           checkRunId,
-          conclusion: result.verdict === "PASS" ? "success" : "failure",
+          conclusion: CONCLUSIONS[result.verdict],
           summary: `${result.verdict}: ${result.reason}`,
           title: result.verdict,
         });

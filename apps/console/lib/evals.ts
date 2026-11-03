@@ -9,7 +9,7 @@ function sameItems(left: readonly string[], right: readonly string[]): boolean {
  * counts as blocked, and a case labeled with failed rules must fail exactly those rules.
  */
 export function isCorrect(evalCase: EvalCase, expected: Expected | undefined): boolean {
-  const verdict = evalCase.actual === "opened" ? "opened" : "blocked";
+  const verdict = evalCase.actual === "failed" ? "blocked" : evalCase.actual;
   const rulesMatch = !expected?.failedRules || sameItems(expected.failedRules, evalCase.failedRules);
   return verdict === evalCase.expected && rulesMatch;
 }

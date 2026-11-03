@@ -5,15 +5,24 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openEventLog, replay, templateForLabel, type RunState, type StepHandler } from "@thin-pr/core";
 import { GATE_RULES } from "@thin-pr/gate";
-import { createRunHandlers, readLabelEvent, runIssue, type GitHubSurface, type RunRecord } from "@thin-pr/github";
+import {
+  createRunHandlers,
+  readLabelEvent,
+  runIssue,
+  verdictOf,
+  type GitHubSurface,
+  type RunRecord,
+  type Verdict,
+} from "@thin-pr/github";
 import { createAnthropicClient, type ModelSession } from "@thin-pr/specialists";
 import { createScratchRepo, loadRepoConfig, openWorkspace } from "@thin-pr/workspace";
 import { z } from "zod";
 
-type Verdict = "opened" | "blocked";
-
 const expectedSchema = z
-  .object({ verdict: z.enum(["opened", "blocked"]), failedRules: z.array(z.enum(GATE_RULES)).min(1).optional() })
+  .object({
+    verdict: z.enum(["opened", "awaiting_approval", "blocked"]),
+    failedRules: z.array(z.enum(GATE_RULES)).min(1).optional(),
+  })
   .strict();
 
 const baselineSchema = z.object({ minVerdictAccuracy: z.number().gt(0).lte(1) }).strict();
@@ -81,6 +90,8 @@ export type Scores = {
   /** Cases expected to open that did open. */
   readonly resolved: { readonly count: number; readonly total: number };
   readonly blocked: { readonly count: number; readonly total: number };
+  /** Cases expected to wait for approval that did. */
+  readonly awaiting: { readonly count: number; readonly total: number };
   /** Spend on the cases expected to open, divided by the ones that opened. Null when none did. */
   readonly costPerResolvedUsd: number | null;
   /** Median duration of the steps that called a model, by nearest rank. Null when no step did. */
@@ -231,6 +242,7 @@ export function scoreRuns(
   const correct = cases.filter((item) => item.correct).length;
   const good = cases.filter((item) => item.expected.verdict === "opened");
   const bad = cases.filter((item) => item.expected.verdict === "blocked");
+  const big = cases.filter((item) => item.expected.verdict === "awaiting_approval");
   const resolved = good.filter((item) => item.verdict === "opened").length;
   const goodSpend = good.reduce((sum, item) => sum + item.record.totals.costUsd, 0);
   const modelSteps = cases.flatMap((item) => item.record.steps.filter((step) => step.usage.length > 0));
@@ -252,6 +264,7 @@ export function scoreRuns(
     accuracy: cases.length === 0 ? 0 : correct / cases.length,
     resolved: { count: resolved, total: good.length },
     blocked: { count: bad.filter((item) => item.verdict === "blocked").length, total: bad.length },
+    awaiting: { count: big.filter((item) => item.verdict === "awaiting_approval").length, total: big.length },
     costPerResolvedUsd: resolved === 0 ? null : goodSpend / resolved,
     p50StepMs: durations[Math.ceil(durations.length / 2) - 1] ?? null,
     byModel: [...byModel.values()].sort((a, b) => a.model.localeCompare(b.model)),
@@ -274,6 +287,7 @@ export function formatReport(report: EvalReport): string {
     ),
     `baseline: ${percent(report.minVerdictAccuracy)}`,
     `blocked bad: ${report.blocked.count}/${report.blocked.total}`,
+    `waited for approval: ${report.awaiting.count}/${report.awaiting.total}`,
     `rules failed by a case: ${GATE_RULES.filter((rule) => failed.has(rule)).join(", ") || "none"}`,
     `rules no case fails: ${GATE_RULES.filter((rule) => !failed.has(rule)).join(", ") || "none"}`,
   ];
@@ -367,6 +381,9 @@ export function replayGitHub(): GitHubSurface {
     },
     async finishCheck() {},
     async comment() {},
+    async branchHead() {
+      return null;
+    },
     async listPullsForHead() {
       return [];
     },
@@ -415,7 +432,7 @@ async function runCase(
     if (result.status === "ignored") {
       throw new Error("the run ignored the issue");
     }
-    const verdict = result.status === "opened" ? "opened" : "blocked";
+    const verdict = verdictOf(result.status);
     const failedRules = result.record.gate.filter((rule) => rule.verdict === "FAIL").map((rule) => rule.rule);
     const rulesMatch = !item.expected.failedRules || sameItems(item.expected.failedRules, failedRules);
     const dirs = [realpathSync(repo.dir), repo.dir];

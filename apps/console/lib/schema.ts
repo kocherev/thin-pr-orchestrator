@@ -3,7 +3,9 @@ import { z } from "zod";
 
 export type { RunRecord };
 
-export const RUN_STATUSES = ["opened", "blocked", "failed"] as const;
+export const RUN_STATUSES = ["opened", "awaiting_approval", "blocked", "failed"] as const;
+
+const VERDICTS = ["opened", "awaiting_approval", "blocked"] as const;
 
 const count = z.number().int().nonnegative();
 const usd = z.number().nonnegative();
@@ -36,7 +38,7 @@ const stepSchema = z
 const gateRuleSchema = z
   .object({
     rule: z.enum(["plan", "contracts", "diff", "budget", "paths", "secrets", "typecheck", "tests", "review"]),
-    verdict: z.enum(["PASS", "FAIL"]),
+    verdict: z.enum(["PASS", "FAIL", "NEEDS_APPROVAL"]),
     reason: z.string(),
   })
   .strict();
@@ -80,7 +82,7 @@ export const runRecordSchema = z
 /** Parses `evals/cases/<id>/expected.json`, the labels `scripts/eval.ts` scores each case against. */
 export const expectedSchema = z
   .object({
-    verdict: z.enum(["opened", "blocked"]),
+    verdict: z.enum(VERDICTS),
     failedRules: z.array(z.string().min(1)).min(1).optional(),
   })
   .strict();
@@ -95,7 +97,7 @@ export const evalReportSchema = z
         .object({
           caseId: z.string().min(1),
           title: z.string().min(1),
-          expected: z.enum(["opened", "blocked"]),
+          expected: z.enum(VERDICTS),
           actual: runStatus,
           failedRules: z.array(z.string().min(1)),
           costUsd: usd,
