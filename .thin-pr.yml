@@ -2,3 +2,7 @@
 checks:
   typecheck: pnpm typecheck
   test: pnpm test
+paths:
+  allow: ["packages/*/src/**", "scripts/**", "docs/**", "README.md"]
+  # Workflows, the lockfile, eval fixtures and agent instructions change only by hand.
+  deny: [".github/**", "**/.env*", "pnpm-lock.yaml", "evals/**", ".agents/**", "AGENTS.md"]
