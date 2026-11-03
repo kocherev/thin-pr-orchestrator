@@ -108,3 +108,5 @@ pnpm --filter @thin-pr/app exec wrangler deploy --dry-run --outdir dist
 ```
 
 The dry run builds the container image, so Docker must be running.
+
+CI runs the same dry run on every pull request, so a merged change always builds the Worker and the runner image. CI never deploys or logs in. The steps above are yours to run as the owner.
