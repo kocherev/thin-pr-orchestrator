@@ -16,6 +16,7 @@ describe("loadRepoConfig", () => {
   it("uses the defaults when .thin-pr.yml is missing", () => {
     expect(loadRepoConfig(repo())).toEqual({
       checks: { typecheck: "pnpm exec tsc --noEmit", test: "pnpm exec vitest run" },
+      generate: [],
       budget: {},
       paths: {
         allow: ["src/**", "test/**", "examples/**", "README.md", "docs/**"],

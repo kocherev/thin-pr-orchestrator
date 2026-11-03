@@ -95,6 +95,13 @@ export async function openWorkspace(input: {
       const command = config.checks[name];
       return { name, command, ...(await shell(command)) };
     },
+    generators: config.generate,
+    async runGenerator(command) {
+      if (!config.generate.includes(command)) {
+        throw new Error(`${command} is not a generator in .thin-pr.yml`);
+      }
+      return { command, ...(await shell(command)) };
+    },
     async install() {
       const command = config.install;
       return command === undefined ? null : { command, ...(await shell(command)) };

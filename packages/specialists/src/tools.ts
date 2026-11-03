@@ -165,7 +165,28 @@ export function workspaceTools(workspace: Workspace) {
         },
       }),
     ]),
+    ...generatorTool(workspace),
   ];
+}
+
+/** A tool for the repo's own generators, offered only when `.thin-pr.yml` lists some. The model picks one by name. */
+function generatorTool(workspace: Workspace) {
+  const [first, ...rest] = workspace.generators;
+  if (first === undefined) {
+    return [];
+  }
+  return strict([
+    betaZodTool({
+      name: "run_generator",
+      description:
+        "Run one of the repository's generator commands, such as a schema or client generator, after a change its output depends on. Files it writes count as part of the change. Returns the exit code and the end of the log.",
+      inputSchema: z.object({ command: z.enum([first, ...rest]) }).strict(),
+      run: async ({ command }) => {
+        const result = await workspace.runGenerator(command);
+        return `${result.command} exited ${result.exitCode}\n${result.logTail}`;
+      },
+    }),
+  ]);
 }
 
 function strict<T extends object>(tools: readonly T[]): (T & { strict: true })[] {

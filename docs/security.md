@@ -23,7 +23,7 @@ The issue title and body come from anyone who can open an issue. Only a label, a
 
 ## Tool confinement
 
-The implementer edits code only through six tools over the `Workspace` interface. There is no shell tool.
+The implementer edits code only through six tools over the `Workspace` interface, plus a seventh when `.thin-pr.yml` lists generators. There is no shell tool.
 
 - Every path goes through `repoPath` in `packages/workspace/src/paths.ts`. An empty path, an absolute path, a path that climbs out with `..`, and a path into `.git` throw.
 - `list_files` and `search` see the files `git ls-files` lists. `search` returns at most 50 matches.
@@ -31,11 +31,12 @@ The implementer edits code only through six tools over the `Workspace` interface
 - `replace` edits an existing file, and its old text must match exactly once. It does not check `paths`. The `paths` rule fails the run when the edited file is denied. `docs/gate.md` shows the eval case.
 - `create_file` refuses a path that `paths.deny` matches or that no `paths.allow` glob matches, and refuses a file that exists.
 - `run_check` takes only `typecheck` or `test` and runs the command `.thin-pr.yml` sets for it. The model cannot pass a command.
+- `run_generator` exists only when `.thin-pr.yml` lists commands under `generate`, such as `pnpm openapi`. Its input is an enum of exactly those commands, and the workspace refuses any other string. It runs like a check: as the check user, with the clean environment and the timeout. The files it writes count in the diff, so the `paths` and `secrets` rules see them.
 - The implementer's tool loop fails after 60 turns, and the planner's after 8. The planner has only `read_file` and `search`.
 
 ## Check environment
 
-`verify`, `run_check`, and `install` run repository code, including the code the implementer wrote. `runShell` in `packages/workspace/src/check.ts` runs each command through `/bin/sh` in its own process group.
+`verify`, `run_check`, `run_generator`, and `install` run repository code, including the code the implementer wrote. `runShell` in `packages/workspace/src/check.ts` runs each command through `/bin/sh` in its own process group.
 
 - The environment drops every variable whose name contains `TOKEN`, `KEY`, `SECRET`, or `PASSWORD`, in any case. It also drops every variable that starts with `GITHUB_`, `ANTHROPIC_`, or `OTEL_`. `GITHUB_TOKEN`, `ANTHROPIC_API_KEY`, and `OTEL_EXPORTER_OTLP_HEADERS`, which holds a trace backend's API key, are not in a check's environment.
 - A command that runs past the timeout, 5 minutes by default, is killed with its whole process group. Its exit code is 124.

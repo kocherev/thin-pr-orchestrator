@@ -120,6 +120,8 @@ install: export UV_CACHE_DIR="$HOME/.cache/uv" && pnpm install --frozen-lockfile
 checks:
   typecheck: export UV_CACHE_DIR="$HOME/.cache/uv" && pnpm lint && pnpm typecheck && uv run ruff check . && uv run pyright
   test: export UV_CACHE_DIR="$HOME/.cache/uv" && pnpm test && uv run pytest
+# Commands the implementer may run by name, such as a generator for files it must not edit by hand.
+generate: ["pnpm openapi"]
 paths:
   allow: ["**"]
   deny: [".github/**", "**/.env", "**/.env.local", "**/.env.*.local", "pnpm-lock.yaml", "uv.lock"]
