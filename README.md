@@ -1,6 +1,6 @@
 # Thin PR Orchestrator
 
-Label a GitHub issue `thin-pr`, and a fixed TypeScript workflow plans, edits, checks, and reviews a small change, then opens a draft pull request only when nine gate rules pass.
+Label a GitHub issue `thin-pr`, and a fixed TypeScript workflow plans, edits, checks, and reviews a change, then opens a draft pull request only when nine gate rules pass. A change over the template's size budget waits for a person to approve it.
 
 ![Console run detail for eval case 18-live-edit: nine passing gate rules, both checks, a step timeline where verify sends a failing test back to implement once, and the two-file diff](docs/demo/console-run.png)
 
@@ -27,6 +27,7 @@ flowchart LR
   review -. changes requested .-> implement
   write --> gate["Nine gate rules"]
   gate -->|all pass| draft["Push thin-pr/&lt;issue&gt;<br/>open the draft"]
+  gate -->|only over budget| wait["Push thin-pr/&lt;issue&gt;<br/>wait for /thin-pr approve"]
   gate -->|any fail| comment["Comment the run report"]
 ```
 
@@ -75,7 +76,7 @@ The cassettes and the judge batch have no live recording yet, so the costs are t
 
 ## Model routing
 
-`templates/feature.yaml` routes the `thin-pr` label. `templates/README.md` lists the other two templates.
+`templates/feature.yaml` routes the `thin-pr` label. Its budget is 12 files and 600 changed lines, and one run may spend 5 USD. A bigger diff that passes every other rule pushes the branch and waits for `/thin-pr approve`. A model call that could pass the spend limit is not sent, and the run fails with a report. These limits are placeholders until the real-repo eval measures what lands reliably. `.thin-pr.yml` can override them. `templates/README.md` lists the other two templates.
 
 | Step | Model | Effort | Why |
 | --- | --- | --- | --- |
