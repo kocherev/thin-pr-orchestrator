@@ -48,6 +48,9 @@ describe("scanAddedLines", () => {
       `-const token = "${SAMPLES["Slack token"]}";`,
       "+const token = readToken(process.env);",
       '+const passwordLabel = "Password";',
+      // Test placeholders from a real run: words only, so no credential.
+      '+TOKEN = "internal-secret"',
+      '+WRONG_TOKEN = "wrong-secret"',
     ].join("\n");
     expect(scanAddedLines(patch)).toEqual([]);
   });

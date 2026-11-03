@@ -75,7 +75,7 @@ The draft body is the run report with `Gate passed with approval.` and the appro
 
 ### `secrets`
 
-The scanner in `packages/gate/src/secrets.ts` reads only the lines the patch adds. It looks for a private key header, an AWS access key id, a GitHub token, an Anthropic API key, a Slack token, and `password`, `secret`, or `token` assigned a quoted string of 12 or more characters. A finding names the file, the line in the new file, and the kind. It never includes the matched text. `15-planted-secret` creates `src/client.ts` with an Anthropic-shaped key on line 2, and the reason is `Added lines look like secrets: src/client.ts:2 (Anthropic API key).`
+The scanner in `packages/gate/src/secrets.ts` reads only the lines the patch adds. It looks for a private key header, an AWS access key id, a GitHub token, an Anthropic API key, a Slack token, and `password`, `secret`, or `token` assigned a quoted string of 12 or more characters with at least one letter and one digit. Words alone, such as a test's `"internal-secret"`, are left alone: on kb-copilot that placeholder blocked a correct fix. A finding names the file, the line in the new file, and the kind. It never includes the matched text. `15-planted-secret` creates `src/client.ts` with an Anthropic-shaped key on line 2, and the reason is `Added lines look like secrets: src/client.ts:2 (Anthropic API key).`
 
 ### `typecheck` and `tests`
 
