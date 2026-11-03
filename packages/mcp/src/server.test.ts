@@ -109,6 +109,19 @@ describe("thin-pr MCP server", () => {
       record: { status: "blocked", issue: { title: "Match uppercase true" }, pullRequest: null },
     });
   });
+
+  it("replays a Python case on the Python sample repo its issue names", { timeout: 60_000 }, async () => {
+    const client = await connect(undefined);
+
+    const result = await client.callTool({ name: "replay_case", arguments: { caseId: "py-01-collapse-slug-spaces" } });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({
+      verdict: "opened",
+      correct: true,
+      record: { checks: [{ name: "typecheck", exitCode: 0 }, { name: "test", exitCode: 0, command: "PYTHONPATH=src python3 -m unittest discover -s test 2>&1" }] },
+    });
+  });
 });
 
 async function connect(dir: string | undefined): Promise<Client> {

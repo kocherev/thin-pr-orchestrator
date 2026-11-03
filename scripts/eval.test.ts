@@ -24,12 +24,12 @@ describe("replay eval", () => {
     const text = formatReport(report);
 
     expect(report).toMatchObject({
-      total: 18,
-      correct: 18,
+      total: 23,
+      correct: 23,
       accuracy: 1,
       minVerdictAccuracy: 1,
-      resolved: { count: 9, total: 9 },
-      blocked: { count: 9, total: 9 },
+      resolved: { count: 11, total: 11 },
+      blocked: { count: 12, total: 12 },
       meetsBaseline: true,
     });
     expect(Object.fromEntries(report.cases.map((item) => [item.id, item.failedRules.join(", ") || item.actual]))).toEqual({
@@ -51,6 +51,11 @@ describe("replay eval", () => {
       "16-whitespace-only": "diff",
       "17-review-notes": "review",
       "18-live-edit": "opened",
+      "py-01-collapse-slug-spaces": "opened",
+      "py-02-minutes-format": "opened",
+      "py-03-failing-hidden-test": "tests",
+      "py-04-project-config": "paths",
+      "py-05-planted-secret": "secrets",
     });
     const emptyPlan = report.cases.find((item) => item.id === "10-empty-plan");
     expect(emptyPlan?.error).toContain("plan failed after 2 attempts: planner output invalid at steps");
@@ -74,17 +79,38 @@ describe("replay eval", () => {
     ]);
     expect(liveEdit?.record.steps[2]?.summary).toContain("expected '1000k' to be '1M'");
 
-    expect(text).toContain("verdict accuracy: 18/18 (100.0%)");
-    expect(text).toContain("resolve rate: 9/9 (100.0%)");
-    expect(text).toContain("cost per resolved case: 0.029992 USD");
-    expect(text).toContain("p50 step latency: 3195 ms");
-    expect(text).toContain("  claude-opus-5-5: 61 calls, 57680 input tokens, 9828 output tokens, 0.427280 USD");
-    expect(text).toContain("blocked bad: 9/9");
+    // The Python cases run python3 for both checks on evals/sample-python, and the hidden unittest catches YES.
+    const pythonFeature = report.cases.find((item) => item.id === "py-02-minutes-format");
+    expect(pythonFeature?.record.repo).toBe("example/sample-python");
+    expect(pythonFeature?.record.diff?.files.map((file) => file.path)).toEqual(["src/duration.py", "test/test_duration.py"]);
+    expect(pythonFeature?.record.checks.map((check) => `${check.name} ${check.exitCode}: ${check.command}`)).toEqual([
+      "typecheck 0: python3 -m compileall -q src test",
+      "test 0: PYTHONPATH=src python3 -m unittest discover -s test 2>&1",
+    ]);
+    const pythonHidden = report.cases.find((item) => item.id === "py-03-failing-hidden-test");
+    // Only the lines every Python version prints the same way stay in the committed log.
+    expect(pythonHidden?.record.checks.find((check) => check.name === "test")?.logTail).toBe(
+      [
+        "FAIL: test_reads_yes_and_no_in_any_case (hidden.test_flags.HiddenParseFlagTest)",
+        "AssertionError: None is not True",
+        "Ran 4 tests",
+        "FAILED (failures=1)",
+      ].join("\n"),
+    );
+
+    expect(text).toContain("verdict accuracy: 23/23 (100.0%)");
+    expect(text).toContain("resolve rate: 11/11 (100.0%)");
+    expect(text).toContain("cost per resolved case: 0.031228 USD");
+    expect(text).toContain("p50 step latency: 3180 ms");
+    expect(text).toContain("  claude-opus-5-5: 81 calls, 78053 input tokens, 13033 output tokens, 0.572872 USD");
+    expect(text).toContain("blocked bad: 12/12");
     expect(text).toContain("rules failed by a case: diff, budget, paths, secrets, typecheck, tests, review");
     expect(text).toContain("rules no case fails: plan, contracts");
     expect(text).toContain("01-clamp-decrement opened ok files 1 lines 2");
     expect(text).toContain("15-planted-secret blocked ok files 1 lines 3 failed rules: secrets");
+    expect(text).toContain("py-05-planted-secret blocked ok files 1 lines 5 failed rules: secrets");
     expect(text).not.toContain("sk-ant-");
+    expect(text).not.toContain("AKIA");
     expect(exitCode(report)).toBe(0);
 
     // The committed report and run records hold no clock time and no scratch path, so a fresh run reproduces them.

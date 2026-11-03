@@ -1,0 +1,7 @@
+{
+  "plan_relevance": "pass",
+  "minimal_diff": "pass",
+  "test_adequacy": "pass",
+  "review_quality": "pass",
+  "note": "The one-line change to requires-python does what the issue asks, and the approval fits it. The gate blocks it because pyproject.toml is outside the repo's allowed paths."
+}

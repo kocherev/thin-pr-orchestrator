@@ -1,0 +1,18 @@
+{
+  "action": "labeled",
+  "label": {
+    "name": "thin-pr"
+  },
+  "issue": {
+    "number": 1,
+    "title": "Collapse spaces in slugs",
+    "body": "slugify in src/slug.py turns each space into a dash, so \"Hello  World\" becomes hello--world. A run of spaces or tabs should become one dash."
+  },
+  "repository": {
+    "name": "sample-python",
+    "default_branch": "main",
+    "owner": {
+      "login": "example"
+    }
+  }
+}
