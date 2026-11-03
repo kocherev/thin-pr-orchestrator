@@ -410,15 +410,25 @@ describe("issue label", () => {
     expect(workflow).toContain("ref: ${{ github.event.pull_request.head.ref }}");
     const manifest = JSON.parse(readFileSync(join(root, "packages/app/github-app-manifest.json"), "utf8")) as { default_events: string[] };
     expect(manifest.default_events).toEqual(["issues", "issue_comment", "pull_request_review", "pull_request_review_comment"]);
-    expect(workflow).toContain("packages/github/src/action.ts");
     expect(workflow).toContain("actions/checkout@v7");
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("persist-credentials: false");
     expect(readFileSync(fileURLToPath(new URL("./trigger.ts", import.meta.url)), "utf8")).toContain("pushToken: input.token");
-    expect(workflow).toContain("GIT_AUTHOR_NAME: thin-pr[bot]");
-    expect(workflow).toContain("GIT_COMMITTER_EMAIL: thin-pr@example.invalid");
-    expect(workflow).toContain("ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}");
+    // The workflow runs the same Action another repo installs.
+    expect(workflow).toContain("uses: ./");
+    expect(workflow).toContain("anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}");
     expect(workflow).not.toContain("THIN_PR_MODEL");
+    const action = readFileSync(join(root, "action.yml"), "utf8");
+    expect(action).toContain("packages/github/bin/action.js");
+    expect(action).toContain("THIN_PR_CHECK_USER: thin-pr-check");
+    expect(action).toContain("GIT_AUTHOR_NAME: thin-pr[bot]");
+    expect(action).toContain("GIT_COMMITTER_EMAIL: thin-pr@example.invalid");
+    expect(action).toContain("ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}");
+    expect(action).not.toContain("THIN_PR_MODEL");
+    // The install guide's workflow keeps the same author and bot checks as this repo's.
+    const condition = (text: string) => /if: >-\n([\s\S]*?)\n {4}runs-on:/.exec(text)?.[1];
+    expect(condition(readFileSync(join(root, "docs/install.md"), "utf8"))).toBe(condition(workflow));
+    expect(condition(workflow)).toContain("author_association");
     expect(workflow).toContain("contents: write");
     expect(workflow).toContain("checks: write");
     expect(workflow).toContain("issues: write");

@@ -1,0 +1,74 @@
+name: Thin PR Orchestrator
+description: Turns a labeled issue into a gated draft pull request, and answers /thin-pr commands and reviews on it.
+author: Borys Kocherev
+branding:
+  icon: git-pull-request
+  color: blue
+
+inputs:
+  anthropic-api-key:
+    description: The Anthropic API key for the model calls. Pass it from a repository secret.
+    required: true
+  github-token:
+    description: The token that comments, pushes thin-pr/<issue>, and opens the draft.
+    default: ${{ github.token }}
+  otel-endpoint:
+    description: An OTLP endpoint for the run's trace. Empty uploads the trace as an artifact instead.
+    default: ""
+  otel-headers:
+    description: Headers for the OTLP endpoint, such as an API key. Pass them from a secret.
+    default: ""
+  trace-artifact:
+    description: The artifact name for the trace. Two thin-pr jobs in one workflow need two names.
+    default: thin-pr-trace
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v7
+      with:
+        node-version-file: ${{ github.action_path }}/.nvmrc
+
+    # Only the Action's own runtime dependencies, inside its own folder. When the repo is thin-pr itself, its
+    # workflow has already installed them, and a second, smaller install would remove the dev tools its checks use.
+    - name: Install thin-pr
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        if [ -d node_modules/.pnpm ]; then
+          echo "thin-pr dependencies already installed"
+        else
+          npx --yes pnpm@10.33.4 install --frozen-lockfile --prod --filter "@thin-pr/github..."
+        fi
+
+    # Checks run as this second user, so code the model wrote cannot read the run's secrets. See docs/security.md.
+    - name: Create the check user
+      shell: bash
+      run: id -u thin-pr-check > /dev/null 2>&1 || sudo useradd --create-home thin-pr-check
+
+    - name: Run the event
+      shell: bash
+      env:
+        THIN_PR_CHECK_USER: thin-pr-check
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        # Outside the checkout, so the trace never shows up in the diff.
+        THIN_PR_TRACE_PATH: ${{ runner.temp }}/thin-pr/trace.json
+        OTEL_EXPORTER_OTLP_ENDPOINT: ${{ inputs.otel-endpoint }}
+        OTEL_EXPORTER_OTLP_HEADERS: ${{ inputs.otel-headers }}
+        # The runner has no git identity. These name the commit on thin-pr/<issue>.
+        GIT_AUTHOR_NAME: thin-pr[bot]
+        GIT_AUTHOR_EMAIL: thin-pr@example.invalid
+        GIT_COMMITTER_NAME: thin-pr[bot]
+        GIT_COMMITTER_EMAIL: thin-pr@example.invalid
+      run: node --experimental-sqlite --disable-warning=ExperimentalWarning "$GITHUB_ACTION_PATH/packages/github/bin/action.js"
+
+    - name: Upload trace
+      if: always() && inputs.otel-endpoint == ''
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.trace-artifact }}
+        path: ${{ runner.temp }}/thin-pr/trace.json
+        if-no-files-found: error
+        retention-days: 14

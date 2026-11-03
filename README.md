@@ -69,7 +69,7 @@ PATH="$PWD/node_modules/.bin:$PATH" THIN_PR_CASSETTE=evals/cases/01-clamp-decrem
 
 The command prints the report, commits the change to a local branch `thin-pr/local-1`, and pushes nothing. Set `THIN_PR_MODEL=live` and `ANTHROPIC_API_KEY` to call the models instead. `docs/mcp.md` covers the command and the MCP server.
 
-To run on GitHub, add the `ANTHROPIC_API_KEY` repository secret, allow GitHub Actions to create pull requests, create the label `thin-pr`, and add it to an issue. `.github/workflows/thin-pr.yml` must be on the default branch. `docs/deploy.md` sets up the GitHub App instead.
+To run on your own repo, add the Action with `uses: kocherev/thin-pr-orchestrator@<commit sha>`. `docs/install.md` has the workflow file, the secret, the labels and the one setting it needs. `docs/deploy.md` sets up the GitHub App instead.
 
 ## Results
 
@@ -116,6 +116,7 @@ The sample-repo cassettes and the judge batch have no live recording yet, so tho
 - `docs/gate.md`: each rule, what it reads, and the eval case that trips it.
 - `docs/security.md`: untrusted issue text, who can give a command, tool confinement, the check user, tokens, egress, and the spend cap.
 - `docs/telemetry.md`: spans, attributes, and backends.
+- `docs/install.md`: the Action on your own repo.
 - `docs/deploy.md`: the GitHub App on Cloudflare.
 - `docs/mcp.md`: the local command and the MCP server.
 - `evals/README.md`: the cases, the judge, and the nightly live run.
