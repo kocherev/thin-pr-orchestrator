@@ -48,13 +48,18 @@ async function main(argv: readonly string[]): Promise<number> {
     runsDir: values.out,
     model: () => createAnthropicClient(clientOptionsFromEnv()),
   });
-  const lines = [result.report, "", `Status: ${result.status}`];
+  const lines = [result.report, "", `Status: ${result.status}`, costLine(result.record.totals)];
   if (result.branch) {
     lines.push(`Branch: ${result.branch}`);
   }
   lines.push(`Record: ${result.recordPath}`);
   process.stdout.write(`${lines.join("\n")}\n`);
   return result.status === "opened" ? 0 : 1;
+}
+
+function costLine(totals: { costUsd: number; durationMs: number; inputTokens: number; outputTokens: number }): string {
+  const tokens = (totals.inputTokens + totals.outputTokens).toLocaleString("en-US");
+  return `Cost: $${totals.costUsd.toFixed(4)} · ${(totals.durationMs / 1000).toFixed(1)}s · ${tokens} tokens`;
 }
 
 // Issue text is rarely a valid path, and a long one fails stat with ENAMETOOLONG instead of ENOENT.
