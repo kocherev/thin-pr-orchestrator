@@ -46,6 +46,8 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 pnpm trace
 
 Open `http://localhost:16686` and pick the service `thin-pr-orchestrator`. Jaeger 2.22.0 shows the 15 spans above in one trace. `docker stop jaeger` stops and removes the container.
 
+![Jaeger 2.22.0 trace view of the run-7 replay: thin-pr.run with its plan, implement, verify, review, and write spans, and the model request and tool spans under them, 15 spans in all](demo/trace-jaeger.png)
+
 ### Honeycomb
 
 ```bash

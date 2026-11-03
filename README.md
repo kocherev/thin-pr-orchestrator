@@ -4,6 +4,8 @@ Label a GitHub issue `thin-pr`, and a fixed TypeScript workflow plans, edits, ch
 
 ![Console run detail for eval case 18-live-edit: nine passing gate rules, both checks, a step timeline where verify sends a failing test back to implement once, and the two-file diff](docs/demo/console-run.png)
 
+![Jaeger trace of the run-7 replay that pnpm trace sends: one span per step, with the model request and tool spans nested under each step](docs/demo/trace-jaeger.png)
+
 [Issue #25](https://github.com/kocherev/thin-pr-orchestrator/issues/25) is a live run on this repository. [The Action run](https://github.com/kocherev/thin-pr-orchestrator/actions/runs/41564965359) opened [draft #27](https://github.com/kocherev/thin-pr-orchestrator/pull/27), which edits an existing function in `packages/github/src/cli.ts` and its test, 2 files and 13 lines. Sonnet 5.5 planned. Opus 5.5 implemented through the `read_file`, `search`, `replace`, and `run_check` tools. Sonnet 5.5 reviewed, and Haiku 5.5 wrote the title. The run ran `pnpm typecheck` and `pnpm test` on the checkout, posted all nine gate rules as check runs, and logged `Model spend: 0.809136 USD`. Its trace has 44 spans.
 
 GitHub does not start workflows for events made with a workflow's `GITHUB_TOKEN`, so CI did not run on #27. The GitHub App in `packages/app` pushes with an installation token, which does start them.
