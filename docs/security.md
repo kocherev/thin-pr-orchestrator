@@ -26,7 +26,7 @@ The implementer edits code only through six tools over the `Workspace` interface
 
 `verify`, `run_check`, and `install` run repository code, including the code the implementer wrote. `runShell` in `packages/workspace/src/check.ts` runs each command through `/bin/sh` in its own process group.
 
-- The environment drops every variable whose name contains `TOKEN`, `KEY`, `SECRET`, or `PASSWORD`, in any case, and every variable that starts with `GITHUB_` or `ANTHROPIC_`. `GITHUB_TOKEN` and `ANTHROPIC_API_KEY` never reach a check.
+- The environment drops every variable whose name contains `TOKEN`, `KEY`, `SECRET`, or `PASSWORD`, in any case. It also drops every variable that starts with `GITHUB_`, `ANTHROPIC_`, or `OTEL_`. `GITHUB_TOKEN`, `ANTHROPIC_API_KEY`, and `OTEL_EXPORTER_OTLP_HEADERS`, which holds a trace backend's API key, never reach a check.
 - A command that runs past the timeout, 5 minutes by default, is killed with its whole process group. Its exit code is 124.
 - The result keeps the last 4 KB of output.
 
@@ -87,5 +87,5 @@ The SDK's spans run with `contentMode: "metadata_only"`, set in code. No span ca
 ## Limits
 
 - A check runs model-written code with the runner's network access. On the App that network is the allowlist above. On the Action it is open.
-- The scrub drops variables by name. A credential in a variable whose name matches none of the rules reaches the checks. `OTEL_EXPORTER_OTLP_HEADERS` is one such variable, and both the Action and the App set it when a trace backend is configured.
+- The scrub drops variables by name. A credential in a variable whose name matches none of the rules reaches the checks.
 - `read_file` can read any file in the checkout. A secret committed to the target repository is visible to the implementer.
