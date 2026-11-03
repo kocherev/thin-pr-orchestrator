@@ -95,11 +95,10 @@ describe("issue label", () => {
       "review PASS",
     ]);
 
-    const checkShas = memory.calls.filter((call) => call.op === "startCheck").map((call) => [call.name, call.sha]);
-    expect(checkShas.slice(0, 5)).toEqual(
-      ["plan", "implement", "verify", "review", "write"].map((step) => [`thin-pr / ${step}`, repo.baseSha]),
-    );
-    expect(checkShas.slice(5).every(([, sha]) => sha === head)).toBe(true);
+    // Every check goes on the pushed commit, never on the base, which is the default branch's head.
+    const checks = memory.calls.filter((call) => call.op === "postCheck");
+    expect(checks.map((call) => call.name)).toEqual(result.record.gate.map((rule) => `thin-pr / gate / ${rule.rule}`));
+    expect(checks.every((call) => call.sha === head)).toBe(true);
     const pullCalls = memory.calls.filter((call) => !call.op.endsWith("Comment"));
     expect(pullCalls.at(-2)).toMatchObject({ op: "listPullsForHead", branch: "thin-pr/7" });
     const draft = pullCalls.at(-1);
@@ -177,9 +176,8 @@ describe("issue label", () => {
     ]);
     expect(git(repo.remote, "branch", "--list", "thin-pr/7")).toBe("");
     expect(memory.calls.some((call) => call.op === "openDraft" || call.op === "listPullsForHead")).toBe(false);
-    const ruleChecks = memory.calls.filter((call) => call.op === "postCheck");
-    expect(ruleChecks).toHaveLength(9);
-    expect(ruleChecks.every((call) => call.sha === repo.baseSha)).toBe(true);
+    // Nothing was pushed, so no check goes anywhere: on the base it would mark the default branch red.
+    expect(memory.calls.some((call) => call.op === "postCheck")).toBe(false);
     const comment = memory.calls.find((call) => call.op === "createComment");
     expect(comment).toMatchObject({ issue: 7, owner: "example", repo: "sample-repo" });
     const body = finalComment(memory.calls);

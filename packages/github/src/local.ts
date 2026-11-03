@@ -129,13 +129,7 @@ async function lastLocalNumber(repo: string): Promise<number> {
 
 /** Keeps the comment or draft body a run posts. Checks have nowhere to go. */
 function localSurface(posted: string[]): GitHubSurface {
-  let nextCheck = 1;
   return {
-    async startCheck() {
-      nextCheck += 1;
-      return nextCheck - 1;
-    },
-    async finishCheck() {},
     async postCheck() {},
     async createComment({ body }) {
       posted.push(body);

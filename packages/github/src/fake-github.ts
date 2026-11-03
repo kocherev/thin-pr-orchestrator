@@ -44,13 +44,6 @@ export function memoryGitHub(options?: {
   };
 
   const github: GitHubSurface = {
-    async startCheck(input) {
-      calls.push({ op: "startCheck", ...input });
-      return id();
-    },
-    async finishCheck(input) {
-      calls.push({ op: "finishCheck", ...input });
-    },
     async postCheck(input) {
       calls.push({ op: "postCheck", ...input });
     },

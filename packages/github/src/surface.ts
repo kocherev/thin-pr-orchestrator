@@ -46,21 +46,12 @@ export type GitHubRest = {
       readonly repo: string;
       readonly name: string;
       readonly head_sha: string;
-      readonly status: "in_progress" | "completed";
-      readonly started_at: string;
-      readonly completed_at?: string;
-      readonly conclusion?: CheckConclusion;
-      readonly output?: { readonly title: string; readonly summary: string };
-    }): Promise<{ data: { id: number } }>;
-    update(params: {
-      readonly owner: string;
-      readonly repo: string;
-      readonly check_run_id: number;
       readonly status: "completed";
-      readonly conclusion: CheckConclusion;
+      readonly started_at: string;
       readonly completed_at: string;
+      readonly conclusion: CheckConclusion;
       readonly output: { readonly title: string; readonly summary: string };
-    }): Promise<unknown>;
+    }): Promise<{ data: { id: number } }>;
   };
   git: {
     getRef(params: { readonly owner: string; readonly repo: string; readonly ref: string }): Promise<{
@@ -141,20 +132,6 @@ const COMMENTS_PER_PAGE = 100;
 type CheckConclusion = "success" | "failure" | "neutral";
 
 export type GitHubSurface = {
-  startCheck(input: {
-    readonly owner: string;
-    readonly repo: string;
-    readonly name: string;
-    readonly sha: string;
-  }): Promise<number>;
-  finishCheck(input: {
-    readonly owner: string;
-    readonly repo: string;
-    readonly checkRunId: number;
-    readonly conclusion: CheckConclusion;
-    readonly summary: string;
-    readonly title?: string;
-  }): Promise<void>;
   /** One check that is already finished, in one call, so nothing updates a check GitHub may not show yet. */
   postCheck(input: {
     readonly owner: string;
@@ -233,17 +210,6 @@ async function onceVisible<T>(call: () => Promise<T>): Promise<T> {
 
 export function createGitHubSurface(octokit: GitHubRest): GitHubSurface {
   return {
-    async startCheck(input) {
-      const { data } = await onceVisible(() => octokit.checks.create({
-        owner: input.owner,
-        repo: input.repo,
-        name: input.name,
-        head_sha: input.sha,
-        status: "in_progress",
-        started_at: new Date().toISOString(),
-      }));
-      return data.id;
-    },
     async postCheck(input) {
       const now = new Date().toISOString();
       await onceVisible(() =>
@@ -257,22 +223,6 @@ export function createGitHubSurface(octokit: GitHubRest): GitHubSurface {
           completed_at: now,
           conclusion: input.conclusion,
           output: { title: input.title, summary: input.summary },
-        }),
-      );
-    },
-    async finishCheck(input) {
-      await onceVisible(() =>
-        octokit.checks.update({
-          owner: input.owner,
-          repo: input.repo,
-          check_run_id: input.checkRunId,
-          status: "completed",
-          conclusion: input.conclusion,
-          completed_at: new Date().toISOString(),
-          output: {
-            title: input.title ?? { success: "Passed", failure: "Failed", neutral: "Needs approval" }[input.conclusion],
-            summary: input.summary,
-          },
         }),
       );
     },

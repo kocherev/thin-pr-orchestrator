@@ -98,7 +98,7 @@ async function handle(trigger: Trigger, token: string): Promise<string> {
       core.info(`Pushed ${result.head} to ${trigger.kind === "revise" ? trigger.pull.branch : "the draft"}.`);
       return "";
     }
-    return result.error;
+    return failureOf(result);
   }
   const result = runResultOf(outcome);
   if (!result || result.status === "ignored") {
@@ -108,7 +108,7 @@ async function handle(trigger: Trigger, token: string): Promise<string> {
   switch (result.status) {
     case "blocked":
     case "failed":
-      return result.error;
+      return failureOf(result);
     case "opened":
       core.info(`Draft pull request ${result.record.pullRequest?.url ?? "opened"}`);
       return "";
@@ -140,6 +140,18 @@ async function startCi(trigger: Trigger, branch: string | null, token: string): 
     const reason = error instanceof Error ? error.message : "dispatch failed";
     core.warning(`Could not start ${workflow} on ${branch}: ${reason}. It needs a workflow_dispatch trigger, and the job needs actions: write.`);
   }
+}
+
+/**
+ * A blocked gate is a normal answer, already on the issue, so the job passes with a notice. Only a run that broke
+ * fails the job: a red job there would say thin-pr broke when it only said no.
+ */
+function failureOf(result: { readonly status: "blocked" | "failed"; readonly error: string }): string {
+  if (result.status === "blocked") {
+    core.notice(`Blocked: ${result.error}. The issue comment has the report.`);
+    return "";
+  }
+  return result.error;
 }
 
 function actionsRunLink(env: NodeJS.ProcessEnv): string | null {
