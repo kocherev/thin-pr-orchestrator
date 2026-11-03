@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import type { CheckResult, Diff, Workspace } from "@thin-pr/specialists";
-import { runShell } from "./check.js";
+import { runShell, scrubEnv, shareWithCheckUser } from "./check.js";
 import type { RepoConfig } from "./config.js";
 import { fileTools } from "./tools.js";
 
@@ -36,6 +36,8 @@ export async function openWorkspace(input: {
   readonly baseSha: string;
   readonly config: RepoConfig;
   readonly checkTimeoutMs?: number;
+  /** The user checks and installs run as. Defaults to `THIN_PR_CHECK_USER`; unset, they run as this process. */
+  readonly checkUser?: string;
 }): Promise<GitWorkspace> {
   const { dir, config } = input;
   const top = await git(dir, ["rev-parse", "--show-toplevel"]);
@@ -48,6 +50,17 @@ export async function openWorkspace(input: {
     throw new Error(`checkout HEAD is ${head}, expected the base ${baseSha}`);
   }
   const timeoutMs = input.checkTimeoutMs ?? DEFAULT_CHECK_TIMEOUT_MS;
+  const user = input.checkUser ?? (process.env.THIN_PR_CHECK_USER || undefined);
+  if (user !== undefined) {
+    shareWithCheckUser(realpathSync(dir), user);
+  }
+  // A turn's tool calls run at once, and a check under `user` ends by killing every process of that user.
+  let queue: Promise<unknown> = Promise.resolve();
+  const shell = (command: string) => {
+    const done = queue.then(() => runShell(command, { cwd: dir, timeoutMs, user }));
+    queue = done.catch(() => undefined);
+    return done;
+  };
 
   const files = fileTools(
     {
@@ -80,11 +93,11 @@ export async function openWorkspace(input: {
     ...files,
     async runCheck(name) {
       const command = config.checks[name];
-      return { name, command, ...(await runShell(command, { cwd: dir, timeoutMs })) };
+      return { name, command, ...(await shell(command)) };
     },
     async install() {
       const command = config.install;
-      return command === undefined ? null : { command, ...(await runShell(command, { cwd: dir, timeoutMs })) };
+      return command === undefined ? null : { command, ...(await shell(command)) };
     },
     async diff(): Promise<Diff> {
       // Untracked files that are not ignored would be committed, so they count.
@@ -116,13 +129,16 @@ function authHeader(token: string): NodeJS.ProcessEnv {
   };
 }
 
+// Checks may have written hooks or an fsmonitor command into `.git` when they run as this process's user.
+const NO_REPO_COMMANDS = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"];
+
 async function git(dir: string, args: readonly string[], env: NodeJS.ProcessEnv = {}): Promise<string> {
   try {
-    const { stdout } = await run("git", args, {
+    const { stdout } = await run("git", [...NO_REPO_COMMANDS, ...args], {
       cwd: dir,
       encoding: "utf8",
       maxBuffer: 64 * 1024 * 1024,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...env },
+      env: { ...scrubEnv(process.env), GIT_TERMINAL_PROMPT: "0", ...env },
     });
     return stdout;
   } catch (error) {

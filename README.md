@@ -14,6 +14,7 @@ GitHub does not start workflows for events made with a workflow's `GITHUB_TOKEN`
 
 - **No model in the control plane.** `packages/core` runs a YAML template. The step order, the retries, and the loop caps are data. `pnpm lint` fails if `packages/core` imports a model client. A model's reply can send the run back through a loop the template allows. It never adds a step, raises a cap, or opens the draft.
 - **The gate measures the code.** It reads `git diff` against the base commit, the exit codes of the real typecheck and test commands, the path rules, and a secret scan of the added lines. A model's list of changed files is never evidence.
+- **Checks never see the keys.** On GitHub and in the App, the repo's checks run as a second OS user. Code the model wrote cannot read the API key or the push token from any process, and cannot plant a git hook. CI proves it on a real runner with a canary secret.
 - **Every run is replayable and traced.** Each step event goes to a SQLite log with its full output and usage, and `replay` rebuilds the run from that log. Model calls record to cassettes that CI replays offline. The Action and `pnpm trace` export each run as one OpenTelemetry trace, with tokens and cost on every model request.
 
 ## How a run flows
@@ -101,7 +102,7 @@ The cassettes and the judge batch have no live recording yet, so the costs are t
 
 - `docs/architecture.md`: packages, the step model, and the data flow.
 - `docs/gate.md`: each rule, what it reads, and the eval case that trips it.
-- `docs/security.md`: untrusted issue text, who can give a command, tool confinement, tokens, egress, and the spend cap.
+- `docs/security.md`: untrusted issue text, who can give a command, tool confinement, the check user, tokens, egress, and the spend cap.
 - `docs/telemetry.md`: spans, attributes, and backends.
 - `docs/deploy.md`: the GitHub App on Cloudflare.
 - `docs/mcp.md`: the local command and the MCP server.

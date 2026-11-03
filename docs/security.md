@@ -37,9 +37,26 @@ The implementer edits code only through six tools over the `Workspace` interface
 
 `verify`, `run_check`, and `install` run repository code, including the code the implementer wrote. `runShell` in `packages/workspace/src/check.ts` runs each command through `/bin/sh` in its own process group.
 
-- The environment drops every variable whose name contains `TOKEN`, `KEY`, `SECRET`, or `PASSWORD`, in any case. It also drops every variable that starts with `GITHUB_`, `ANTHROPIC_`, or `OTEL_`. `GITHUB_TOKEN`, `ANTHROPIC_API_KEY`, and `OTEL_EXPORTER_OTLP_HEADERS`, which holds a trace backend's API key, never reach a check.
+- The environment drops every variable whose name contains `TOKEN`, `KEY`, `SECRET`, or `PASSWORD`, in any case. It also drops every variable that starts with `GITHUB_`, `ANTHROPIC_`, or `OTEL_`. `GITHUB_TOKEN`, `ANTHROPIC_API_KEY`, and `OTEL_EXPORTER_OTLP_HEADERS`, which holds a trace backend's API key, are not in a check's environment.
 - A command that runs past the timeout, 5 minutes by default, is killed with its whole process group. Its exit code is 124.
 - The result keeps the last 4 KB of output.
+- Checks run one at a time, even when the implementer asks for two in one turn.
+
+### The check user
+
+A clean environment is not enough on its own. Any process can read `/proc/<pid>/environ` of the other processes its user runs, and the run and the shell that started it hold the secrets there. So the Action and the App run checks as a second user, `thin-pr-check`, set by `THIN_PR_CHECK_USER`.
+
+- The Action creates the user with `sudo useradd`. The App's image creates it and lets the `node` user run commands as it through `sudo`, and nothing else.
+- `openWorkspace` gives the user write access to the checkout through ACLs. It gets none to `.git`, so a check cannot plant a hook or change the git config. It gets search access to the folders above the checkout and above each tool on `PATH`, so it can run `node`, `pnpm`, and `python3`.
+- Each check runs as `sudo -n -H -u thin-pr-check`, with the clean environment passed as arguments. The check user cannot read the run's processes, and it cannot signal them.
+- When a check ends or times out, every process of the check user is killed, including any that left its process group. One check user serves one run at a time, as on a GitHub-hosted runner or in an App container.
+- CI proves it on a real runner. `pnpm test:sandbox` starts with a canary secret in every process above the check. The check searches every `/proc/*/environ` and finds no canary, cannot write `.git/hooks` or `.git/config`, and a `setsid` process it starts is dead when the check ends.
+
+Without `THIN_PR_CHECK_USER`, as in `pnpm thin-pr run` and the MCP server on your machine, checks run as you. Code a check runs can then read what your user can, including your shell's environment. Run local issues only on code you trust, or set the variable to a user you created.
+
+### Git
+
+Every git command the run makes gets the clean environment, plus the push header only for the push. Each one runs with `core.hooksPath=/dev/null` and `core.fsmonitor=false`, so git runs no hook and no fsmonitor command from `.git`, even where a check could write there.
 
 ## Push token
 

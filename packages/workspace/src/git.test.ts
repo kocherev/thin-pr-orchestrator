@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -170,6 +170,29 @@ describe("GitWorkspace", () => {
     expect(config).not.toContain(token);
     expect(config).not.toContain(Buffer.from(`x-access-token:${token}`).toString("base64"));
     expect((await workspace.runCheck("typecheck")).logTail).toBe("0\n0\n");
+  });
+
+  it("runs no hook or fsmonitor a check could plant, and gives git no secrets", async () => {
+    const secret = randomUUID();
+    process.env.ANTHROPIC_API_KEY = secret;
+    cleanups.push(() => delete process.env.ANTHROPIC_API_KEY);
+    const workspace = await open();
+    // What a check running as this process's user could write.
+    const git = join(workspace.dir, ".git");
+    writeFileSync(join(git, "hooks", "post-commit"), `#!/bin/sh\ntouch "$PWD/../hook-ran"\n`, { mode: 0o755 });
+    gitIn(workspace.dir, "config", "core.fsmonitor", `touch "$PWD/../fsmonitor-ran"; false`);
+    // A clean filter still runs on `git add`, so it shows what environment git passes on.
+    gitIn(workspace.dir, "config", "filter.probe.clean", `env > "$PWD/../git-env"; cat`);
+    writeFileSync(join(git, "info", "attributes"), "* filter=probe\n");
+
+    await workspace.createFile("src/reset.ts", "export const reset = 0;\n");
+    await workspace.commitAndPush({ branch: "thin-pr/7", message: "Apply thin-pr/#7" });
+
+    expect(existsSync(join(workspace.dir, "..", "hook-ran"))).toBe(false);
+    expect(existsSync(join(workspace.dir, "..", "fsmonitor-ran"))).toBe(false);
+    const env = readFileSync(join(workspace.dir, "..", "git-env"), "utf8");
+    expect(env).toContain("GIT_TERMINAL_PROMPT=0");
+    expect(env).not.toContain(secret);
   });
 
   it("refuses a checkout whose HEAD is not the base", async () => {
