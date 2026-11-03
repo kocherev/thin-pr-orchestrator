@@ -156,7 +156,8 @@ describe("revise", () => {
     expect(final).toContain("| `src/b.ts:2` | Name this `twice`, not `double`. | changed, +2 -2 |");
     expect(memory.calls.some((call) => call.op === "react")).toBe(false);
     expect(memory.calls.some((call) => call.op === "openDraft" || call.op === "updatePull")).toBe(false);
-    const ruleChecks = memory.calls.filter((call) => call.op === "startCheck" && String(call.name).includes("/ gate /"));
+    const ruleChecks = memory.calls.filter((call) => call.op === "postCheck");
+    expect(ruleChecks).toHaveLength(9);
     expect(ruleChecks.every((call) => call.sha === result.head)).toBe(true);
 
     // The events for the two inline comments name the same review. They find the reply and do nothing.

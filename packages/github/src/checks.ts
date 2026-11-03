@@ -53,16 +53,11 @@ export function createCheckRuns(
     },
     async postRules(results, sha) {
       for (const result of results) {
-        const checkRunId = await github.startCheck({
+        await github.postCheck({
           owner: target.owner,
           repo: target.repo,
           name: `thin-pr / gate / ${result.rule}`,
           sha,
-        });
-        await github.finishCheck({
-          owner: target.owner,
-          repo: target.repo,
-          checkRunId,
           conclusion: CONCLUSIONS[result.verdict],
           summary: `${result.verdict}: ${result.reason}`,
           title: result.verdict,

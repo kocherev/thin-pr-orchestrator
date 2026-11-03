@@ -94,7 +94,7 @@ export async function runRevise(input: {
         }
         const message = `Revise thin-pr/#${trigger.pull.issue} for review ${trigger.reviewId}`;
         const head = await workspace.commitAndPush({ branch, message, token: input.pushToken });
-        await postRules(head);
+        const note = await postRules(head);
         const pushed = record("opened", { number: pull, url: `https://github.com/${target.owner}/${target.repo}/pull/${pull}` });
         const change = implementerOutput.safeParse(outputs.implement).data?.summary;
         await finish(
@@ -102,7 +102,7 @@ export async function runRevise(input: {
             `**Revised.** Pushed ${head.slice(0, 7)} to \`${branch}\` for ${by}. All ${pushed.gate.length} gate rules passed.${change ? ` ${change}` : ""}`,
             perComment(review, diff),
             reportDetails({ record: pushed, outputs, branch }),
-          ].join("\n\n"),
+          ].join("\n\n") + note,
         );
         return { status: "pushed", record: pushed, head };
       },

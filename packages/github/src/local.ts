@@ -136,6 +136,7 @@ function localSurface(posted: string[]): GitHubSurface {
       return nextCheck - 1;
     },
     async finishCheck() {},
+    async postCheck() {},
     async createComment({ body }) {
       posted.push(body);
       return posted.length;

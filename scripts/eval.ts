@@ -386,6 +386,7 @@ export function replayGitHub(): GitHubSurface {
       return nextId - 1;
     },
     async finishCheck() {},
+    async postCheck() {},
     async createComment() {
       nextId += 1;
       return nextId - 1;

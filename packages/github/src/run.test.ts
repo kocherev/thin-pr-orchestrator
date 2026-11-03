@@ -38,6 +38,18 @@ const STUB_SCRIPT: Script = {
 };
 
 describe("issue label", () => {
+  it("opens the draft even when posting the gate checks fails after the push", async () => {
+    const repo = scratch(PASSING_CHECKS);
+    const memory = memoryGitHub({ remote: repo.remote });
+    // As on kb-copilot: GitHub answered 404 on the check runs of a commit pushed a moment before.
+    const github = { ...memory.github, postCheck: () => Promise.reject(new Error("Not Found")) };
+    const result = await run(repo, github, { model: scripted(STUB_SCRIPT) });
+
+    expect(result.status).toBe("opened");
+    expect(memory.calls.some((call) => call.op === "openDraft")).toBe(true);
+    expect(finalComment(memory.calls)).toContain("The gate checks could not be posted on the pushed commit: Not Found");
+  });
+
   it("pushes the branch and opens a draft when every gate rule passes", async () => {
     const repo = scratch(PASSING_CHECKS);
     const memory = memoryGitHub();
@@ -165,7 +177,8 @@ describe("issue label", () => {
     ]);
     expect(git(repo.remote, "branch", "--list", "thin-pr/7")).toBe("");
     expect(memory.calls.some((call) => call.op === "openDraft" || call.op === "listPullsForHead")).toBe(false);
-    const ruleChecks = memory.calls.filter((call) => call.op === "startCheck" && String(call.name).includes("/ gate /"));
+    const ruleChecks = memory.calls.filter((call) => call.op === "postCheck");
+    expect(ruleChecks).toHaveLength(9);
     expect(ruleChecks.every((call) => call.sha === repo.baseSha)).toBe(true);
     const comment = memory.calls.find((call) => call.op === "createComment");
     expect(comment).toMatchObject({ issue: 7, owner: "example", repo: "sample-repo" });
@@ -496,9 +509,11 @@ describe("approval", () => {
     expect(result.record.gate.filter((rule) => rule.verdict !== "PASS")).toEqual([
       { rule: "budget", verdict: "NEEDS_APPROVAL", reason: "Diff exceeds the budget (1 file, 2 lines; limit 12 files, 1 line)." },
     ]);
-    const budgetCheck = memory.calls.findIndex((call) => call.op === "startCheck" && call.name === "thin-pr / gate / budget");
-    expect(memory.calls[budgetCheck]).toMatchObject({ sha: head });
-    expect(memory.calls[budgetCheck + 1]).toMatchObject({ op: "finishCheck", conclusion: "neutral", title: "NEEDS_APPROVAL" });
+    expect(memory.calls.find((call) => call.op === "postCheck" && call.name === "thin-pr / gate / budget")).toMatchObject({
+      sha: head,
+      conclusion: "neutral",
+      title: "NEEDS_APPROVAL",
+    });
 
     const [first, , second] = comment.split("\n");
     expect(first).toBe(
