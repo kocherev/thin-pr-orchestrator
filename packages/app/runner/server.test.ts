@@ -2,8 +2,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { Job } from "../src/event.js";
 import { createRunnerServer } from "./server.js";
 
+// A label job is keyed by its delivery id.
+const DELIVERY = "72d3162e-cc78-11e3-81ab-4c9367dc0958";
 const JOB: Job = {
-  deliveryId: "72d3162e-cc78-11e3-81ab-4c9367dc0958",
+  deliveryId: DELIVERY,
+  key: DELIVERY,
   installationId: 42,
   trigger: {
     kind: "label",
@@ -71,6 +74,28 @@ describe("runner server", () => {
     expect((await post(base, JOB)).status).toBe(202);
     expect((await post(base, JOB)).status).toBe(202);
     expect(started).toHaveLength(1);
+  });
+
+  it("starts one run for the deliveries of one review", async () => {
+    const started: Job[] = [];
+    const base = await start(async (job) => {
+      started.push(job);
+    });
+    const revise = (deliveryId: string): Job => ({
+      deliveryId,
+      key: "review-501",
+      installationId: 42,
+      trigger: {
+        kind: "revise",
+        repo: { owner: "example", name: "sample-repo", defaultBranch: "main" },
+        pull: { number: 12, branch: "thin-pr/7", issue: 7 },
+        reviewId: 501,
+        reviewer: "octocat",
+      },
+    });
+    expect((await post(base, revise("72d3162e-cc78-11e3-81ab-4c9367dc0001"))).status).toBe(202);
+    expect((await post(base, revise("72d3162e-cc78-11e3-81ab-4c9367dc0002"))).status).toBe(202);
+    expect(started.map((job) => job.deliveryId)).toEqual(["72d3162e-cc78-11e3-81ab-4c9367dc0001"]);
   });
 
   it("reports a failed run as finished", async () => {

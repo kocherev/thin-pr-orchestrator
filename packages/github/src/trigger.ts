@@ -5,13 +5,15 @@ import { Octokit } from "@octokit/rest";
 import { clientOptionsFromEnv, createAnthropicClient, type ModelSession } from "@thin-pr/specialists";
 import { runCommand, type CommandResult } from "./commands.js";
 import { labelEvent, type LabelEvent } from "./event.js";
+import { runRevise, type ReviseResult } from "./revise.js";
 import type { Trigger } from "./router.js";
 import { runLabel, type LabelRunResult } from "./run.js";
 import { createGitHubSurface } from "./surface.js";
 
 export type TriggerOutcome =
   | { readonly kind: "label"; readonly result: LabelRunResult }
-  | { readonly kind: "command"; readonly result: CommandResult };
+  | { readonly kind: "command"; readonly result: CommandResult }
+  | { readonly kind: "revise"; readonly result: ReviseResult };
 
 export type TriggerRun = {
   readonly outcome: TriggerOutcome;
@@ -19,12 +21,21 @@ export type TriggerRun = {
   readonly spentUsd: number | null;
 };
 
-/** The run a trigger started, if any: a label, or a retry command. */
+/** The label run a trigger started, if any: a label, or a retry command. */
 export function runResultOf(outcome: TriggerOutcome): LabelRunResult | null {
-  if (outcome.kind === "label") {
-    return outcome.result;
+  switch (outcome.kind) {
+    case "label":
+      return outcome.result;
+    case "command":
+      return outcome.result.status === "retried" ? outcome.result.run : null;
+    case "revise":
+      return null;
   }
-  return outcome.result.status === "retried" ? outcome.result.run : null;
+}
+
+/** The branch a trigger's checkout must hold: the draft branch for a review, the default branch otherwise. */
+export function checkoutBranch(trigger: Trigger): string {
+  return trigger.kind === "revise" ? trigger.pull.branch : trigger.repo.defaultBranch;
 }
 
 /**
@@ -51,32 +62,39 @@ export async function runTrigger(input: {
   const sessions: ModelSession[] = [];
   // GitHub Actions sets GITHUB_API_URL. Elsewhere it is unset and Octokit uses api.github.com.
   const github = createGitHubSurface(new Octokit({ auth: input.token, baseUrl: env.GITHUB_API_URL }));
-  const label = (event: LabelEvent) =>
-    runLabel({
-      event,
-      templates: fileURLToPath(new URL("../../../templates", import.meta.url)),
-      checkout: input.checkout,
-      baseSha: input.baseSha,
-      pushToken: input.token,
-      runId: input.runId,
-      runLink: input.runLink,
-      logPath: join(tmpdir(), `thin-pr-${input.runId}.sqlite`),
-      github,
-      model: () => {
-        if (options.mode !== "replay" && !env.ANTHROPIC_API_KEY) {
-          throw new Error("ANTHROPIC_API_KEY is missing. Add it to the thin-pr workflow secrets or the Worker secrets.");
-        }
-        const session = createAnthropicClient(options, env);
-        sessions.push(session);
-        return session;
-      },
-    });
+  const run = {
+    templates: fileURLToPath(new URL("../../../templates", import.meta.url)),
+    checkout: input.checkout,
+    baseSha: input.baseSha,
+    pushToken: input.token,
+    runId: input.runId,
+    runLink: input.runLink,
+    logPath: join(tmpdir(), `thin-pr-${input.runId}.sqlite`),
+    github,
+    model: () => {
+      if (options.mode !== "replay" && !env.ANTHROPIC_API_KEY) {
+        throw new Error("ANTHROPIC_API_KEY is missing. Add it to the thin-pr workflow secrets or the Worker secrets.");
+      }
+      const session = createAnthropicClient(options, env);
+      sessions.push(session);
+      return session;
+    },
+  };
+  const label = (event: LabelEvent) => runLabel({ ...run, event });
 
   const { trigger } = input;
-  const outcome: TriggerOutcome =
-    trigger.kind === "label"
-      ? { kind: "label", result: await label(labelEvent(trigger)) }
-      : { kind: "command", result: await runCommand(trigger, { github, retry: label }) };
+  let outcome: TriggerOutcome;
+  switch (trigger.kind) {
+    case "label":
+      outcome = { kind: "label", result: await label(labelEvent(trigger)) };
+      break;
+    case "command":
+      outcome = { kind: "command", result: await runCommand(trigger, { github, retry: label }) };
+      break;
+    case "revise":
+      outcome = { kind: "revise", result: await runRevise({ ...run, trigger }) };
+      break;
+  }
   const session = sessions[0];
   return { outcome, spentUsd: session && options.mode !== "replay" ? session.meter.spentUsd : null };
 }

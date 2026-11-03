@@ -59,11 +59,13 @@ async function main(): Promise<void> {
 /** Runs the trigger and logs what happened. Returns the failure message, or "" when the job should pass. */
 async function handle(trigger: Trigger, token: string): Promise<string> {
   const runId = process.env.GITHUB_RUN_ID ? `gha-${process.env.GITHUB_RUN_ID}` : `local-${Date.now()}`;
-  // actions/checkout leaves the default branch at the event's commit and stores no credentials; the push gets the token.
+  // actions/checkout stores no credentials; the push gets the token. For a label or a command it leaves the default
+  // branch at the event's commit. For a review it checks out the draft branch, whose head may be newer than the
+  // event, so the run starts from HEAD.
   const { outcome, spentUsd } = await runTrigger({
     trigger,
     checkout: process.cwd(),
-    baseSha: github.context.sha,
+    baseSha: trigger.kind === "revise" ? "HEAD" : github.context.sha,
     token,
     runId,
     runLink: actionsRunLink(process.env),
@@ -81,6 +83,19 @@ async function handle(trigger: Trigger, token: string): Promise<string> {
     }
   }
 
+  if (outcome.kind === "revise") {
+    const { result } = outcome;
+    if (result.status === "ignored") {
+      core.info(`Nothing to revise: ${result.reason}.`);
+      return "";
+    }
+    exportRunRecord(result.record, process.env.THIN_PR_RECORD_PATH);
+    if (result.status === "pushed") {
+      core.info(`Pushed ${result.head} to ${trigger.kind === "revise" ? trigger.pull.branch : "the draft"}.`);
+      return "";
+    }
+    return result.error;
+  }
   const result = runResultOf(outcome);
   if (!result || result.status === "ignored") {
     return "";

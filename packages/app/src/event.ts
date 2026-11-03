@@ -5,6 +5,11 @@ import { z } from "zod";
 export const jobSchema = z
   .object({
     deliveryId: z.guid(),
+    /**
+     * Names the container and dedupes runs. A review arrives as one review event and one event per inline comment,
+     * so all of them share `review-<id>` and run once. Every other job is keyed by its delivery.
+     */
+    key: z.string().regex(/^[A-Za-z0-9-]+$/),
     installationId: z.number().int().positive(),
     trigger: triggerSchema,
   })
@@ -28,8 +33,10 @@ export function readDelivery(headers: Headers, body: string): Delivery {
   if (route.kind !== "run") {
     return route;
   }
+  const deliveryId = headers.get("x-github-delivery");
   const job = jobSchema.safeParse({
-    deliveryId: headers.get("x-github-delivery"),
+    deliveryId,
+    key: route.trigger.kind === "revise" ? `review-${route.trigger.reviewId}` : deliveryId,
     installationId: route.installationId,
     trigger: route.trigger,
   });

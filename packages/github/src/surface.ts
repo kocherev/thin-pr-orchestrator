@@ -29,6 +29,16 @@ export type GitHubRest = {
         base: { repo: { full_name: string } };
       };
     }>;
+    getReview(params: { readonly owner: string; readonly repo: string; readonly pull_number: number; readonly review_id: number }): Promise<{
+      data: { body: string };
+    }>;
+    listCommentsForReview(params: {
+      readonly owner: string;
+      readonly repo: string;
+      readonly pull_number: number;
+      readonly review_id: number;
+      readonly per_page: number;
+    }): Promise<{ data: readonly { path: string; line?: number | null; original_line?: number | null; body: string }[] }>;
   };
   checks: {
     create(params: {
@@ -60,6 +70,12 @@ export type GitHubRest = {
       readonly owner: string;
       readonly repo: string;
       readonly comment_id: number;
+      readonly content: Reaction;
+    }): Promise<{ data: { user: { login: string } | null } }>;
+    createForIssue(params: {
+      readonly owner: string;
+      readonly repo: string;
+      readonly issue_number: number;
       readonly content: Reaction;
     }): Promise<{ data: { user: { login: string } | null } }>;
   };
@@ -98,6 +114,15 @@ export type IssueComment = { readonly id: number; readonly author: string | null
 
 export type Issue = { readonly number: number; readonly title: string; readonly body: string; readonly labels: readonly string[] };
 
+/** A review's text and its inline comments. `line` is null for a comment on a whole file or an outdated line. */
+export type Review = {
+  readonly body: string;
+  readonly comments: readonly { readonly path: string; readonly line: number | null; readonly body: string }[];
+};
+
+// One page. A review with more inline comments than this is cut at this many.
+const REVIEW_COMMENTS = 100;
+
 const COMMENTS_PER_PAGE = 100;
 
 /** `neutral` marks a rule that waits for a person, such as `budget` with `NEEDS_APPROVAL`. */
@@ -134,11 +159,17 @@ export type GitHubSurface = {
   /** Every comment on an issue or pull request, oldest first. */
   listComments(input: { readonly owner: string; readonly repo: string; readonly issue: number }): Promise<IssueComment[]>;
   /**
-   * Reacts to an issue comment and returns the login that reacted, which is the token's own account. An
-   * installation token cannot read `GET /user`, and the command flow reacts anyway, so this is how it learns who
-   * it is.
+   * Reacts to an issue comment, or to an issue or pull request, and returns the login that reacted: the token's own
+   * account. An installation token cannot read `GET /user`, and commands and reviews get a reaction anyway, so
+   * this is how a run learns who it is.
    */
-  react(input: { readonly owner: string; readonly repo: string; readonly commentId: number; readonly content: Reaction }): Promise<string>;
+  react(input: {
+    readonly owner: string;
+    readonly repo: string;
+    readonly on: { readonly comment: number } | { readonly issue: number };
+    readonly content: Reaction;
+  }): Promise<string>;
+  getReview(input: { readonly owner: string; readonly repo: string; readonly pull: number; readonly reviewId: number }): Promise<Review>;
   getIssue(input: { readonly owner: string; readonly repo: string; readonly issue: number }): Promise<Issue>;
   /** The head branch of a pull request, and whether it lives in the same repository. */
   getPull(input: { readonly owner: string; readonly repo: string; readonly number: number }): Promise<{
@@ -230,16 +261,26 @@ export function createGitHubSurface(octokit: GitHubRest): GitHubSurface {
       }
     },
     async react(input) {
-      const { data } = await octokit.reactions.createForIssueComment({
-        owner: input.owner,
-        repo: input.repo,
-        comment_id: input.commentId,
-        content: input.content,
-      });
+      const { owner, repo, on, content } = input;
+      const { data } =
+        "comment" in on
+          ? await octokit.reactions.createForIssueComment({ owner, repo, comment_id: on.comment, content })
+          : await octokit.reactions.createForIssue({ owner, repo, issue_number: on.issue, content });
       if (!data.user) {
         throw new Error("GitHub returned a reaction without a user");
       }
       return data.user.login;
+    },
+    async getReview(input) {
+      const params = { owner: input.owner, repo: input.repo, pull_number: input.pull, review_id: input.reviewId };
+      const [{ data: review }, { data: comments }] = await Promise.all([
+        octokit.pulls.getReview(params),
+        octokit.pulls.listCommentsForReview({ ...params, per_page: REVIEW_COMMENTS }),
+      ]);
+      return {
+        body: review.body,
+        comments: comments.map((comment) => ({ path: comment.path, line: comment.line ?? comment.original_line ?? null, body: comment.body })),
+      };
     },
     async getIssue(input) {
       const { data } = await octokit.issues.get({ owner: input.owner, repo: input.repo, issue_number: input.issue });
@@ -310,9 +351,11 @@ export function createGitHubSurface(octokit: GitHubRest): GitHubSurface {
 }
 
 /** The methods only commands and reviews call, for a surface that runs labeled issues alone. Each one throws. */
-export function noReadBack(who: string): Pick<GitHubSurface, "listComments" | "react" | "getIssue" | "getPull" | "deleteBranch"> {
+export function noReadBack(
+  who: string,
+): Pick<GitHubSurface, "listComments" | "react" | "getIssue" | "getPull" | "getReview" | "deleteBranch"> {
   const refuse = async (): Promise<never> => {
     throw new Error(`${who} runs labeled issues only`);
   };
-  return { listComments: refuse, react: refuse, getIssue: refuse, getPull: refuse, deleteBranch: refuse };
+  return { listComments: refuse, react: refuse, getIssue: refuse, getPull: refuse, getReview: refuse, deleteBranch: refuse };
 }

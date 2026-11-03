@@ -118,7 +118,16 @@ describe("Octokit surface", () => {
     const comments = await github.listComments({ ...target, issue: 7 });
     expect(comments).toHaveLength(101);
     expect(comments.at(-1)).toEqual({ id: 101, author: null, body: "" });
-    await expect(github.react({ ...target, commentId: 5, content: "eyes" })).resolves.toBe("thin-pr[bot]");
+    await expect(github.react({ ...target, on: { comment: 5 }, content: "eyes" })).resolves.toBe("thin-pr[bot]");
+    await expect(github.react({ ...target, on: { issue: 11 }, content: "eyes" })).resolves.toBe("thin-pr[bot]");
+    await expect(github.getReview({ ...target, pull: 11, reviewId: 3 })).resolves.toEqual({
+      body: "Two things.",
+      comments: [
+        { path: "src/a.ts", line: 4, body: "Rename this." },
+        { path: "src/b.ts", line: 9, body: "Outdated, but still wanted." },
+        { path: "README.md", line: null, body: "On the whole file." },
+      ],
+    });
     await expect(github.getIssue({ ...target, issue: 7 })).resolves.toEqual({
       number: 7,
       title: "Add a flag",
@@ -137,6 +146,9 @@ describe("Octokit surface", () => {
       ["issues.listComments", { ...target, issue_number: 7, per_page: 100, page: 1 }],
       ["issues.listComments", { ...target, issue_number: 7, per_page: 100, page: 2 }],
       ["reactions.createForIssueComment", { ...target, comment_id: 5, content: "eyes" }],
+      ["reactions.createForIssue", { ...target, issue_number: 11, content: "eyes" }],
+      ["pulls.getReview", { ...target, pull_number: 11, review_id: 3 }],
+      ["pulls.listCommentsForReview", { ...target, pull_number: 11, review_id: 3, per_page: 100 }],
       ["issues.get", { ...target, issue_number: 7 }],
       ["pulls.get", { ...target, pull_number: 11 }],
       ["git.deleteRef", { ...target, ref: "heads/thin-pr/7" }],
@@ -165,6 +177,20 @@ function restWith(calls: unknown[], overrides: { readonly issues?: Partial<GitHu
           },
         };
       },
+      async getReview(params) {
+        calls.push(["pulls.getReview", params]);
+        return { data: { body: "Two things." } };
+      },
+      async listCommentsForReview(params) {
+        calls.push(["pulls.listCommentsForReview", params]);
+        return {
+          data: [
+            { path: "src/a.ts", line: 4, body: "Rename this." },
+            { path: "src/b.ts", line: null, original_line: 9, body: "Outdated, but still wanted." },
+            { path: "README.md", body: "On the whole file." },
+          ],
+        };
+      },
     },
     checks: { create: unused, update: unused },
     git: {
@@ -176,6 +202,10 @@ function restWith(calls: unknown[], overrides: { readonly issues?: Partial<GitHu
     reactions: {
       async createForIssueComment(params) {
         calls.push(["reactions.createForIssueComment", params]);
+        return { data: { user: { login: "thin-pr[bot]" } } };
+      },
+      async createForIssue(params) {
+        calls.push(["reactions.createForIssue", params]);
         return { data: { user: { login: "thin-pr[bot]" } } };
       },
     },

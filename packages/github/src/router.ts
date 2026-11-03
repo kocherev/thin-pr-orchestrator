@@ -10,6 +10,14 @@ const TRUSTED = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 
 export const COMMANDS = ["approve", "retry", "cancel"] as const;
 
+/** The template a review starts. A label run never uses it. */
+export const REVISE_LABEL = "thin-pr:revise";
+
+const DRAFT_BRANCH = /^thin-pr\/(\d+)$/;
+
+// GitHub sends review states in lower case in webhooks. Approvals ask for nothing.
+const REVISE_STATES = new Set(["changes_requested", "commented"]);
+
 // Names that go into clone URLs and API paths.
 const githubName = z.string().regex(/^[A-Za-z0-9_.-]+$/);
 const positive = z.number().int().positive();
@@ -30,10 +38,22 @@ export const triggerSchema = z.discriminatedUnion("kind", [
       comment: z.object({ id: positive, author: z.string().min(1) }).strict(),
     })
     .strict(),
+  z
+    .object({
+      kind: z.literal("revise"),
+      repo: repoSchema,
+      /** An open draft on `thin-pr/<issue>` in the same repository. */
+      pull: z.object({ number: positive, branch: z.string().regex(DRAFT_BRANCH), issue: positive }).strict(),
+      /** A review, and the review an inline comment belongs to, both name the review. */
+      reviewId: positive,
+      reviewer: z.string().min(1),
+    })
+    .strict(),
 ]);
 
 export type Trigger = z.infer<typeof triggerSchema>;
 export type CommandTrigger = Extract<Trigger, { kind: "command" }>;
+export type ReviseTrigger = Extract<Trigger, { kind: "revise" }>;
 
 export type Route =
   | { readonly kind: "run"; readonly trigger: Trigger; readonly installationId: number | null }
@@ -58,6 +78,22 @@ const commentPayload = z.object({
     pull_request: z.unknown().optional(),
   }),
   comment: z.object({ id: z.number(), body: z.string().nullish(), user, author_association: z.string() }),
+  repository,
+});
+const pullRequest = z.object({
+  number: z.number(),
+  state: z.string(),
+  head: z.object({ ref: z.string(), repo: z.object({ full_name: z.string() }).nullable() }),
+  base: z.object({ repo: z.object({ full_name: z.string() }) }),
+});
+const reviewPayload = z.object({
+  review: z.object({ id: z.number(), state: z.string(), user, author_association: z.string() }),
+  pull_request: pullRequest,
+  repository,
+});
+const reviewCommentPayload = z.object({
+  comment: z.object({ pull_request_review_id: z.number().nullable(), user, author_association: z.string() }),
+  pull_request: pullRequest,
   repository,
 });
 
@@ -123,7 +159,48 @@ export function routeEvent(name: string, payload: unknown): Route {
     });
   }
 
+  // GitHub sends one review event per review and one comment event per inline comment in it. Both carry the review
+  // id, and the revise run answers each review once.
+  if ((name === "pull_request_review" && action === "submitted") || (name === "pull_request_review_comment" && action === "created")) {
+    const event = name === "pull_request_review" ? reviewPayload.safeParse(payload) : reviewCommentPayload.safeParse(payload);
+    if (!event.success) {
+      return invalid(event.error);
+    }
+    const author = "review" in event.data ? event.data.review : event.data.comment;
+    const reviewId = "review" in event.data ? event.data.review.id : event.data.comment.pull_request_review_id;
+    if ("review" in event.data && !REVISE_STATES.has(event.data.review.state.toLowerCase())) {
+      return ignored(`a review that is ${event.data.review.state.toLowerCase()} asks for no change`);
+    }
+    if (reviewId === null) {
+      return ignored("the comment belongs to no review");
+    }
+    const pull = draftOf(event.data.pull_request);
+    if (typeof pull === "string") {
+      return ignored(pull);
+    }
+    const outsider = untrusted(author.user, author.author_association);
+    if (outsider) {
+      return ignored(outsider);
+    }
+    return run({ kind: "revise", repo: repoOf(event.data.repository), pull, reviewId, reviewer: author.user.login });
+  }
+
   return ignored(`${name}${action ? `.${action}` : ""} does not start a run`);
+}
+
+/** The draft's number, branch and issue, or why the pull request is not one thin-pr revises. */
+function draftOf(pull: z.infer<typeof pullRequest>): { number: number; branch: string; issue: number } | string {
+  const match = DRAFT_BRANCH.exec(pull.head.ref);
+  if (!match) {
+    return `${pull.head.ref} is not a thin-pr branch`;
+  }
+  if (pull.head.repo?.full_name !== pull.base.repo.full_name) {
+    return "the pull request comes from a fork";
+  }
+  if (pull.state !== "open") {
+    return `the pull request is ${pull.state}`;
+  }
+  return { number: pull.number, branch: pull.head.ref, issue: Number(match[1]) };
 }
 
 /** The command on the first line of a comment, `help` for an unknown word, or null when it is not a command. */

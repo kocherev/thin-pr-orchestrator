@@ -9,4 +9,5 @@ export { runAction, runIssue, runLabel, runLimits, type LabelRunResult, type Run
 export { createRunHandlers } from "./steps.js";
 export { noReadBack, type GitHubSurface } from "./surface.js";
 export { spanNames, startTrace } from "./trace.js";
-export { runResultOf, runTrigger, type TriggerOutcome, type TriggerRun } from "./trigger.js";
+export { runRevise, type ReviseResult } from "./revise.js";
+export { checkoutBranch, runResultOf, runTrigger, type TriggerOutcome, type TriggerRun } from "./trigger.js";

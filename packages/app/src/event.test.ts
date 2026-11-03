@@ -26,6 +26,7 @@ describe("readDelivery", () => {
       kind: "job",
       job: {
         deliveryId: DELIVERY_ID,
+        key: DELIVERY_ID,
         installationId: 42,
         trigger: {
           kind: "label",
@@ -53,6 +54,37 @@ describe("readDelivery", () => {
     };
     const delivery = readDelivery(headers("issue_comment"), JSON.stringify(payload));
     expect(delivery.kind === "job" && delivery.job.trigger).toMatchObject({ kind: "command", command: "retry", comment: { id: 55 } });
+  });
+
+  it("keys a review and its inline comments to one run", () => {
+    const pull_request = {
+      number: 12,
+      state: "open",
+      head: { ref: "thin-pr/7", repo: { full_name: "example/sample-repo" } },
+      base: { repo: { full_name: "example/sample-repo" } },
+    };
+    const user = { login: "octocat", type: "User" };
+    const review = {
+      action: "submitted",
+      review: { id: 501, state: "commented", body: null, user, author_association: "OWNER" },
+      pull_request,
+      repository,
+      sender: user,
+      installation: { id: 42 },
+    };
+    const comment = {
+      action: "created",
+      comment: { id: 9, pull_request_review_id: 501, user, author_association: "OWNER" },
+      pull_request,
+      repository,
+      sender: user,
+      installation: { id: 42 },
+    };
+    const keys = [
+      readDelivery(headers("pull_request_review"), JSON.stringify(review)),
+      readDelivery(headers("pull_request_review_comment"), JSON.stringify(comment)),
+    ].map((delivery) => (delivery.kind === "job" ? delivery.job.key : delivery.kind));
+    expect(keys).toEqual(["review-501", "review-501"]);
   });
 
   it("ignores other events, actions, and labels", () => {

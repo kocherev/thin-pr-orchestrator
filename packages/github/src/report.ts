@@ -21,10 +21,18 @@ export function formatRunReport(run: {
   /** The login that approved a run over the budget, or cancelled it. */
   readonly by?: string;
 }): string {
+  return [outcome(run.record, run.error, run.branch, run.by), reportDetails(run)].join("\n\n");
+}
+
+/** The report without its outcome line, for a reply that states the outcome its own way. */
+export function reportDetails(run: {
+  readonly record: RunRecord;
+  readonly outputs: Readonly<Partial<Record<StepId, Json>>>;
+  readonly branch: string;
+}): string {
   const { record } = run;
   const overBudget = record.gate.some((rule) => rule.verdict === "NEEDS_APPROVAL");
   return [
-    outcome(record, run.error, run.branch, run.by),
     gateTable(record.gate),
     usage(record),
     ...(overBudget ? [diffSection(record)] : []),
@@ -161,7 +169,7 @@ function fenced(text: string): string {
 }
 
 // A table cell is one short line, and a pipe would end it.
-function cell(text: string): string {
+export function cell(text: string): string {
   const line = text.replace(/\s+/g, " ").trim();
   const short = line.length > CELL_CHARS ? `${line.slice(0, CELL_CHARS - 3)}...` : line;
   return short.replaceAll("|", "\\|");

@@ -21,9 +21,12 @@ afterEach(() => {
   }
 });
 
+const DELIVERY = "72d3162e-cc78-11e3-81ab-4c9367dc0958";
+
 // The issue in fixtures/sample-issue-labeled.json, as the Worker queues it.
 const JOB: Job = {
-  deliveryId: "72d3162e-cc78-11e3-81ab-4c9367dc0958",
+  deliveryId: DELIVERY,
+  key: DELIVERY,
   installationId: 42,
   trigger: {
     kind: "label",

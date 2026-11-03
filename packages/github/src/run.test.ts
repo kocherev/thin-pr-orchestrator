@@ -401,6 +401,14 @@ describe("issue label", () => {
     expect(workflow).toContain("github.event.label.name == 'thin-pr' || startsWith(github.event.label.name, 'thin-pr:')");
     expect(workflow).toContain("github.event.sender.type != 'Bot'");
     expect(workflow).toContain(`contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)`);
+    expect(workflow).toContain(`contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association)`);
+    for (const event of ["issue_comment:", "pull_request_review:", "pull_request_review_comment:"]) {
+      expect(workflow).toContain(`  ${event}`);
+    }
+    expect(workflow).toContain("group: thin-pr-${{ github.event.issue.number || github.event.pull_request.number }}");
+    expect(workflow).toContain("ref: ${{ github.event.pull_request.head.ref }}");
+    const manifest = JSON.parse(readFileSync(join(root, "packages/app/github-app-manifest.json"), "utf8")) as { default_events: string[] };
+    expect(manifest.default_events).toEqual(["issues", "issue_comment", "pull_request_review", "pull_request_review_comment"]);
     expect(workflow).toContain("packages/github/src/action.ts");
     expect(workflow).toContain("actions/checkout@v7");
     expect(workflow).toContain("fetch-depth: 0");

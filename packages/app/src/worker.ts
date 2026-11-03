@@ -87,8 +87,9 @@ export default {
       const job = message.body;
       try {
         const outcome = await dispatch(job, env);
-        const { repo, issue } = job.trigger;
-        console.log(`delivery ${job.deliveryId} (${job.trigger.kind}) for ${repo.owner}/${repo.name}#${issue.number}: ${outcome}`);
+        const { trigger } = job;
+        const number = trigger.kind === "revise" ? trigger.pull.number : trigger.issue.number;
+        console.log(`delivery ${job.deliveryId} (${trigger.kind}) for ${trigger.repo.owner}/${trigger.repo.name}#${number}: ${outcome}`);
         message.ack();
       } catch (error) {
         console.error(`dispatch failed for delivery ${job.deliveryId}`, error);
@@ -110,7 +111,7 @@ async function dispatch(job: Job, env: Env): Promise<"started" | "left to the Ac
   if (await actionWorkflowEnabled({ owner: repo.owner, repo: repo.name, token: installation.token, fetch: fetcher })) {
     return "left to the Action";
   }
-  const runner = getContainer(env.RUNNER, job.deliveryId);
+  const runner = getContainer(env.RUNNER, job.key);
   await runner.start({ envVars: runnerEnvVars(env, installation.token) });
   const response = await runner.fetch("http://runner/run", {
     method: "POST",

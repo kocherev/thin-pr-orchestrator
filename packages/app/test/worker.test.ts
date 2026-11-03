@@ -11,6 +11,7 @@ const DELIVERY_ID = "72d3162e-cc78-11e3-81ab-4c9367dc0958";
 
 const JOB: Job = {
   deliveryId: DELIVERY_ID,
+  key: DELIVERY_ID,
   installationId: 42,
   trigger: {
     kind: "label",

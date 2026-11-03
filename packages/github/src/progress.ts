@@ -34,6 +34,8 @@ export async function startProgress(input: {
   readonly runId: string;
   /** Markdown that links to where the run executes: the Actions run, or the App delivery. */
   readonly runLink: string | null;
+  /** A hidden marker every body carries, such as the review a revise run answers. */
+  readonly marker?: string;
 }): Promise<Progress> {
   const rows = new Map<StepId, Row>(input.steps.map((step) => [step, { status: "pending", attempt: 0, loop: 0, costUsd: 0 }]));
   const passes: Partial<Record<StepId, number>> = {};
@@ -53,8 +55,9 @@ export async function startProgress(input: {
   };
 
   const target = { owner: input.owner, repo: input.repo };
-  const commentId = await input.github.createComment({ ...target, issue: input.issue, body: `${render()}\n\n${RUN_COMMENT}` });
-  const edit = (body: string) => input.github.editComment({ ...target, commentId, body: `${body}\n\n${RUN_COMMENT}` });
+  const trailer = [input.marker, RUN_COMMENT].filter(Boolean).join("\n");
+  const commentId = await input.github.createComment({ ...target, issue: input.issue, body: `${render()}\n\n${trailer}` });
+  const edit = (body: string) => input.github.editComment({ ...target, commentId, body: `${body}\n\n${trailer}` });
 
   return {
     async onEvent(event) {

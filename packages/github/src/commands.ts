@@ -36,14 +36,14 @@ export async function runCommand(
 ): Promise<CommandResult> {
   const { github } = deps;
   const target = { owner: trigger.repo.owner, repo: trigger.repo.name };
-  const self = await github.react({ ...target, commentId: trigger.comment.id, content: "eyes" });
+  const self = await github.react({ ...target, on: { comment: trigger.comment.id }, content: "eyes" });
   const result = await execute(trigger, { ...deps, target, self });
   const reply = result.status === "refused" ? result.reason : result.status === "helped" ? HELP : null;
   if (reply) {
     await github.createComment({ ...target, issue: trigger.issue.number, body: reply });
   }
   if (result.status !== "helped") {
-    await github.react({ ...target, commentId: trigger.comment.id, content: result.status === "refused" ? "confused" : "+1" });
+    await github.react({ ...target, on: { comment: trigger.comment.id }, content: result.status === "refused" ? "confused" : "+1" });
   }
   return result;
 }

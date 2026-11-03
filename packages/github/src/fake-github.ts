@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import type { GitHubSurface, Issue } from "./surface.js";
+import type { GitHubSurface, Issue, Review } from "./surface.js";
 
 /** One recorded surface call: the method name and its input. */
 export type Call = { readonly op: string } & Readonly<Record<string, unknown>>;
@@ -18,6 +18,7 @@ export function memoryGitHub(options?: {
   readonly comments?: readonly StoredComment[];
   readonly issues?: Readonly<Record<number, Issue>>;
   readonly pulls?: Readonly<Record<number, { readonly branch: string; readonly sameRepo?: boolean }>>;
+  readonly reviews?: Readonly<Record<number, Review>>;
 }) {
   const calls: Call[] = [];
   const self = options?.self ?? "thin-pr[bot]";
@@ -72,6 +73,14 @@ export function memoryGitHub(options?: {
         throw Object.assign(new Error("Not Found"), { status: 404 });
       }
       return issue;
+    },
+    async getReview(input) {
+      calls.push({ op: "getReview", ...input });
+      const review = options?.reviews?.[input.reviewId];
+      if (!review) {
+        throw Object.assign(new Error("Not Found"), { status: 404 });
+      }
+      return review;
     },
     async getPull(input) {
       calls.push({ op: "getPull", ...input });

@@ -9,6 +9,7 @@ A template is data. `label` is the issue label that selects it. `budget` has `ma
 | `feature.yaml` | `thin-pr` | 12 files, 600 lines | 5 USD | One retry per model step. Verify and review each loop back to implement at most twice. |
 | `bugfix.yaml` | `thin-pr:bugfix` | 6 files, 250 lines | 3 USD | Two implement retries. Verify loops back to implement at most three times. |
 | `docs.yaml` | `thin-pr:docs` | 8 files, 400 lines | 1 USD | Smaller models. Verify does not loop. Review loops back to implement at most once. |
+| `revise.yaml` | `thin-pr:revise` | 6 files, 250 lines | 2 USD | Runs on a review of a thin-pr draft, not on a label. The plan is the review, one step per comment, with no model call. Verify loops back to implement at most twice, review at most once. The budget measures the new commit only. |
 
 The budgets and spend limits are placeholders. The real-repo eval will measure what size of change lands reliably and what a run costs, and these values will be set from that data.
 

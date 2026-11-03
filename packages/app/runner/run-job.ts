@@ -3,13 +3,14 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { runResultOf, runTrigger, startTrace, type RunRecord } from "@thin-pr/github";
+import { checkoutBranch, runResultOf, runTrigger, startTrace, type RunRecord } from "@thin-pr/github";
 import type { Job } from "../src/event.js";
 
 const run = promisify(execFile);
 
 /**
- * Clones the job's repository at the head of its default branch and runs the trigger there, as the Action does.
+ * Clones the branch the trigger needs, the default branch or the draft a review is on, and runs the trigger there
+ * as the Action does.
  * Returns what happened: the run record when the trigger started a run, otherwise the trigger kind and outcome.
  */
 export async function runJob(
@@ -28,7 +29,8 @@ export async function runJob(
     // Full history and every branch, like the Action's checkout, so a second label can push thin-pr/<issue> with a lease.
     const { repo } = job.trigger;
     const url = `https://github.com/${repo.owner}/${repo.name}.git`;
-    await run("git", ["clone", "--quiet", "--branch", repo.defaultBranch, url, checkout], { env: withToken(env, token) });
+    const branch = checkoutBranch(job.trigger);
+    await run("git", ["clone", "--quiet", "--branch", branch, url, checkout], { env: withToken(env, token) });
     const { stdout } = await run("git", ["-C", checkout, "rev-parse", "HEAD"], { env });
     const { outcome } = await runTrigger({
       trigger: job.trigger,
@@ -39,8 +41,8 @@ export async function runJob(
       runLink: `App delivery \`${job.deliveryId}\``,
       env,
     });
-    const result = runResultOf(outcome);
-    if (result && result.status !== "ignored") {
+    const result = outcome.kind === "revise" ? outcome.result : runResultOf(outcome);
+    if (result && "record" in result) {
       return result.record;
     }
     return { deliveryId: job.deliveryId, trigger: job.trigger.kind, status: result?.status ?? outcome.result.status };
