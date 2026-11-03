@@ -148,6 +148,21 @@ describe("model client", () => {
     expect(requestHash({ ...ask(""), system: [{ type: "text", text: "You make a large change." }] })).not.toBe(requestHash(ask("")));
   });
 
+  it("records a cassette without this machine's paths and still replays it", async () => {
+    const path = cassettePath();
+    const scratch = join(tmpdir(), "thin-pr-repo-Ab12Cd", "checkout");
+    const request = { ...planRequest("claude-sonnet-5-5"), input: `Checks ran in ${scratch}. Logs in ${join(tmpdir(), "x.log")}.` };
+    const fake = upstream([{ text: planText(`Ran in ${scratch}`) }]);
+    const recorder = createAnthropicClient({ mode: "record", cassettePath: path, apiKey: "test-key", fetch: fake.fetch });
+    await structured(recorder.client, request);
+
+    const line = readFileSync(path, "utf8");
+    expect(line).not.toContain(tmpdir());
+    expect(line).toContain("Checks ran in .. Logs in $TMPDIR/x.log.");
+    const player = createAnthropicClient({ mode: "replay", cassettePath: path, fetch: offline }, {});
+    await expect(structured(player.client, request)).resolves.toMatchObject({ summary: "Ran in ." });
+  });
+
   it("strips the specialist header and sends the documented request shape", async () => {
     const fake = upstream([{ text: planText("opus") }, { text: planText("haiku") }]);
     const { client } = createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: fake.fetch });

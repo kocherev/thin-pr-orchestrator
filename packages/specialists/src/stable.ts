@@ -15,27 +15,28 @@ export function stableText(text: string): string {
 }
 
 // A path ends at a slash, whitespace, a quote, or punctuation that follows a path in a log.
-const PATH_END = String.raw`(?=[/\s"'):,]|$)`;
+const PATH_END = String.raw`(?=[/\s"'):;,.]|$)`;
 const NOT_INSIDE_A_PATH = String.raw`(?<![\w.~-])`;
 const TEMP_ROOTS = roots(
   [tmpdir(), realTmpdir()],
   // A macOS per-user temp folder from any machine, and /tmp.
-  [String.raw`(?:/private)?/var/folders/[^/\s"']+/[^/\s"']+/T`, String.raw`${NOT_INSIDE_A_PATH}/(?:private/)?tmp`],
+  [String.raw`(?:/private)?/var/folders/[^/\s"']+/[^/\s"']+/T`, "/(?:private/)?tmp"],
 );
-const HOME_ROOTS = roots([homedir()], [String.raw`${NOT_INSIDE_A_PATH}/(?:Users|home)/[^/\s"']+`]);
+const HOME_ROOTS = roots([homedir()], [String.raw`/(?:Users|home)/[^/\s"']+`]);
 const SCRATCH_CHECKOUT = new RegExp(String.raw`(?:${TEMP_ROOTS})/thin-pr-(?:repo|local)-[A-Za-z0-9]+/checkout${PATH_END}`, "g");
 const TEMP = new RegExp(String.raw`(?:${TEMP_ROOTS})${PATH_END}`, "g");
 const HOME = new RegExp(String.raw`(?:${HOME_ROOTS})${PATH_END}`, "g");
 
 /** A scratch checkout or local-run worktree becomes `.`, any other temp folder `$TMPDIR`, and a home folder `~`. */
-function stripLocalPaths(text: string): string {
+export function stripLocalPaths(text: string): string {
   return text.replace(SCRATCH_CHECKOUT, ".").replace(TEMP, "$$TMPDIR").replace(HOME, "~");
 }
 
-/** One regex alternation: this machine's folders, escaped, then the patterns that match them on any machine. */
+/** One regex alternation: this machine's folders, escaped, then the patterns that match them on any machine. None
+ * matches inside a longer path, so `src/tmp` stays put where this machine's temp folder is `/tmp`. */
 function roots(dirs: readonly string[], patterns: readonly string[]): string {
   const literal = [...new Set(dirs.filter((dir) => dir.length > 1))].map((dir) => dir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  return [...literal, ...patterns].join("|");
+  return `${NOT_INSIDE_A_PATH}(?:${[...literal, ...patterns].join("|")})`;
 }
 
 function realTmpdir(): string {

@@ -20,6 +20,8 @@ Each cassette line has a `source`. `live` came from the API. `converted` was reb
 
 Each line's `requestHash` is the SHA-256 of the request's model, system prompt, messages, tools, and output config. Before hashing, scratch paths become `.`, and vitest timings and the unittest lines that differ between Python versions are dropped, so the hash is the same on any machine. A change to a prompt, a tool, an output schema, or anything a step sends makes replay fail with `request drifted from the cassette at <specialist> call <n>; re-record with pnpm eval:record`. The converted and scripted lines got their hashes from a replay of today's requests. Their `request.messages` still show what the older recording sent.
 
+Cassettes are committed, so the recorder writes no local path: a scratch checkout becomes `.`, any other temp folder `$TMPDIR`, and a home folder `~`. The run records under `evals/runs/` go through the same rule.
+
 ## What each case tests
 
 | Case | Issue | Expected | Files | Lines | Failed rules | Cost (USD) |

@@ -7,7 +7,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path";
 import { z } from "zod";
 import { costOf, pricedModel, type BilledUsage, type PricedModel } from "./pricing.js";
-import { stableText } from "./stable.js";
+import { stableText, stripLocalPaths } from "./stable.js";
 
 /** Names the specialist behind a request. The transport reads it and strips it before anything is sent. */
 export const SPECIALIST_HEADER = "x-thin-pr-specialist";
@@ -295,9 +295,16 @@ function parseLine(line: string): CassetteEntry | null {
   }
 }
 
-/** Starts the cassette empty, then appends one JSON line per call. */
+/**
+ * Starts the cassette empty, then appends one JSON line per call. Cassettes are committed, so every string loses this
+ * machine's paths first. The request hash already ignores them, so replay still matches.
+ */
 function recorder(path: string): (entry: CassetteEntry) => void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, "");
-  return (entry) => appendFileSync(path, `${JSON.stringify(entry)}\n`);
+  return (entry) => appendFileSync(path, `${cassetteLine(entry)}\n`);
+}
+
+function cassetteLine(entry: CassetteEntry): string {
+  return JSON.stringify(entry, (_key, value: unknown) => (typeof value === "string" ? stripLocalPaths(value) : value));
 }
