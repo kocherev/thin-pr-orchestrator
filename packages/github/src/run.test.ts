@@ -222,6 +222,26 @@ describe("issue label", () => {
     expect(memory.calls.some((call) => call.op === "openDraft")).toBe(false);
   });
 
+  it("stops the run without a retry when the next model call could pass spend_usd", async () => {
+    // The planner's request could cost 0.16 USD and fits 0.2. The implementer's could cost 0.64 USD and does not.
+    const repo = scratch(`spend_usd: 0.2\n${PASSING_CHECKS}`);
+    const memory = memoryGitHub();
+    const result = await run(repo, memory.github, { model: scripted(STUB_SCRIPT) });
+
+    expect(result.status).toBe("failed");
+    if (result.status !== "failed") {
+      return;
+    }
+    expect(result.error).toMatch(/^implement stopped: the next model call could pass the run's spend_usd of 0\.2 USD \(0\.\d{6} USD spent\)$/);
+    expect(result.record.steps.map((step) => `${step.id} ${step.attempt} ${step.outcome}`)).toEqual([
+      "plan 1 finished",
+      "implement 1 failed",
+    ]);
+    const body = String(memory.calls.find((call) => call.op === "comment")?.body);
+    expect(body.split("\n")[0]).toBe(`**Run failed.** ${result.error}`);
+    expect(git(repo.remote, "branch", "--list", "thin-pr/7")).toBe("");
+  });
+
   it("fails the step with the refusal category when the model declines", async () => {
     const repo = scratch(PASSING_CHECKS);
     const memory = memoryGitHub();

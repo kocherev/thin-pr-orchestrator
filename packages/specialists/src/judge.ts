@@ -94,7 +94,7 @@ export async function runJudgeBatch(
     BATCH_DISCOUNT *
     costOf(JUDGE_MODEL, { input_tokens: 0, output_tokens: MAX_TOKENS, cache_read_input_tokens: null, cache_creation_input_tokens: null });
   if (worstCase > options.spendLimitUsd) {
-    throw new SpendLimitError(options.spendLimitUsd, 0);
+    throw new SpendLimitError("session", options.spendLimitUsd, 0);
   }
   const client = new Anthropic({ apiKey: requireKey(options.apiKey), fetch: options.fetch, maxRetries: 2, openTelemetry: false });
   let batch = await client.beta.messages.batches.create({ requests: [...requests] });

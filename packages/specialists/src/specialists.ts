@@ -6,6 +6,7 @@ import { runImplementer } from "./implementer.js";
 import { pricedModel, type PricedModel } from "./pricing.js";
 import { PLANNER_SYSTEM, PR_WRITER_SYSTEM, REVIEWER_SYSTEM } from "./prompts.js";
 import { structured, type Effort } from "./structured.js";
+import { SpendLimitError } from "./transport.js";
 import type { CheckResult, Workspace } from "./workspace.js";
 
 const text = z.string().min(1);
@@ -65,6 +66,10 @@ export function createStepHandlers(session: ModelSession, workspace: Workspace):
         return { ...result, usage: meter.usage.slice(before) };
       } catch (error) {
         const usage = meter.usage.slice(before);
+        // A retry would hit the same limit, so the run stops here.
+        if (error instanceof SpendLimitError) {
+          throw new StepError(error, usage, { retryable: false });
+        }
         throw usage.length > 0 ? new StepError(error, usage) : error;
       }
     };

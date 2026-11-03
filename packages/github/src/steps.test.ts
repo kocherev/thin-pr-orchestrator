@@ -7,6 +7,7 @@ import { createMemoryWorkspace } from "@thin-pr/workspace";
 import { afterEach, describe, expect, it } from "vitest";
 import { createRunHandlers, createVerifyHandler } from "./steps.js";
 
+const LIMITS = { spendUsd: 5 };
 const passing = { exitCode: 0, logTail: "" };
 const failingTest = { exitCode: 1, logTail: "FAIL test/counter.test.ts > clamps at zero" };
 
@@ -67,11 +68,11 @@ describe("implement", () => {
   it("edits through the tools on a replayed cassette and stops when the model does", async () => {
     const cassettePath = join(temporary(), "implement.jsonl");
     const recorder = createAnthropicClient({ mode: "record", cassettePath, apiKey: "test-key", fetch: scriptedUpstream(script) });
-    await createRunHandlers(recorder, counterWorkspace()).implement({ ...context("implement", 0), outputs: { plan } });
+    await createRunHandlers(recorder, counterWorkspace(), LIMITS).implement({ ...context("implement", 0), outputs: { plan } });
 
     const workspace = counterWorkspace();
     const player = createAnthropicClient({ mode: "replay", cassettePath, fetch: offline }, {});
-    const result = await createRunHandlers(player, workspace).implement({ ...context("implement", 0), outputs: { plan } });
+    const result = await createRunHandlers(player, workspace, LIMITS).implement({ ...context("implement", 0), outputs: { plan } });
 
     expect(result).toMatchObject({
       outcome: "done",
@@ -90,7 +91,7 @@ describe("implement", () => {
       return fetch(url, init);
     };
     const session = createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: captured });
-    await createRunHandlers(session, counterWorkspace()).plan(context("plan", 0));
+    await createRunHandlers(session, counterWorkspace(), LIMITS).plan(context("plan", 0));
 
     expect(bodies).toHaveLength(1);
     expect(bodies[0]).toContain("Repository files:\\nsrc/counter.ts");

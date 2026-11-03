@@ -44,13 +44,20 @@ export class CassetteError extends Error {
   }
 }
 
+/** `session` is the limit for the whole client, `THIN_PR_SPEND_LIMIT_USD`. `run` is one run's `spend_usd`. */
 export class SpendLimitError extends Error {
+  readonly scope: "session" | "run";
   readonly limitUsd: number;
   readonly spentUsd: number;
 
-  constructor(limitUsd: number, spentUsd: number) {
-    super(`model spend would pass the ${limitUsd} USD limit (${spentUsd.toFixed(6)} USD spent)`);
+  constructor(scope: "session" | "run", limitUsd: number, spentUsd: number) {
+    super(
+      scope === "session"
+        ? `model spend would pass the ${limitUsd} USD limit (${spentUsd.toFixed(6)} USD spent)`
+        : `the next model call could pass the run's spend_usd of ${limitUsd} USD (${spentUsd.toFixed(6)} USD spent)`,
+    );
     this.name = "SpendLimitError";
+    this.scope = scope;
     this.limitUsd = limitUsd;
     this.spentUsd = spentUsd;
   }
@@ -60,6 +67,7 @@ export class SpendLimitError extends Error {
 export class SpendMeter {
   private spent = 0;
   private readonly calls: Usage[] = [];
+  private run: { readonly startUsd: number; readonly limitUsd: number } | null = null;
 
   constructor(readonly limitUsd: number) {}
 
@@ -71,6 +79,11 @@ export class SpendMeter {
     return [...this.calls];
   }
 
+  /** Caps what the calls from now on may spend, under the session limit. A run sets its `spend_usd` here. */
+  limitRun(limitUsd: number): void {
+    this.run = { startUsd: this.spent, limitUsd };
+  }
+
   /** Input size is unknown before the call, so this prices the largest output the request allows. */
   assertRoomFor(model: PricedModel, maxTokens: number): void {
     const worstCase = costOf(model, {
@@ -80,7 +93,11 @@ export class SpendMeter {
       cache_creation_input_tokens: null,
     });
     if (this.spent + worstCase > this.limitUsd) {
-      throw new SpendLimitError(this.limitUsd, this.spent);
+      throw new SpendLimitError("session", this.limitUsd, this.spent);
+    }
+    const runSpent = this.spent - (this.run?.startUsd ?? 0);
+    if (this.run && runSpent + worstCase > this.run.limitUsd) {
+      throw new SpendLimitError("run", this.run.limitUsd, runSpent);
     }
   }
 

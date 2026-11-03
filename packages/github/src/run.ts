@@ -87,7 +87,7 @@ export async function runAction(input: {
       template,
       config,
       workspace,
-      handlers: () => createRunHandlers(input.model(), workspace),
+      handlers: (limits) => createRunHandlers(input.model(), workspace, limits),
       github: input.github,
       log,
       runId: input.runId,
@@ -108,8 +108,11 @@ export async function runIssue(deps: {
   readonly template: Template;
   readonly config: RepoConfig;
   readonly workspace: GitWorkspace;
-  /** Built first inside the run, so a setup error such as a missing API key is reported on the issue. */
-  readonly handlers: () => Readonly<Record<StepId, StepHandler>>;
+  /**
+   * Built first inside the run, so a setup error such as a missing API key is reported on the issue. The model steps
+   * must keep to `limits.spendUsd`.
+   */
+  readonly handlers: (limits: RunLimits) => Readonly<Record<StepId, StepHandler>>;
   readonly github: GitHubSurface;
   readonly log: EventLog;
   readonly runId: string;
@@ -121,6 +124,7 @@ export async function runIssue(deps: {
   const target = { owner: event.owner, repo: event.repo };
   const checkRuns = createCheckRuns(github, target);
   const branch = deps.branch ?? `thin-pr/${event.issue.number}`;
+  const limits = runLimits(deps.template, deps.config);
   const timeline: TimedEvent[] = [];
   let diff: Diff | null = null;
   let checks: readonly CheckResult[] = [];
@@ -137,7 +141,7 @@ export async function runIssue(deps: {
   };
 
   try {
-    const handlers = deps.handlers();
+    const handlers = deps.handlers(limits);
     // Before the workflow, so the implementer's run_check already has the dependencies.
     const install = await workspace.install();
     if (install && install.exitCode !== 0) {
@@ -167,7 +171,7 @@ export async function runIssue(deps: {
       contracts: deps.template.steps.map(({ id }) => ({ step: id, valid: CONTRACTS[id].safeParse(state.outputs[id]).success })),
       diff,
       checks,
-      budget: runLimits(deps.template, deps.config).budget,
+      budget: limits.budget,
       config: deps.config,
     };
     gate = evaluate(evidence);

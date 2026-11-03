@@ -89,7 +89,7 @@ export async function runLocal(input: {
       template,
       config,
       workspace,
-      handlers: () => createRunHandlers(input.model(), workspace),
+      handlers: (limits) => createRunHandlers(input.model(), workspace, limits),
       github: localSurface(posted),
       log,
       runId,

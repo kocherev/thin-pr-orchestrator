@@ -404,8 +404,8 @@ async function runCase(
       template,
       config,
       workspace: checkout,
-      handlers: () => {
-        const handlers = createRunHandlers(session(), checkout);
+      handlers: (limits) => {
+        const handlers = createRunHandlers(session(), checkout, limits);
         return { ...handlers, verify: withHiddenTests(handlers.verify, repo.dir, item.hidden) };
       },
       github: replayGitHub(),

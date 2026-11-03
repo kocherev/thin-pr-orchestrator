@@ -185,6 +185,21 @@ describe("model client", () => {
     expect(fake.sent).toHaveLength(1);
   });
 
+  it("counts a run's cap from the moment the run sets it", async () => {
+    const fake = upstream([{ text: planText("spent"), inputTokens: 1_000_000, outputTokens: 0 }]);
+    const { client, meter } = createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: fake.fetch }, {});
+    await structured(client, planRequest("claude-sonnet-5-5"));
+
+    // 2 USD went to an earlier run. The next request could cost 0.16 USD, under 0.2 but over 0.1.
+    meter.limitRun(0.2);
+    expect(() => meter.assertRoomFor("claude-sonnet-5-5", 16_000)).not.toThrow();
+    meter.limitRun(0.1);
+    const refused = structured(client, planRequest("claude-sonnet-5-5"));
+    await expect(refused).rejects.toMatchObject({ name: "SpendLimitError", scope: "run", limitUsd: 0.1, spentUsd: 0 });
+    await expect(refused).rejects.toThrow("the next model call could pass the run's spend_usd of 0.1 USD (0.000000 USD spent)");
+    expect(fake.sent).toHaveLength(1);
+  });
+
   it("turns a refusal into a typed error with its category", async () => {
     const fake = upstream([{ stopReason: "refusal", category: "cyber" }]);
     const { client } = createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: fake.fetch });
