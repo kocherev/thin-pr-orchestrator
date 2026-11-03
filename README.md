@@ -2,7 +2,7 @@
 
 A GitHub issue goes in. A fixed workflow runs in ordinary TypeScript, runs five steps through a typed boundary, and opens a draft pull request when the gate passes. A person reviews the draft.
 
-The control plane does not call a model. This tree injects a replay client that returns fixture JSON. The design note is `docs/design.md`.
+The control plane does not call a model. This tree injects a replay client that returns fixture JSON. `docs/architecture.md` describes the packages and the flow.
 
 ## Control flow
 

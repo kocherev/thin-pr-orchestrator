@@ -1,6 +1,6 @@
 # Working notes
 
-Thin PR Orchestrator. Read this before changing the repo. It is enough to install and run the four checks below. The public overview is `README.md`. The why is `docs/design.md`.
+Thin PR Orchestrator. Read this before changing the repo. It is enough to install and run the four checks below. The public overview is `README.md`. The design is in `docs/architecture.md`, `docs/gate.md`, and `docs/security.md`.
 
 ## Requirements
 
