@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-03T05:00:15.336Z",
+  "generatedAt": "2026-11-03T07:24:08.194Z",
   "cases": [
     {
       "caseId": "01-clamp-decrement",
@@ -258,6 +258,48 @@
       "failedRules": [],
       "costUsd": 0.074424,
       "durationMs": 34635,
+      "models": [
+        "claude-haiku-5-5",
+        "claude-opus-5-5",
+        "claude-sonnet-5-5"
+      ]
+    },
+    {
+      "caseId": "19-tag-notes",
+      "title": "Collect tags from notes",
+      "expected": "opened",
+      "actual": "opened",
+      "failedRules": [],
+      "costUsd": 0.068132,
+      "durationMs": 29836,
+      "models": [
+        "claude-haiku-5-5",
+        "claude-opus-5-5",
+        "claude-sonnet-5-5"
+      ]
+    },
+    {
+      "caseId": "20-rename-split-lines",
+      "title": "Rename splitNotes to splitLines",
+      "expected": "opened",
+      "actual": "opened",
+      "failedRules": [],
+      "costUsd": 0.043086,
+      "durationMs": 24756,
+      "models": [
+        "claude-haiku-5-5",
+        "claude-opus-5-5",
+        "claude-sonnet-5-5"
+      ]
+    },
+    {
+      "caseId": "21-document-every-helper",
+      "title": "Document every helper",
+      "expected": "awaiting_approval",
+      "actual": "awaiting_approval",
+      "failedRules": [],
+      "costUsd": 0.113283,
+      "durationMs": 37968,
       "models": [
         "claude-haiku-5-5",
         "claude-opus-5-5",

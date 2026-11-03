@@ -1,0 +1,7 @@
+{
+  "plan_relevance": "pass",
+  "minimal_diff": "pass",
+  "test_adequacy": "pass",
+  "review_quality": "pass",
+  "note": "The plan covers the JSDoc, the four pages, the four usage tests, and the README links, which is what the issue asks. The change is 13 files because the issue names that many, and each line serves it. Each usage test runs the example from its page. The approval fits. The size is for the budget rule and a person to weigh, not the reviewer."
+}

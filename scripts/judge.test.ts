@@ -22,7 +22,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 describe("judge eval", () => {
   it("keeps a human label for every criterion of every case", () => {
     const labels = loadLabels(root);
-    expect(labels.size).toBe(23);
+    expect(labels.size).toBe(26);
     const fails = Object.fromEntries(
       JUDGE_CRITERIA.map((criterion) => [criterion, [...labels].filter(([, label]) => label[criterion] === "fail").map(([id]) => id)]),
     );
@@ -49,7 +49,7 @@ describe("judge eval", () => {
     const report = await runJudge(root, { record: false, env: {} });
     const text = formatJudgeReport(report);
     expect(text).toContain("judge: claude-sonnet-5-5 at medium effort, one Message Batches request per case");
-    expect(text).toContain("always-pass agreement: 79/92 (85.9%)");
+    expect(text).toContain("always-pass agreement: 91/104 (87.5%)");
     expect(text).toContain("baseline: 90.0%");
     expect(text).toContain("judge cassette: not recorded.");
     expect(exitCode(report)).toBe(0);

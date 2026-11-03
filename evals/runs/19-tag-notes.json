@@ -1,0 +1,244 @@
+{
+  "version": 1,
+  "runId": "eval-19-tag-notes",
+  "repo": "example/sample-repo",
+  "issue": {
+    "number": 19,
+    "title": "Collect tags from notes",
+    "url": "https://github.com/example/sample-repo/issues/19"
+  },
+  "template": "feature",
+  "status": "opened",
+  "steps": [
+    {
+      "id": "plan",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-03T07:24:04.215Z",
+      "durationMs": 6520,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 644,
+          "outputTokens": 191,
+          "cacheReadTokens": 0,
+          "costUsd": 0.003198,
+          "durationMs": 3164
+        },
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 913,
+          "outputTokens": 239,
+          "cacheReadTokens": 0,
+          "costUsd": 0.004216,
+          "durationMs": 3356
+        }
+      ],
+      "summary": "Add parseTags in a new src/tags.ts and notesWithTag in src/notes.ts, with tests and a README line."
+    },
+    {
+      "id": "implement",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-03T07:24:10.735Z",
+      "durationMs": 17224,
+      "usage": [
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 992,
+          "outputTokens": 167,
+          "cacheReadTokens": 0,
+          "costUsd": 0.007308,
+          "durationMs": 3068
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1164,
+          "outputTokens": 319,
+          "cacheReadTokens": 0,
+          "costUsd": 0.011036,
+          "durationMs": 3676
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1422,
+          "outputTokens": 526,
+          "cacheReadTokens": 0,
+          "costUsd": 0.016208,
+          "durationMs": 4504
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1943,
+          "outputTokens": 141,
+          "cacheReadTokens": 0,
+          "costUsd": 0.010592,
+          "durationMs": 2964
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 2079,
+          "outputTokens": 153,
+          "cacheReadTokens": 0,
+          "costUsd": 0.011376,
+          "durationMs": 3012
+        }
+      ],
+      "summary": "Added parseTags in src/tags.ts and notesWithTag in src/notes.ts, with tests for both and a README line."
+    },
+    {
+      "id": "verify",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-03T07:24:27.959Z",
+      "durationMs": 0,
+      "usage": [],
+      "summary": "typecheck passed; test passed."
+    },
+    {
+      "id": "review",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-03T07:24:27.959Z",
+      "durationMs": 3056,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 1216,
+          "outputTokens": 164,
+          "cacheReadTokens": 0,
+          "costUsd": 0.004072,
+          "durationMs": 3056
+        }
+      ],
+      "summary": "parseTags and notesWithTag do what the issue asks, and the tests cover both. The checks pass."
+    },
+    {
+      "id": "write",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-03T07:24:31.015Z",
+      "durationMs": 3036,
+      "usage": [
+        {
+          "model": "claude-haiku-5-5",
+          "inputTokens": 466,
+          "outputTokens": 159,
+          "cacheReadTokens": 0,
+          "costUsd": 0.0001261,
+          "durationMs": 3036
+        }
+      ],
+      "summary": "Collect tags from notes."
+    }
+  ],
+  "gate": [
+    {
+      "rule": "plan",
+      "verdict": "PASS",
+      "reason": "Plan is present (5 steps)."
+    },
+    {
+      "rule": "contracts",
+      "verdict": "PASS",
+      "reason": "Step outputs match their contracts."
+    },
+    {
+      "rule": "diff",
+      "verdict": "PASS",
+      "reason": "Diff is present (5 files, 28 lines)."
+    },
+    {
+      "rule": "budget",
+      "verdict": "PASS",
+      "reason": "Diff is within the budget (5 files, 28 lines; limit 12 files, 600 lines)."
+    },
+    {
+      "rule": "paths",
+      "verdict": "PASS",
+      "reason": "Every changed path is allowed."
+    },
+    {
+      "rule": "secrets",
+      "verdict": "PASS",
+      "reason": "No added line looks like a secret."
+    },
+    {
+      "rule": "typecheck",
+      "verdict": "PASS",
+      "reason": "Typecheck passed: tsc --noEmit"
+    },
+    {
+      "rule": "tests",
+      "verdict": "PASS",
+      "reason": "Tests passed: vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1"
+    },
+    {
+      "rule": "review",
+      "verdict": "PASS",
+      "reason": "Reviewer approved."
+    }
+  ],
+  "diff": {
+    "files": [
+      {
+        "path": "README.md",
+        "added": 1,
+        "removed": 0
+      },
+      {
+        "path": "src/notes.ts",
+        "added": 8,
+        "removed": 0
+      },
+      {
+        "path": "src/tags.ts",
+        "added": 6,
+        "removed": 0
+      },
+      {
+        "path": "test/notes.test.ts",
+        "added": 5,
+        "removed": 1
+      },
+      {
+        "path": "test/tags.test.ts",
+        "added": 7,
+        "removed": 0
+      }
+    ],
+    "meaningful": true,
+    "patch": "diff --git a/README.md b/README.md\nindex c0b1033..34011e9 100644\n--- a/README.md\n+++ b/README.md\n@@ -6,3 +6,4 @@ Small helpers used by the replay fixtures.\n - `formatCount` renders a count.\n - `splitNotes` splits text into lines.\n - `parseFlag` reads true and false.\n+- `parseTags` reads the #tags in a line, and `notesWithTag` keeps the note lines that carry a tag.\ndiff --git a/src/notes.ts b/src/notes.ts\nindex db28111..0e52a49 100644\n--- a/src/notes.ts\n+++ b/src/notes.ts\n@@ -1,3 +1,11 @@\n+import { parseTags } from \"./tags.js\";\n+\n export function splitNotes(text: string): string[] {\n   return text.split(\"\\n\");\n }\n+\n+/** The note lines that carry `tag`, matched without case and with or without the #. */\n+export function notesWithTag(text: string, tag: string): string[] {\n+  const wanted = tag.replace(/^#/, \"\").toLowerCase();\n+  return splitNotes(text).filter((line) => parseTags(line).includes(wanted));\n+}\ndiff --git a/src/tags.ts b/src/tags.ts\nnew file mode 100644\nindex 0000000..9d43162\n--- /dev/null\n+++ b/src/tags.ts\n@@ -0,0 +1,6 @@\n+const TAG = /(?:^|\\s)#([a-z0-9-]+)/gi;\n+\n+/** The tags in one line, lowercased and without the #, in the order they appear. */\n+export function parseTags(line: string): string[] {\n+  return [...line.matchAll(TAG)].map((match) => (match[1] ?? \"\").toLowerCase());\n+}\ndiff --git a/test/notes.test.ts b/test/notes.test.ts\nindex 6daef50..cef7e24 100644\n--- a/test/notes.test.ts\n+++ b/test/notes.test.ts\n@@ -1,6 +1,10 @@\n import { expect, it } from \"vitest\";\n-import { splitNotes } from \"../src/notes.js\";\n+import { notesWithTag, splitNotes } from \"../src/notes.js\";\n \n it(\"splits text into lines\", () => {\n   expect(splitNotes(\"buy milk\\ncall home\")).toEqual([\"buy milk\", \"call home\"]);\n });\n+\n+it(\"keeps the lines that carry a tag\", () => {\n+  expect(notesWithTag(\"buy milk #home\\nfile taxes #work\", \"#Home\")).toEqual([\"buy milk #home\"]);\n+});\ndiff --git a/test/tags.test.ts b/test/tags.test.ts\nnew file mode 100644\nindex 0000000..158b24e\n--- /dev/null\n+++ b/test/tags.test.ts\n@@ -0,0 +1,7 @@\n+import { expect, it } from \"vitest\";\n+import { parseTags } from \"../src/tags.js\";\n+\n+it(\"reads the tags in a line, lowercased and without the #\", () => {\n+  expect(parseTags(\"buy milk #Home #errands\")).toEqual([\"home\", \"errands\"]);\n+  expect(parseTags(\"see issue#4 at a@b.com\")).toEqual([]);\n+});\n"
+  },
+  "checks": [
+    {
+      "name": "typecheck",
+      "command": "tsc --noEmit",
+      "exitCode": 0,
+      "durationMs": 0,
+      "logTail": ""
+    },
+    {
+      "name": "test",
+      "command": "vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1",
+      "exitCode": 0,
+      "durationMs": 0,
+      "logTail": "\n RUN  v5.0.5 .\n\n\n Test Files  6 passed (6)\n      Tests  7 passed (7)\n\n"
+    }
+  ],
+  "pullRequest": {
+    "number": 1,
+    "url": "https://example.test/example/sample-repo/pull/1"
+  },
+  "totals": {
+    "costUsd": 0.06813210000000001,
+    "durationMs": 29836,
+    "inputTokens": 10839,
+    "outputTokens": 2059
+  }
+}

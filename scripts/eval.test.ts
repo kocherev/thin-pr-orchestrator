@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { RunRecord } from "@thin-pr/github";
+import type { RunRecord, Verdict } from "@thin-pr/github";
 import { describe, expect, it } from "vitest";
 import {
   exitCode,
@@ -19,17 +19,18 @@ import {
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("replay eval", () => {
-  it("opens every good case, blocks every bad one, and matches the committed report", { timeout: 240_000 }, async () => {
+  it("opens every good case, blocks every bad one, waits on the big one, and matches the committed report", { timeout: 240_000 }, async () => {
     const report = await runEval(root);
     const text = formatReport(report);
 
     expect(report).toMatchObject({
-      total: 23,
-      correct: 23,
+      total: 26,
+      correct: 26,
       accuracy: 1,
       minVerdictAccuracy: 1,
-      resolved: { count: 13, total: 13 },
+      resolved: { count: 15, total: 15 },
       blocked: { count: 10, total: 10 },
+      awaiting: { count: 1, total: 1 },
       meetsBaseline: true,
     });
     expect(Object.fromEntries(report.cases.map((item) => [item.id, item.failedRules.join(", ") || item.actual]))).toEqual({
@@ -56,7 +57,18 @@ describe("replay eval", () => {
       "py-03-failing-hidden-test": "tests",
       "py-04-project-config": "paths",
       "py-05-planted-secret": "secrets",
+      "19-tag-notes": "opened",
+      "20-rename-split-lines": "opened",
+      "21-document-every-helper": "awaiting_approval",
     });
+    // 13 files is one over the feature budget, and every other rule passes, so the run waits for a person.
+    const big = report.cases.find((item) => item.id === "21-document-every-helper");
+    expect(big?.record.gate.filter((rule) => rule.verdict !== "PASS")).toEqual([
+      { rule: "budget", verdict: "NEEDS_APPROVAL", reason: "Diff exceeds the budget (13 files, 79 lines; limit 12 files, 600 lines)." },
+    ]);
+    // The planner reads the files it names before it replies: two planner requests, one of them a read.
+    const tagNotes = report.cases.find((item) => item.id === "19-tag-notes");
+    expect(tagNotes?.record.steps.find((step) => step.id === "plan")?.usage).toHaveLength(2);
     const emptyPlan = report.cases.find((item) => item.id === "10-empty-plan");
     expect(emptyPlan?.error).toContain("plan failed after 2 attempts: planner output invalid at steps");
     const failingTest = report.cases.find((item) => item.id === "09-failing-hidden-test");
@@ -98,12 +110,14 @@ describe("replay eval", () => {
       ].join("\n"),
     );
 
-    expect(text).toContain("verdict accuracy: 23/23 (100.0%)");
-    expect(text).toContain("resolve rate: 13/13 (100.0%)");
-    expect(text).toContain("cost per resolved case: 0.031117 USD");
+    expect(text).toContain("verdict accuracy: 26/26 (100.0%)");
+    expect(text).toContain("resolve rate: 15/15 (100.0%)");
+    expect(text).toContain("cost per resolved case: 0.034382 USD");
     expect(text).toContain("p50 step latency: 3180 ms");
-    expect(text).toContain("  claude-opus-5-5: 81 calls, 78053 input tokens, 13033 output tokens, 0.572872 USD");
+    expect(text).toContain("  claude-opus-5-5: 97 calls, 105098 input tokens, 17091 output tokens, 0.762212 USD");
     expect(text).toContain("blocked bad: 10/10");
+    expect(text).toContain("waited for approval: 1/1");
+    expect(text).toContain("21-document-every-helper awaiting_approval ok files 13 lines 79 needs approval: budget");
     expect(text).toContain("rules failed by a case: diff, paths, secrets, typecheck, tests, review");
     expect(text).toContain("rules no case fails: plan, contracts, budget");
     expect(text).toContain("01-clamp-decrement opened ok files 1 lines 2");
@@ -145,6 +159,9 @@ describe("replay eval", () => {
       { model: "claude-sonnet-5-5", calls: 2, inputTokens: 200, outputTokens: 20, costUsd: expect.closeTo(0.51, 10) },
     ]);
     expect(scoreRuns([scored("opened", "blocked", [step(0, [])])])).toMatchObject({ costPerResolvedUsd: null, p50StepMs: null });
+    // A case that should wait for approval scores on its own. It is neither resolved nor blocked.
+    const waiting = scoreRuns([scored("awaiting_approval", "awaiting_approval", []), scored("awaiting_approval", "opened", [])]);
+    expect(waiting).toMatchObject({ correct: 1, awaiting: { count: 1, total: 2 }, resolved: { count: 0, total: 0 } });
   });
 
   it("names the first stale line, a missing file and a run file with no case", () => {
@@ -218,7 +235,7 @@ function step(durationMs: number, calls: Step["usage"]): Step {
   return { id: "plan", attempt: 1, loop: 0, outcome: "finished", startedAt: "2026-11-02T00:00:00.000Z", durationMs, usage: calls, summary: "" };
 }
 
-function scored(expected: "opened" | "blocked", verdict: "opened" | "blocked", steps: Step[]) {
+function scored(expected: Verdict, verdict: Verdict, steps: Step[]) {
   const costUsd = steps.flatMap((item) => item.usage).reduce((sum, item) => sum + item.costUsd, 0);
   const record: RunRecord = {
     version: 1,

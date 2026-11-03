@@ -295,11 +295,14 @@ export function formatReport(report: EvalReport): string {
     const files = item.record.diff?.files ?? [];
     const changed = files.reduce((sum, file) => sum + file.added + file.removed, 0);
     const expected = `${item.expected.verdict}${item.expected.failedRules ? ` on ${item.expected.failedRules.join(", ")}` : ""}`;
+    const waiting = item.record.gate.filter((rule) => rule.verdict === "NEEDS_APPROVAL").map((rule) => rule.rule);
     const detail = item.error
       ? ` run failed: ${item.error}`
       : item.failedRules.length > 0
         ? ` failed rules: ${item.failedRules.join(", ")}`
-        : "";
+        : waiting.length > 0
+          ? ` needs approval: ${waiting.join(", ")}`
+          : "";
     lines.push(
       `${item.id} ${item.verdict} ${item.correct ? "ok" : `MISMATCH (expected ${expected})`} files ${files.length} lines ${changed}${detail}`,
     );

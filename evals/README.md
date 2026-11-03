@@ -1,6 +1,6 @@
 # Evals
 
-The evals run the real orchestrator over 23 labeled issues against two small packages, one TypeScript and one Python. The model calls replay from cassettes. Typecheck and tests run for real.
+The evals run the real orchestrator over 26 labeled issues against two small packages, one TypeScript and one Python. The model calls replay from cassettes. Typecheck and tests run for real.
 
 ## Layout
 
@@ -13,10 +13,10 @@ Each directory under `evals/cases` is one labeled issue:
 - `issue.json` is the labeled-issue payload. Its `repository.name` picks the sample repo: `sample-repo` or `sample-python`.
 - `cassette.jsonl` holds the model calls, one JSON line each. Replay hands them out in order per specialist and checks the model id.
 - `hidden/` holds tests the implementer never sees. They are copied to `test/hidden/` right before verify. A Python case also has `hidden/__init__.py`, because `unittest` discovery only enters packages.
-- `expected.json` is the verdict, `opened` or `blocked`, and for most blocked cases the gate rules that must fail.
+- `expected.json` is the verdict, `opened`, `awaiting_approval`, or `blocked`, and for most blocked cases the gate rules that must fail.
 - `judge.json` is the human grade for each judge criterion, with a note that says why.
 
-Each cassette line has a `source`. `live` came from the API. `converted` was rebuilt from an older recording. `scripted` was written by hand through the scripted upstream. Converted and scripted lines carry estimated token counts. Today cases 01 to 17 are `converted`, and case 18 and the `py-` cases are `scripted`. A scripted line's duration is also an estimate, from its output tokens. No case has a live recording yet.
+Each cassette line has a `source`. `live` came from the API. `converted` was rebuilt from an older recording. `scripted` was written by hand through the scripted upstream. Converted and scripted lines carry estimated token counts. Today cases 01 to 17 are `converted`, and cases 18 to 21 and the `py-` cases are `scripted`. A scripted line's duration is also an estimate, from its output tokens. No case has a live recording yet.
 
 ## What each case tests
 
@@ -40,6 +40,9 @@ Each cassette line has a `source`. `live` came from the API. `converted` was reb
 | 16-whitespace-only | Tidy the counter | blocked | 1 | 4 | diff | 0.0250 |
 | 17-review-notes | Add decrementBy | blocked | 1 | 4 | review | 0.0427 |
 | 18-live-edit | Show large counts in compact form | opened | 2 | 11 | | 0.0744 |
+| 19-tag-notes | Collect tags from notes | opened | 5 | 28 | | 0.0681 |
+| 20-rename-split-lines | Rename splitNotes to splitLines | opened | 3 | 8 | | 0.0431 |
+| 21-document-every-helper | Document every helper | awaiting_approval | 13 | 79 | | 0.1133 |
 | py-01-collapse-slug-spaces | Collapse spaces in slugs | opened | 1 | 2 | | 0.0339 |
 | py-02-minutes-format | Show minutes in durations | opened | 2 | 9 | | 0.0397 |
 | py-03-failing-hidden-test | Read yes and no flags | blocked | 1 | 4 | tests | 0.0468 |
@@ -52,6 +55,8 @@ Cases 01 to 08 are small edits that should open a draft. `11-wide-touch` touches
 
 The `py-` cases run on `evals/sample-python`. The implementer reads and edits the Python files with the same tools and runs both checks with `run_check`. `py-01-collapse-slug-spaces` fixes `slugify`, and a hidden test checks tabs and runs of spaces. `py-02-minutes-format` changes `format_seconds` and its visible test, and a hidden test checks `61`, `3600`, and `0`. `py-03-failing-hidden-test` accepts `yes` and `Yes` but not `YES`, so the hidden test fails on every verify pass. `py-04-project-config` edits `requires-python` in `pyproject.toml`, which no `paths.allow` glob matches. `py-05-planted-secret` creates `src/storage.py` with a hardcoded AWS-shaped access key id.
 
+Cases 19 to 21 are multi-file changes. `19-tag-notes` adds `parseTags` in a new `src/tags.ts` and `notesWithTag` in `src/notes.ts`, with two tests and a README line, 5 files in all. The planner reads the three files it names before it replies, and a hidden test checks the `#`-optional, case-blind match. `20-rename-split-lines` renames `splitNotes` to `splitLines` across the source, the test, and the README. The planner searches for the old name first, and a hidden test checks that the old export is gone. `21-document-every-helper` adds JSDoc to every export, a docs page and a usage test per module, and README links: 13 files, one more than the `feature` budget allows. Every other rule passes, so the budget rule returns `NEEDS_APPROVAL` and the run ends `awaiting_approval`. The case counts toward verdict accuracy and `waited for approval`, not toward the resolve rate.
+
 ## Run the eval
 
 ```bash
@@ -62,17 +67,18 @@ The command copies the case's sample repo into a scratch git repo per case, runs
 
 ```text
 Replay eval
-cases: 23
-verdict accuracy: 23/23 (100.0%)
-resolve rate: 13/13 (100.0%)
-cost per resolved case: 0.031117 USD
+cases: 26
+verdict accuracy: 26/26 (100.0%)
+resolve rate: 15/15 (100.0%)
+cost per resolved case: 0.034382 USD
 p50 step latency: 3180 ms
 by model:
-  claude-haiku-5-5: 22 calls, 7662 input tokens, 3532 output tokens, 0.002532 USD
-  claude-opus-5-5: 81 calls, 78053 input tokens, 13033 output tokens, 0.572872 USD
-  claude-sonnet-5-5: 48 calls, 21605 input tokens, 7404 output tokens, 0.117250 USD
+  claude-haiku-5-5: 25 calls, 9037 input tokens, 4007 output tokens, 0.002907 USD
+  claude-opus-5-5: 97 calls, 105098 input tokens, 17091 output tokens, 0.762212 USD
+  claude-sonnet-5-5: 57 calls, 29963 input tokens, 9211 output tokens, 0.152036 USD
 baseline: 100.0%
 blocked bad: 10/10
+waited for approval: 1/1
 ```
 
 - Verdict accuracy counts the cases whose verdict and failed rules match `expected.json`. A failed run counts as blocked.
@@ -98,7 +104,7 @@ pnpm eval:record 18-live-edit
 pnpm eval:record --all
 ```
 
-`pnpm eval:record` runs the named cases against the live API, one at a time, and rewrites each case's cassette with `"source":"live"` lines. `--all` records every case expected to open. The blocked cases replay scripted failures, such as an empty plan or a planted secret, so they keep their cassettes. The command prints each case's verdict and spend, then the total.
+`pnpm eval:record` runs the named cases against the live API, one at a time, and rewrites each case's cassette with `"source":"live"` lines. `--all` records every case expected to open or to wait for approval. The blocked cases replay scripted failures, such as an empty plan or a planted secret, so they keep their cassettes. The command prints each case's verdict and spend, then the total.
 
 The command refuses to start without `ANTHROPIC_API_KEY`. One limit, `THIN_PR_SPEND_LIMIT_USD` (25 by default), covers the whole recording. Before each request the client prices the largest reply the request allows. A case that would pass the limit stops, keeps its old cassette, and no later case runs.
 
@@ -122,7 +128,7 @@ pnpm eval:judge
 
 `--record` sends one batch to the Message Batches API, with one request per case, at half the standard price. Before it sends, it prices the largest reply every request allows and refuses the whole batch when that total would pass `THIN_PR_SPEND_LIMIT_USD`. It polls every 30 seconds until the batch ends, then writes `evals/judge-cassette.jsonl`. Each line holds one batch result and the SHA-256 of the request that produced it. Without `--record`, the command replays that cassette offline. A request that changed since the recording makes the cassette stale, and the command fails.
 
-The report compares each grade with `judge.json` and prints the agreement, the agreement per criterion, the fail labels the judge caught, and the judge cost. A case the judge could not grade, such as a refusal or an expired request, is listed and agrees on nothing. The floor in `evals/judge-baseline.json` is 90%. A judge that passes everything would agree on 79 of the 92 labels, 85.9%, and catch none of the 13 fail labels.
+The report compares each grade with `judge.json` and prints the agreement, the agreement per criterion, the fail labels the judge caught, and the judge cost. A case the judge could not grade, such as a refusal or an expired request, is listed and agrees on nothing. The floor in `evals/judge-baseline.json` is 90%. A judge that passes everything would agree on 91 of the 104 labels, 87.5%, and catch none of the 13 fail labels.
 
 The judge cassette is not recorded yet. Until it is, `pnpm eval:judge` prints the label counts and `judge cassette: not recorded.`, and exits 0.
 

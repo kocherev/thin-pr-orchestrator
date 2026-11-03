@@ -61,13 +61,14 @@ To run on GitHub, add the `ANTHROPIC_API_KEY` repository secret, allow GitHub Ac
 
 ## Results
 
-`pnpm eval` replays 23 labeled issues and runs each repo's checks for real: 18 against the TypeScript package in `evals/sample-repo` with `tsc` and `vitest`, and 5 against the Python package in `evals/sample-python` with `python3`. Some cases add hidden tests the implementer never sees. Thirteen cases should open a draft. Ten should not: one per gate rule from `diff` to `review` except `budget`, an empty plan that fails before the gate, and three Python cases that fail `tests`, `paths`, and `secrets`.
+`pnpm eval` replays 26 labeled issues and runs each repo's checks for real: 21 against the TypeScript package in `evals/sample-repo` with `tsc` and `vitest`, and 5 against the Python package in `evals/sample-python` with `python3`. Some cases add hidden tests the implementer never sees. Fifteen cases should open a draft, two of them multi-file changes of 5 and 3 files. Ten should not: one per gate rule from `diff` to `review` except `budget`, an empty plan that fails before the gate, and three Python cases that fail `tests`, `paths`, and `secrets`. One case changes 13 files, one more than the feature budget, and must end waiting for approval.
 
 | Metric | Value |
 | --- | --- |
-| Verdict accuracy | 23/23 (100.0%) |
-| Resolve rate | 13/13 (100.0%) |
-| Cost per resolved case | 0.031117 USD |
+| Verdict accuracy | 26/26 (100.0%) |
+| Resolve rate | 15/15 (100.0%) |
+| Waited for approval | 1/1 |
+| Cost per resolved case | 0.034382 USD |
 | Judge agreement | pending live recording |
 
 The cassettes and the judge batch have no live recording yet, so the costs are token estimates and the judge has no score. `evals/README.md` has every case and the commands that record them.

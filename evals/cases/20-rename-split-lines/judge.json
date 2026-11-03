@@ -1,0 +1,7 @@
+{
+  "plan_relevance": "pass",
+  "minimal_diff": "pass",
+  "test_adequacy": "pass",
+  "review_quality": "pass",
+  "note": "The planner searches for splitNotes first, and the plan renames it in the three files that use it and nowhere else. The diff changes only those names. The renamed test still checks the split, and no new behavior needs a test. The approval fits a complete rename with passing checks."
+}

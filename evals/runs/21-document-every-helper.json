@@ -1,0 +1,297 @@
+{
+  "version": 1,
+  "runId": "eval-21-document-every-helper",
+  "repo": "example/sample-repo",
+  "issue": {
+    "number": 21,
+    "title": "Document every helper",
+    "url": "https://github.com/example/sample-repo/issues/21"
+  },
+  "template": "feature",
+  "status": "awaiting_approval",
+  "steps": [
+    {
+      "id": "plan",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-03T07:24:08.194Z",
+      "durationMs": 7008,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 622,
+          "outputTokens": 214,
+          "cacheReadTokens": 0,
+          "costUsd": 0.003384,
+          "durationMs": 3256
+        },
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 924,
+          "outputTokens": 338,
+          "cacheReadTokens": 0,
+          "costUsd": 0.005228,
+          "durationMs": 3752
+        }
+      ],
+      "summary": "Add JSDoc to every export, one docs page and one usage test per module, and README links."
+    },
+    {
+      "id": "implement",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-03T07:24:15.202Z",
+      "durationMs": 24840,
+      "usage": [
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1067,
+          "outputTokens": 211,
+          "cacheReadTokens": 0,
+          "costUsd": 0.008488,
+          "durationMs": 3244
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1363,
+          "outputTokens": 385,
+          "cacheReadTokens": 0,
+          "costUsd": 0.013152,
+          "durationMs": 3940
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 1767,
+          "outputTokens": 444,
+          "cacheReadTokens": 0,
+          "costUsd": 0.015948,
+          "durationMs": 4176
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 2193,
+          "outputTokens": 454,
+          "cacheReadTokens": 0,
+          "costUsd": 0.017852,
+          "durationMs": 4216
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 2640,
+          "outputTokens": 201,
+          "cacheReadTokens": 0,
+          "costUsd": 0.01458,
+          "durationMs": 3204
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 2759,
+          "outputTokens": 163,
+          "cacheReadTokens": 0,
+          "costUsd": 0.014296,
+          "durationMs": 3052
+        },
+        {
+          "model": "claude-opus-5-5",
+          "inputTokens": 2945,
+          "outputTokens": 152,
+          "cacheReadTokens": 0,
+          "costUsd": 0.01482,
+          "durationMs": 3008
+        }
+      ],
+      "summary": "Added JSDoc to every export, a docs page and a usage test per module, and README links to the pages."
+    },
+    {
+      "id": "verify",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-03T07:24:40.042Z",
+      "durationMs": 0,
+      "usage": [],
+      "summary": "typecheck passed; test passed."
+    },
+    {
+      "id": "review",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-03T07:24:40.042Z",
+      "durationMs": 3080,
+      "usage": [
+        {
+          "model": "claude-sonnet-5-5",
+          "inputTokens": 1853,
+          "outputTokens": 170,
+          "cacheReadTokens": 0,
+          "costUsd": 0.005406,
+          "durationMs": 3080
+        }
+      ],
+      "summary": "Every export has JSDoc, each page's example matches its usage test, and the README links all four. The checks pass."
+    },
+    {
+      "id": "write",
+      "attempt": 1,
+      "loop": 0,
+      "outcome": "finished",
+      "startedAt": "2026-11-03T07:24:43.122Z",
+      "durationMs": 3040,
+      "usage": [
+        {
+          "model": "claude-haiku-5-5",
+          "inputTokens": 488,
+          "outputTokens": 160,
+          "cacheReadTokens": 0,
+          "costUsd": 0.00012880000000000001,
+          "durationMs": 3040
+        }
+      ],
+      "summary": "Document every helper."
+    }
+  ],
+  "gate": [
+    {
+      "rule": "plan",
+      "verdict": "PASS",
+      "reason": "Plan is present (13 steps)."
+    },
+    {
+      "rule": "contracts",
+      "verdict": "PASS",
+      "reason": "Step outputs match their contracts."
+    },
+    {
+      "rule": "diff",
+      "verdict": "PASS",
+      "reason": "Diff is present (13 files, 79 lines)."
+    },
+    {
+      "rule": "budget",
+      "verdict": "NEEDS_APPROVAL",
+      "reason": "Diff exceeds the budget (13 files, 79 lines; limit 12 files, 600 lines)."
+    },
+    {
+      "rule": "paths",
+      "verdict": "PASS",
+      "reason": "Every changed path is allowed."
+    },
+    {
+      "rule": "secrets",
+      "verdict": "PASS",
+      "reason": "No added line looks like a secret."
+    },
+    {
+      "rule": "typecheck",
+      "verdict": "PASS",
+      "reason": "Typecheck passed: tsc --noEmit"
+    },
+    {
+      "rule": "tests",
+      "verdict": "PASS",
+      "reason": "Tests passed: vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1"
+    },
+    {
+      "rule": "review",
+      "verdict": "PASS",
+      "reason": "Reviewer approved."
+    }
+  ],
+  "diff": {
+    "files": [
+      {
+        "path": "README.md",
+        "added": 2,
+        "removed": 0
+      },
+      {
+        "path": "docs/counter.md",
+        "added": 12,
+        "removed": 0
+      },
+      {
+        "path": "docs/format.md",
+        "added": 11,
+        "removed": 0
+      },
+      {
+        "path": "docs/notes.md",
+        "added": 11,
+        "removed": 0
+      },
+      {
+        "path": "docs/parse.md",
+        "added": 12,
+        "removed": 0
+      },
+      {
+        "path": "src/counter.ts",
+        "added": 2,
+        "removed": 0
+      },
+      {
+        "path": "src/format.ts",
+        "added": 1,
+        "removed": 0
+      },
+      {
+        "path": "src/notes.ts",
+        "added": 1,
+        "removed": 0
+      },
+      {
+        "path": "src/parse.ts",
+        "added": 1,
+        "removed": 0
+      },
+      {
+        "path": "test/counter.usage.test.ts",
+        "added": 7,
+        "removed": 0
+      },
+      {
+        "path": "test/format.usage.test.ts",
+        "added": 6,
+        "removed": 0
+      },
+      {
+        "path": "test/notes.usage.test.ts",
+        "added": 6,
+        "removed": 0
+      },
+      {
+        "path": "test/parse.usage.test.ts",
+        "added": 7,
+        "removed": 0
+      }
+    ],
+    "meaningful": true,
+    "patch": "diff --git a/README.md b/README.md\nindex c0b1033..ea1fa15 100644\n--- a/README.md\n+++ b/README.md\n@@ -6,3 +6,5 @@ Small helpers used by the replay fixtures.\n - `formatCount` renders a count.\n - `splitNotes` splits text into lines.\n - `parseFlag` reads true and false.\n+\n+Each module has a page: [counter](docs/counter.md), [format](docs/format.md), [notes](docs/notes.md), and [parse](docs/parse.md).\ndiff --git a/docs/counter.md b/docs/counter.md\nnew file mode 100644\nindex 0000000..53b8069\n--- /dev/null\n+++ b/docs/counter.md\n@@ -0,0 +1,12 @@\n+# counter\n+\n+Count up and down by one.\n+\n+```ts\n+import { decrement, increment } from \"../src/counter.js\";\n+\n+expect(increment(1)).toBe(2);\n+expect(decrement(3)).toBe(2);\n+```\n+\n+`test/counter.usage.test.ts` runs this example.\ndiff --git a/docs/format.md b/docs/format.md\nnew file mode 100644\nindex 0000000..5b63eb2\n--- /dev/null\n+++ b/docs/format.md\n@@ -0,0 +1,11 @@\n+# format\n+\n+Render a count as text.\n+\n+```ts\n+import { formatCount } from \"../src/format.js\";\n+\n+expect(formatCount(42)).toBe(\"42\");\n+```\n+\n+`test/format.usage.test.ts` runs this example.\ndiff --git a/docs/notes.md b/docs/notes.md\nnew file mode 100644\nindex 0000000..6202a6b\n--- /dev/null\n+++ b/docs/notes.md\n@@ -0,0 +1,11 @@\n+# notes\n+\n+Split note text into lines.\n+\n+```ts\n+import { splitNotes } from \"../src/notes.js\";\n+\n+expect(splitNotes(\"a\\nb\")).toEqual([\"a\", \"b\"]);\n+```\n+\n+`test/notes.usage.test.ts` runs this example.\ndiff --git a/docs/parse.md b/docs/parse.md\nnew file mode 100644\nindex 0000000..14894c1\n--- /dev/null\n+++ b/docs/parse.md\n@@ -0,0 +1,12 @@\n+# parse\n+\n+Read a true or false flag.\n+\n+```ts\n+import { parseFlag } from \"../src/parse.js\";\n+\n+expect(parseFlag(\"true\")).toBe(true);\n+expect(parseFlag(\"maybe\")).toBeNull();\n+```\n+\n+`test/parse.usage.test.ts` runs this example.\ndiff --git a/src/counter.ts b/src/counter.ts\nindex d36f7d7..2f76b0e 100644\n--- a/src/counter.ts\n+++ b/src/counter.ts\n@@ -1,7 +1,9 @@\n+/** The value plus one. */\n export function increment(value: number): number {\n   return value + 1;\n }\n \n+/** The value minus one. */\n export function decrement(value: number): number {\n   return value - 1;\n }\ndiff --git a/src/format.ts b/src/format.ts\nindex c4cc2f1..90cff10 100644\n--- a/src/format.ts\n+++ b/src/format.ts\n@@ -1,3 +1,4 @@\n+/** The count as plain digits. */\n export function formatCount(value: number): string {\n   return String(value);\n }\ndiff --git a/src/notes.ts b/src/notes.ts\nindex db28111..1a83949 100644\n--- a/src/notes.ts\n+++ b/src/notes.ts\n@@ -1,3 +1,4 @@\n+/** The text split at each newline. */\n export function splitNotes(text: string): string[] {\n   return text.split(\"\\n\");\n }\ndiff --git a/src/parse.ts b/src/parse.ts\nindex 9b0460c..91f6f30 100644\n--- a/src/parse.ts\n+++ b/src/parse.ts\n@@ -1,3 +1,4 @@\n+/** true for \"true\", false for \"false\", and null for anything else. */\n export function parseFlag(text: string): boolean | null {\n   if (text === \"true\") {\n     return true;\ndiff --git a/test/counter.usage.test.ts b/test/counter.usage.test.ts\nnew file mode 100644\nindex 0000000..18becc2\n--- /dev/null\n+++ b/test/counter.usage.test.ts\n@@ -0,0 +1,7 @@\n+import { expect, it } from \"vitest\";\n+import { decrement, increment } from \"../src/counter.js\";\n+\n+it(\"runs the example from docs/counter.md\", () => {\n+  expect(increment(1)).toBe(2);\n+  expect(decrement(3)).toBe(2);\n+});\ndiff --git a/test/format.usage.test.ts b/test/format.usage.test.ts\nnew file mode 100644\nindex 0000000..0392b73\n--- /dev/null\n+++ b/test/format.usage.test.ts\n@@ -0,0 +1,6 @@\n+import { expect, it } from \"vitest\";\n+import { formatCount } from \"../src/format.js\";\n+\n+it(\"runs the example from docs/format.md\", () => {\n+  expect(formatCount(42)).toBe(\"42\");\n+});\ndiff --git a/test/notes.usage.test.ts b/test/notes.usage.test.ts\nnew file mode 100644\nindex 0000000..ad5cf05\n--- /dev/null\n+++ b/test/notes.usage.test.ts\n@@ -0,0 +1,6 @@\n+import { expect, it } from \"vitest\";\n+import { splitNotes } from \"../src/notes.js\";\n+\n+it(\"runs the example from docs/notes.md\", () => {\n+  expect(splitNotes(\"a\\nb\")).toEqual([\"a\", \"b\"]);\n+});\ndiff --git a/test/parse.usage.test.ts b/test/parse.usage.test.ts\nnew file mode 100644\nindex 0000000..cb7b8cd\n--- /dev/null\n+++ b/test/parse.usage.test.ts\n@@ -0,0 +1,7 @@\n+import { expect, it } from \"vitest\";\n+import { parseFlag } from \"../src/parse.js\";\n+\n+it(\"runs the example from docs/parse.md\", () => {\n+  expect(parseFlag(\"true\")).toBe(true);\n+  expect(parseFlag(\"maybe\")).toBeNull();\n+});\n"
+  },
+  "checks": [
+    {
+      "name": "typecheck",
+      "command": "tsc --noEmit",
+      "exitCode": 0,
+      "durationMs": 0,
+      "logTail": ""
+    },
+    {
+      "name": "test",
+      "command": "vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1",
+      "exitCode": 0,
+      "durationMs": 0,
+      "logTail": "\n RUN  v5.0.5 .\n\n\n Test Files  8 passed (8)\n      Tests  8 passed (8)\n\n"
+    }
+  ],
+  "pullRequest": null,
+  "totals": {
+    "costUsd": 0.11328279999999999,
+    "durationMs": 37968,
+    "inputTokens": 18621,
+    "outputTokens": 2892
+  }
+}

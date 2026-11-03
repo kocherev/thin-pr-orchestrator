@@ -56,7 +56,7 @@ pnpm exec vitest run packages/specialists/src/client.test.ts
 pnpm exec vitest run scripts/eval.test.ts
 ```
 
-`packages/core/src/run.test.ts` writes a SQLite log for a run that loops once, reopens it, and expects `replay` to rebuild the same outputs, loops, and usage. `packages/github/src/run.test.ts` runs `fixtures/sample-issue-labeled.json` against a scratch git checkout with an in-memory GitHub client. `packages/specialists/src/client.test.ts` records and replays model calls against a fake API and checks pricing, the spend limit, and refusals. `packages/workspace/src/git.test.ts` edits, diffs, checks, and pushes a scratch checkout. `scripts/eval.test.ts` runs the eval, expects 23/23, and checks that the committed report matches the run. `scripts/record.test.ts` records a case through the scripted upstream and checks the spend limit. `scripts/judge.test.ts` checks the human labels and records and replays a judge batch through the scripted upstream. `scripts/trace.test.ts` expects 16 spans in one trace, with the GenAI attributes, the parent links, request costs that match the pricing, and no prompt or file text. It also sends the spans to a local OTLP receiver.
+`packages/core/src/run.test.ts` writes a SQLite log for a run that loops once, reopens it, and expects `replay` to rebuild the same outputs, loops, and usage. `packages/github/src/run.test.ts` runs `fixtures/sample-issue-labeled.json` against a scratch git checkout with an in-memory GitHub client. `packages/specialists/src/client.test.ts` records and replays model calls against a fake API and checks pricing, the spend limit, and refusals. `packages/workspace/src/git.test.ts` edits, diffs, checks, and pushes a scratch checkout. `scripts/eval.test.ts` runs the eval, expects 26/26, and checks that the committed report matches the run. `scripts/record.test.ts` records a case through the scripted upstream and checks the spend limit. `scripts/judge.test.ts` checks the human labels and records and replays a judge batch through the scripted upstream. `scripts/trace.test.ts` expects 16 spans in one trace, with the GenAI attributes, the parent links, request costs that match the pricing, and no prompt or file text. It also sends the spans to a local OTLP receiver.
 
 `scripts/eval.test.ts`, `scripts/record.test.ts`, and the replay test in `packages/mcp/src/server.test.ts` run `tsc` and `vitest` in scratch repos for several cases. They set longer timeouts of their own.
 
@@ -68,14 +68,14 @@ Stdout on the committed cases starts with:
 
 ```text
 Replay eval
-cases: 23
-verdict accuracy: 23/23 (100.0%)
-resolve rate: 13/13 (100.0%)
-cost per resolved case: 0.031117 USD
+cases: 26
+verdict accuracy: 26/26 (100.0%)
+resolve rate: 15/15 (100.0%)
+cost per resolved case: 0.034382 USD
 p50 step latency: 3180 ms
 ```
 
-The command then prints the totals by model, the baseline, the gate rules some case fails, and one line per case: id, `opened` or `blocked`, `ok` or `MISMATCH`, file count, line count, and the failed rules or the step error. Each case runs on a scratch git copy of the sample repo its issue names, `evals/sample-repo` or `evals/sample-python`, with this repo's `node_modules/.bin` on `PATH` for `tsc` and `vitest`. The Python cases need `python3` 3.10 or later on `PATH` and nothing else. The eval stops with a message that says so when it is missing. Exit 0 means the verdict accuracy is at least `evals/baseline.json` and `evals/report.json` and `evals/runs/` match the run.
+The command then prints the totals by model, the baseline, the gate rules some case fails, and one line per case: id, `opened`, `awaiting_approval`, or `blocked`, `ok` or `MISMATCH`, file count, line count, and the failed rules, the rule that needs approval, or the step error. Each case runs on a scratch git copy of the sample repo its issue names, `evals/sample-repo` or `evals/sample-python`, with this repo's `node_modules/.bin` on `PATH` for `tsc` and `vitest`. The Python cases need `python3` 3.10 or later on `PATH` and nothing else. The eval stops with a message that says so when it is missing. Exit 0 means the verdict accuracy is at least `evals/baseline.json` and `evals/report.json` and `evals/runs/` match the run.
 
 When you change a case, a cassette, or anything a run records, run `pnpm eval -- --write` and commit `evals/report.json` and `evals/runs/` in the same change. Do not lower `evals/baseline.json`, and do not edit `scripts/eval.test.ts`, to turn a red eval green. Update the case table in `evals/README.md` when a case changes, and the results table in `README.md` when the printed numbers change.
 
