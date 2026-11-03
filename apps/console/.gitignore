@@ -1,0 +1,4 @@
+.next/
+out/
+.wrangler/
+next-env.d.ts

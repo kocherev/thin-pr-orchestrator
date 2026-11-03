@@ -17,7 +17,8 @@
     "trace": "node --disable-warning=ExperimentalWarning --import tsx scripts/trace.ts",
     "verify": "bash scripts/verify.sh",
     "thin-pr": "node --disable-warning=ExperimentalWarning packages/github/bin/thin-pr.js",
-    "build": "tsc -b --pretty false"
+    "build": "tsc -b --pretty false",
+    "console:build": "pnpm --filter console build"
   },
   "dependencies": {
     "@thin-pr/core": "workspace:*",
