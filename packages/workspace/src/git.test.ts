@@ -206,6 +206,19 @@ describe("GitWorkspace", () => {
     await expect(workspace.runGenerator("rm -rf .")).rejects.toThrow("rm -rf . is not a generator in .thin-pr.yml");
   });
 
+  it("gives a generator the same environment as a check, so a cache path that breaks one breaks both", async () => {
+    process.env.UV_CACHE_DIR = "/runner-owned/setup-uv-cache";
+    cleanups.push(() => delete process.env.UV_CACHE_DIR);
+    const repo = scratch();
+    const config = { ...loadRepoConfig(repo.dir), checks: { typecheck: "env | sort", test: "true" }, generate: ["env | sort"] };
+    const workspace = await openWorkspace({ dir: repo.dir, baseSha: repo.baseSha, config });
+
+    const check = await workspace.runCheck("typecheck");
+    const generator = await workspace.runGenerator("env | sort");
+    expect(generator.logTail).toContain("UV_CACHE_DIR=/runner-owned/setup-uv-cache");
+    expect(generator.logTail).toBe(check.logTail);
+  });
+
   it("refuses a checkout whose HEAD is not the base", async () => {
     const repo = scratch();
     const clone = cloneWithCommit(repo.remote, "README.md", "# Moved\n");

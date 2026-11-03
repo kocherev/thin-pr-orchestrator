@@ -121,13 +121,13 @@ checks:
   typecheck: export UV_CACHE_DIR="$HOME/.cache/uv" && pnpm lint && pnpm typecheck && uv run ruff check . && uv run pyright
   test: export UV_CACHE_DIR="$HOME/.cache/uv" && pnpm test && uv run pytest
 # Commands the implementer may run by name, such as a generator for files it must not edit by hand.
-generate: ["pnpm openapi"]
+generate: ['export UV_CACHE_DIR="$HOME/.cache/uv" && pnpm openapi']
 paths:
   allow: ["**"]
   deny: [".github/**", "**/.env", "**/.env.local", "**/.env.*.local", "pnpm-lock.yaml", "uv.lock"]
 ```
 
-The install and checks run as `thin-pr-check`, with that user's own `HOME`. A setup action may point a tool's cache at a folder the runner's user owns, and the check user can't write there. `setup-uv` does this with `UV_CACHE_DIR`, so the example moves the uv cache into the check user's home.
+The install and checks run as `thin-pr-check`, with that user's own `HOME`. A setup action may point a tool's cache at a folder the runner's user owns, and the check user can't write there. `setup-uv` does this with `UV_CACHE_DIR`, so the example moves the uv cache into the check user's home. A generator runs with exactly the check environment, so a generator that calls `uv` needs the same prefix.
 
 Each field has a default, so a file can set only what differs. `templates/README.md` lists the budget and spend fields. Name only real secret files in `deny`. A broad pattern such as `**/.env*` also blocks `.env.example`, which an issue may need to change. The `secrets` gate rule scans every added line whatever the paths.
 
