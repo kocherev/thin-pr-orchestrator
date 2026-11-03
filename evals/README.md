@@ -6,11 +6,13 @@ The evals run the real orchestrator over 18 labeled issues against a small TypeS
 
 `evals/sample-repo` is the tree before each change. It has four helper files under `src/`, visible vitest tests under `test/`, and a `.thin-pr.yml` whose checks are `tsc --noEmit` and `vitest run --reporter=minimal --no-file-parallelism --isolate 2>&1`. vitest picks its default reporter from the environment, so the command names one. The minimal reporter prints each failing test in full and the totals. Files run one at a time. The explicit `--isolate` keeps the default isolation and turns off a hint that vitest prints only when worker startup is slow. The command merges stderr into stdout, so the log keeps the order vitest wrote it.
 
+`evals/sample-python` is a small Python package with three helper modules under `src/`, visible `unittest` tests under `test/`, and a `pyproject.toml` with no dependencies. Its `.thin-pr.yml` sets the typecheck check to `python3 -m compileall -q src test`, which proves every file compiles, and the test check to `PYTHONPATH=src python3 -m unittest discover -s test 2>&1`. Both come with Python, so the eval installs nothing. The eval stops with a clear message unless `python3` on `PATH` is Python 3.10 or later.
+
 Each directory under `evals/cases` is one labeled issue:
 
-- `issue.json` is the labeled-issue payload.
+- `issue.json` is the labeled-issue payload. Its `repository.name` picks the sample repo: `sample-repo` or `sample-python`.
 - `cassette.jsonl` holds the model calls, one JSON line each. Replay hands them out in order per specialist and checks the model id.
-- `hidden/*.test.ts` are tests the implementer never sees. They are copied to `test/hidden/` right before verify.
+- `hidden/` holds tests the implementer never sees. They are copied to `test/hidden/` right before verify. A Python case also has `hidden/__init__.py`, because `unittest` discovery only enters packages.
 - `expected.json` is the verdict, `opened` or `blocked`, and for most blocked cases the gate rules that must fail.
 - `judge.json` is the human grade for each judge criterion, with a note that says why.
 
@@ -78,7 +80,7 @@ blocked bad: 9/9
 
 `pnpm eval -- --write` writes `evals/report.json` and one RunRecord per case under `evals/runs/`. The console reads them. The report has `version`, `generatedAt`, and one entry per case with `caseId`, `title`, `expected`, `actual`, `failedRules`, `costUsd`, `durationMs`, and `models`.
 
-A fresh run reproduces both files byte for byte. `generatedAt` is the newest cassette's first `recordedAt`. Each step's duration is the sum of its recorded model calls, and the steps start back to back from the cassette's first `recordedAt`. The eval sets `CI=true` and `NO_COLOR=1` and unsets `FORCE_COLOR` for the checks, so a laptop and a CI runner give vitest the same environment. The writer then normalizes four things and nothing else. Check durations are 0. The scratch checkout path becomes `.`. The vitest `Start at` and `Duration` lines are dropped. A trailing duration such as ` 7ms` is cut from each log line.
+A fresh run reproduces both files byte for byte. `generatedAt` is the newest cassette's first `recordedAt`. Each step's duration is the sum of its recorded model calls, and the steps start back to back from the cassette's first `recordedAt`. The eval sets `CI=true` and `NO_COLOR=1` and unsets `FORCE_COLOR` for the checks, so a laptop and a CI runner give vitest the same environment. The writer then normalizes five things and nothing else. Check durations are 0. The scratch checkout path becomes `.`. The vitest `Start at` and `Duration` lines are dropped. A trailing duration such as ` 7ms` is cut from each log line. A `unittest` report keeps only each `FAIL:` and `ERROR:` line, with the test id in the Python 3.10 form, the last line of each traceback, `Ran N tests`, and `OK` or `FAILED (...)`, because traceback frames and carets differ between Python versions. The committed report matches a fresh run on Python 3.11 through 3.15.
 
 `pnpm eval` without `--write` compares the committed files with a fresh run. When they differ, it names the first differing line of each file and tells you to run `pnpm eval -- --write`. CI runs `pnpm eval`, so a stale report fails CI.
 

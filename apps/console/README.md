@@ -30,7 +30,7 @@ The build parses every file with the Zod schemas in `lib/schema.ts`. A file that
 - Resolve rate is the share of cases expected to open that opened.
 - Cost per resolved case is the spend on cases expected to open, divided by the ones that opened.
 
-Eval runs replay recorded model responses against `example/sample-repo`. The console labels them as replays and shows their issue and pull request numbers without links.
+Eval runs replay recorded model responses against `example/sample-repo` and `example/sample-python`. The console labels them as replays and shows their issue and pull request numbers without links.
 
 ## Tests
 

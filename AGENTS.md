@@ -8,6 +8,7 @@ Thin PR Orchestrator. Read this before changing the repo. It is enough to instal
 - pnpm 10.33.4, from the `packageManager` field in `package.json`. Do not switch to another major version.
 - A checkout of this repo.
 - git 2.28 or later. The tests, `pnpm eval`, and `pnpm trace` create scratch git repos.
+- Python 3.10 or later as `python3`, for the eval cases on `evals/sample-python`. They use only the standard library.
 
 Corepack ships with Node 22. Enable it when `pnpm` is missing or the version is not 10.33.4.
 
@@ -74,7 +75,7 @@ cost per resolved case: 0.029992 USD
 p50 step latency: 3195 ms
 ```
 
-The command then prints the totals by model, the baseline, the gate rules some case fails, and one line per case: id, `opened` or `blocked`, `ok` or `MISMATCH`, file count, line count, and the failed rules or the step error. Each case runs on a scratch git copy of `evals/sample-repo`, with this repo's `node_modules/.bin` on `PATH` for `tsc` and `vitest`. Exit 0 means the verdict accuracy is at least `evals/baseline.json` and `evals/report.json` and `evals/runs/` match the run.
+The command then prints the totals by model, the baseline, the gate rules some case fails, and one line per case: id, `opened` or `blocked`, `ok` or `MISMATCH`, file count, line count, and the failed rules or the step error. Each case runs on a scratch git copy of the sample repo its issue names, `evals/sample-repo` or `evals/sample-python`, with this repo's `node_modules/.bin` on `PATH` for `tsc` and `vitest`. The Python cases need `python3` 3.10 or later on `PATH` and nothing else. The eval stops with a message that says so when it is missing. Exit 0 means the verdict accuracy is at least `evals/baseline.json` and `evals/report.json` and `evals/runs/` match the run.
 
 When you change a case, a cassette, or anything a run records, run `pnpm eval -- --write` and commit `evals/report.json` and `evals/runs/` in the same change. Do not lower `evals/baseline.json`, and do not edit `scripts/eval.test.ts`, to turn a red eval green. Update the case table in `evals/README.md` when a case changes, and the results table in `README.md` when the printed numbers change.
 
@@ -104,7 +105,7 @@ The command replays run `run-7` on a scratch checkout and exports OTLP JSON. Set
 
 The YAML templates under `templates/` are data. A step names its id, optional model and effort, retry limit, and optional loop. The labeled-issue entry loads the template whose `label` matches the issue label.
 
-`evals/` holds the sample package and one directory per case under `evals/cases`. `pnpm eval` replays each case's `cassette.jsonl`. `fixtures/gate-pass.jsonl` and `fixtures/gate-fail.jsonl` are the cassettes for the draft path and the failed-rule path.
+`evals/` holds the TypeScript and Python sample repos and one directory per case under `evals/cases`. `pnpm eval` replays each case's `cassette.jsonl`. `fixtures/gate-pass.jsonl` and `fixtures/gate-fail.jsonl` are the cassettes for the draft path and the failed-rule path.
 
 ## Skills
 

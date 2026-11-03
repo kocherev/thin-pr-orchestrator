@@ -1,0 +1,6 @@
+[project]
+name = "sample-python"
+version = "0.1.0"
+description = "Small helpers used by the replay fixtures."
+requires-python = ">=3.10"
+dependencies = []

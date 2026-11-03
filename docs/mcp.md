@@ -61,7 +61,7 @@ The sample package checks with bare `tsc` and `vitest`. Put this repo's `node_mo
 | `replay_case` | `caseId`, a directory under `evals/cases` | `verdict`, `failedRules`, `expected`, `correct`, and the RunRecord. |
 | `start_run` | `repo`, an absolute path, and `issue`, the issue text | `status`, `branch`, `report`, `recordPath`, and the RunRecord, from the same `runLocal` as the command line. |
 
-`replay_case` copies `evals/sample-repo` and the case's `hidden/` tests into a scratch repo, then calls `runLocal` with the case's cassette. Replay ignores what the tools return, so committing the hidden tests with the base gives the verdict `pnpm eval` gives. It calls no model API.
+`replay_case` copies the sample repo the case's issue names, `evals/sample-repo` or `evals/sample-python`, and the case's `hidden/` tests into a scratch repo, then calls `runLocal` with the case's cassette. Replay ignores what the tools return, so committing the hidden tests with the base gives the verdict `pnpm eval` gives. It calls no model API.
 
 A tool that fails answers with an MCP tool error, `isError: true` and the message as text. Examples are an unknown `runId`, an unknown `caseId`, a relative `repo`, or `THIN_PR_RUNS_DIR` unset. The server keeps running.
 

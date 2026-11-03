@@ -1,0 +1,5 @@
+checks:
+  # The standard library has no type checker, so this check proves every file compiles.
+  typecheck: python3 -m compileall -q src test
+  # The tests import the modules under src by name. unittest writes its report to stderr, so stderr joins stdout.
+  test: PYTHONPATH=src python3 -m unittest discover -s test 2>&1

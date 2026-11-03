@@ -4,7 +4,17 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { RunRecord } from "@thin-pr/github";
 import { describe, expect, it } from "vitest";
-import { exitCode, formatReport, reportFiles, runEval, scoreRuns, staleReportFiles, writeReportFiles } from "./eval.js";
+import {
+  exitCode,
+  formatReport,
+  loadCases,
+  reportFiles,
+  runCases,
+  runEval,
+  scoreRuns,
+  staleReportFiles,
+  writeReportFiles,
+} from "./eval.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -134,6 +144,32 @@ describe("replay eval", () => {
       expect(staleReportFiles(dir, files)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("stops before any case runs when a Python case has no python3 3.10 or later on PATH", async () => {
+    const [item] = loadCases(root);
+    if (!item) throw new Error("no eval case");
+    const python = { ...item, repo: "sample-python" };
+    const noSession = () => {
+      throw new Error("the case ran");
+    };
+    // A python3 that reports 3.9, as macOS's /usr/bin/python3 does.
+    const old = mkdtempSync(join(tmpdir(), "thin-pr-python-"));
+    writeFileSync(join(old, "python3"), "#!/bin/sh\necho 3.9\n", { mode: 0o755 });
+    const path = process.env.PATH;
+    try {
+      process.env.PATH = join(root, "node_modules", ".bin");
+      await expect(runCases(root, [python], noSession, 1)).rejects.toThrow(
+        "evals/sample-python runs its checks with python3, and python3 is not on PATH. Install Python 3.10 or later.",
+      );
+      process.env.PATH = old;
+      await expect(runCases(root, [python], noSession, 1)).rejects.toThrow(
+        "evals/sample-python needs Python 3.10 or later, and python3 is 3.9.",
+      );
+    } finally {
+      process.env.PATH = path;
+      rmSync(old, { recursive: true, force: true });
     }
   });
 
