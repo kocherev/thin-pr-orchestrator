@@ -3,13 +3,15 @@ import { parseArgs } from "node:util";
 import { clientOptionsFromEnv, createAnthropicClient } from "@thin-pr/specialists";
 import { runLocal } from "./local.js";
 
-const USAGE = `Usage: thin-pr run --repo <path> --issue <file.md | text> [--out <dir>]
+const USAGE = `Usage: thin-pr run --repo <path> --issue <file.md | text> [--config <file>] [--label <name>] [--out <dir>]
 
 Runs the issue against the committed HEAD of a local git checkout. A gate pass leaves the
 change on a new local branch thin-pr/local-<n>. Nothing is pushed.
 
   --repo   the git checkout to change
   --issue  a file whose first line is the title, or the issue text itself
+  --config a .thin-pr.yml to use instead of the one in the checkout
+  --label  the label that picks the template, default thin-pr
   --out    the directory for <runId>.json, default <repo>/.git/thin-pr/runs
 
 THIN_PR_MODEL is live, record or replay (the default). Live and record need ANTHROPIC_API_KEY.
@@ -19,6 +21,8 @@ const OPTIONS = {
   repo: { type: "string" },
   issue: { type: "string" },
   out: { type: "string" },
+  config: { type: "string" },
+  label: { type: "string" },
   help: { type: "boolean", short: "h" },
 } as const;
 
@@ -46,6 +50,8 @@ async function main(argv: readonly string[]): Promise<number> {
     repo: values.repo,
     issue,
     runsDir: values.out,
+    configPath: values.config,
+    label: values.label,
     model: () => createAnthropicClient({ ...clientOptionsFromEnv(), checkRequests: false }),
   });
   const lines = [result.report, "", `Status: ${result.status}`];

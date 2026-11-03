@@ -10,9 +10,9 @@ From this repo's root, after `pnpm install`:
 pnpm thin-pr run --repo /path/to/checkout --issue issue.md
 ```
 
-`--issue` takes a file or the issue text itself. The first line is the title, with any leading `#` dropped. The rest is the body. `--out` sets the directory for the RunRecord.
+`--issue` takes a file or the issue text itself. The first line is the title, with any leading `#` dropped. The rest is the body. `--out` sets the directory for the RunRecord. `--config` reads `.thin-pr.yml` from a path outside the checkout, so you can try thin-pr on a repo without adding a file to it. `--label` picks the template by its label, such as `thin-pr:bugfix`.
 
-`runLocal` in `packages/github/src/local.ts` runs the `feature` template, the template for the `thin-pr` label, against the committed `HEAD` of the checkout. It works in a temporary git worktree, so your working tree and any uncommitted change stay as they are. The checks from the checkout's `.thin-pr.yml` run in that worktree. A local surface stands in for GitHub. It keeps the text GitHub would get, the draft body or the run report comment, and the command prints it.
+`runLocal` in `packages/github/src/local.ts` runs the `feature` template, the template for the `thin-pr` label, or the template `--label` names, against the committed `HEAD` of the checkout. It works in a temporary git worktree, so your working tree and any uncommitted change stay as they are. The checks from the checkout's `.thin-pr.yml`, or from the `--config` file, run in that worktree. A local surface stands in for GitHub. It keeps the text GitHub would get, the draft body or the run report comment, and the command prints it.
 
 - When every gate rule passes, the run commits the change to a new local branch `thin-pr/local-<n>`. `<n>` is one more than the highest existing `thin-pr/local-*` branch. The exit code is 0.
 - When a rule or a step fails, the run creates no branch. The exit code is 1. The record keeps the patch.

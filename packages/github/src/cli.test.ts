@@ -55,6 +55,23 @@ describe("thin-pr run", () => {
     expect(record.totals.costUsd).toBeGreaterThan(0);
   });
 
+  it("takes the config from outside the checkout and the template from --label", async () => {
+    const repo = sampleRepo();
+    const configFile = join(repo.dir, "..", "thin-pr.yml");
+    writeFileSync(configFile, "checks:\n  typecheck: echo outside typecheck\n  test: echo outside test\n");
+
+    const result = await thinPr(
+      ["run", "--repo", repo.dir, "--issue", "Clamp decrement at zero", "--config", configFile, "--label", "thin-pr:bugfix"],
+      { THIN_PR_CASSETTE: join(root, "evals", "cases", "01-clamp-decrement", "cassette.jsonl") },
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("| `tests` | PASS | Tests passed: echo outside test");
+    const recordPath = /^Record: (.+)$/m.exec(result.stdout)?.[1] ?? "";
+    expect(JSON.parse(readFileSync(recordPath, "utf8"))).toMatchObject({ template: "bugfix", status: "opened" });
+    expect(git(repo.dir, "status", "--porcelain")).toBe("");
+  });
+
   it("prints the usage and exits 2 without a repo", async () => {
     const result = await thinPr(["run", "--issue", "Fix it"], {});
 
