@@ -49,7 +49,7 @@ const SCRIPT: Script = {
     summary: "Return 2 from a and rename double to twice.",
   },
   reviewer: [{ summary: "Both comments are answered.", verdict: "approve", notes: [] }],
-  "pr-writer": [{ summary: "Revision", title: "Add the helpers", body: "Revision." }],
+  "pr-writer": [{ summary: "Revision", title: "Add the helpers" }],
 };
 
 /** A remote with `thin-pr/7` one commit past main, and a checkout of that branch at its head, as the Action makes. */

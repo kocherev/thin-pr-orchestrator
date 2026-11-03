@@ -4,7 +4,7 @@ import type { SpecialistName } from "./contract.js";
 import type { ModelSession } from "./client.js";
 import { runImplementer } from "./implementer.js";
 import { pricedModel, type PricedModel } from "./pricing.js";
-import { PLANNER_SYSTEM, PR_WRITER_SYSTEM, REVIEWER_SYSTEM } from "./prompts.js";
+import { plannerSystem, PR_WRITER_SYSTEM, REVIEWER_SYSTEM, type Budget } from "./prompts.js";
 import { structured, type Effort } from "./structured.js";
 import { structuredWithReads } from "./tools.js";
 import { SpendLimitError } from "./transport.js";
@@ -37,7 +37,8 @@ export const reviewerOutput = z
   .object({ summary: text, verdict: z.enum(["approve", "changes_requested"]), notes: z.array(z.string()) })
   .strict();
 
-export const prWriterOutput = z.object({ summary: text, title: text, body: text }).strict();
+/** The pull request body is built in code from the run, so the model writes only the title. */
+export const prWriterOutput = z.object({ summary: text, title: text }).strict();
 
 /** The steps a model answers. `verify` runs the repo's checks instead. */
 type ModelStepId = Exclude<StepId, "verify">;
@@ -51,7 +52,11 @@ const DEFAULTS: Record<ModelStepId, { readonly specialist: SpecialistName; reado
 };
 
 /** One handler per model step. Each returns the usage of the calls it made. */
-export function createStepHandlers(session: ModelSession, workspace: Workspace): Record<ModelStepId, StepHandler> {
+export function createStepHandlers(
+  session: ModelSession,
+  workspace: Workspace,
+  budget: Budget,
+): Record<ModelStepId, StepHandler> {
   const { client, meter } = session;
   const route = (step: ModelStepId, context: StepContext) => ({
     specialist: DEFAULTS[step].specialist,
@@ -83,14 +88,14 @@ export function createStepHandlers(session: ModelSession, workspace: Workspace):
       const more = files.length > shown.length ? `\n(${files.length - shown.length} more files not shown)` : "";
       const task = "Plan the change. Read each file with read_file before a step names it, and use search to find callers.";
       const input = withFeedback(`Repository files:\n${shown.join("\n")}${more}\n\n${task}`, context.feedback);
-      const request = { ...route("plan", context), system: PLANNER_SYSTEM, input, schema: plannerOutput, workspace };
+      const request = { ...route("plan", context), system: plannerSystem(budget), input, schema: plannerOutput, workspace };
       const output = await structuredWithReads(client, request);
       return { outcome: "done", output };
     }),
     implement: metered(async (context) => {
       const plan = plannerOutput.parse(context.outputs.plan);
       const input = withFeedback(`Plan: ${plan.summary}\n${bullets(plan.steps)}`, context.feedback);
-      const summary = await runImplementer(client, { ...route("implement", context), input, workspace });
+      const summary = await runImplementer(client, { ...route("implement", context), input, workspace, budget });
       const files = (await workspace.diff()).files.map((file) => file.path);
       return { outcome: "done", output: { summary, files } };
     }),

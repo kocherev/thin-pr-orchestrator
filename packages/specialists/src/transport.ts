@@ -2,10 +2,12 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { Middleware, MiddlewareContext } from "@anthropic-ai/sdk";
 import { trace } from "@opentelemetry/api";
 import type { Usage } from "@thin-pr/core";
+import { createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
 import { costOf, pricedModel, type BilledUsage, type PricedModel } from "./pricing.js";
+import { stableText, stripLocalPaths } from "./stable.js";
 
 /** Names the specialist behind a request. The transport reads it and strips it before anything is sent. */
 export const SPECIALIST_HEADER = "x-thin-pr-specialist";
@@ -15,7 +17,13 @@ const ATTR_COST_USD = "thin_pr.cost_usd";
 
 export type TransportOptions =
   | { readonly mode: "live"; readonly spendLimitUsd: number }
-  | { readonly mode: "record" | "replay"; readonly cassettePath: string; readonly spendLimitUsd: number };
+  | {
+      readonly mode: "record" | "replay";
+      readonly cassettePath: string;
+      readonly spendLimitUsd: number;
+      /** Replay only. False serves the recorded replies in order without comparing request hashes. */
+      readonly checkRequests?: boolean;
+    };
 
 const cassetteEntry = z
   .object({
@@ -28,6 +36,8 @@ const cassetteEntry = z
     durationMs: z.number().nonnegative(),
     // The conversation sent. System prompts and tool schemas live in the code.
     request: z.object({ messages: z.json() }).strict(),
+    // `requestHash` of the whole request. Replay fails when the request it gets hashes differently.
+    requestHash: z.string().regex(/^[0-9a-f]{64}$/),
     // A JSON body is stored parsed. A streamed body is stored as the raw event stream text.
     response: z.object({ contentType: z.string(), body: z.json() }).strict(),
   })
@@ -36,6 +46,31 @@ const cassetteEntry = z
 export type CassetteEntry = z.infer<typeof cassetteEntry>;
 
 const messageRequest = z.looseObject({ model: z.string(), max_tokens: z.number(), messages: z.json() });
+
+/** What a request asks the model. Headers, betas, limits and fallbacks change how it is served, not what it asks. */
+const HASHED_FIELDS = ["model", "system", "messages", "tools", "output_config"] as const;
+
+/**
+ * SHA-256 of a request's model, system prompt, messages, tools and output config. Keys are sorted, and every string
+ * goes through `stableText`, because tool results carry check logs with scratch paths and timings.
+ */
+export function requestHash(body: Readonly<Record<string, unknown>>): string {
+  const asked = Object.fromEntries(HASHED_FIELDS.map((field) => [field, body[field] ?? null]));  return createHash("sha256").update(canonical(asked)).digest("hex");
+}
+
+function canonical(value: unknown): string {
+  if (typeof value === "string") {
+    return JSON.stringify(stableText(value));
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonical).join(",")}]`;
+  }
+  if (typeof value === "object" && value !== null) {
+    const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
 
 export class CassetteError extends Error {
   constructor(message: string) {
@@ -68,6 +103,8 @@ export class SpendMeter {
   private spent = 0;
   private readonly calls: Usage[] = [];
   private run: { readonly startUsd: number; readonly limitUsd: number } | null = null;
+  /** Per specialist, the input and output tokens of its last call. */
+  private readonly lastTurnTokens = new Map<string, number>();
 
   constructor(readonly limitUsd: number) {}
 
@@ -84,10 +121,14 @@ export class SpendMeter {
     this.run = { startUsd: this.spent, limitUsd };
   }
 
-  /** Input size is unknown before the call, so this prices the largest output the request allows. */
-  assertRoomFor(model: PricedModel, maxTokens: number): void {
+  /**
+   * Prices the largest output the request allows, plus an input estimate: the specialist's previous request and its
+   * reply, all at the uncached rate. A tool loop sends both again on the next turn, so a late turn's input counts.
+   * Tool results added since are not known yet. A specialist's first call counts no input.
+   */
+  assertRoomFor(model: PricedModel, maxTokens: number, specialist: string): void {
     const worstCase = costOf(model, {
-      input_tokens: 0,
+      input_tokens: this.lastTurnTokens.get(specialist) ?? 0,
       output_tokens: maxTokens,
       cache_read_input_tokens: null,
       cache_creation_input_tokens: null,
@@ -101,9 +142,11 @@ export class SpendMeter {
     }
   }
 
-  record(model: PricedModel, usage: BilledUsage, durationMs: number): Usage {
+  record(model: PricedModel, usage: BilledUsage, durationMs: number, specialist: string): Usage {
     const costUsd = costOf(model, usage);
     this.spent += costUsd;
+    const input = usage.input_tokens + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
+    this.lastTurnTokens.set(specialist, input + usage.output_tokens);
     const call = {
       model,
       // Usage has no cache-write field, so written tokens count as input.
@@ -124,7 +167,7 @@ export class SpendMeter {
  */
 export function createTransport(options: TransportOptions): { middleware: Middleware; meter: SpendMeter } {
   const meter = new SpendMeter(options.spendLimitUsd);
-  const play = options.mode === "replay" ? player(options.cassettePath) : null;
+  const play = options.mode === "replay" ? player(options.cassettePath, options.checkRequests ?? true) : null;
   const write = options.mode === "record" ? recorder(options.cassettePath) : null;
 
   const middleware: Middleware = async (request, next, ctx) => {
@@ -139,17 +182,18 @@ export function createTransport(options: TransportOptions): { middleware: Middle
     }
     const sent = messageRequest.parse(JSON.parse(request.body));
     const model = pricedModel(sent.model);
+    const hash = requestHash(sent);
     // The SDK runs middleware inside its `anthropic.messages.create` span, which has the GenAI attributes.
     // This adds what only the transport knows.
     const span = trace.getActiveSpan();
     span?.setAttribute(ATTR_SPECIALIST, specialist);
     const price = async (response: Response, durationMs: number) => {
-      const call = meter.record(model, await billedUsage(response, ctx), durationMs);
+      const call = meter.record(model, await billedUsage(response, ctx), durationMs, specialist);
       span?.setAttribute(ATTR_COST_USD, call.costUsd);
     };
 
     if (play) {
-      const entry = play(specialist, model);
+      const entry = play(specialist, model, hash);
       const { contentType, body: recorded } = entry.response;
       const text = typeof recorded === "string" ? recorded : JSON.stringify(recorded);
       const response = new Response(text, { status: 200, headers: { "content-type": contentType } });
@@ -157,7 +201,7 @@ export function createTransport(options: TransportOptions): { middleware: Middle
       return response;
     }
 
-    meter.assertRoomFor(model, sent.max_tokens);
+    meter.assertRoomFor(model, sent.max_tokens, specialist);
     const started = Date.now();
     const upstream = await next({ ...request, headers });
     if (!upstream.ok) {
@@ -172,7 +216,8 @@ export function createTransport(options: TransportOptions): { middleware: Middle
       const contentType = upstream.headers.get("content-type") ?? "application/json";
       const stored = contentType.includes("json") ? z.json().parse(JSON.parse(text)) : text;
       const recordedAt = new Date().toISOString();
-      const entry = { source: "live", recordedAt, specialist, model, durationMs, request: { messages: sent.messages } } as const;
+      const request = { messages: sent.messages };
+      const entry = { source: "live", recordedAt, specialist, model, durationMs, request, requestHash: hash } as const;
       write({ ...entry, response: { contentType, body: stored } });
     }
     return response;
@@ -206,8 +251,8 @@ async function billedUsage(response: Response, ctx: MiddlewareContext): Promise<
   return usage;
 }
 
-/** Hands out recorded calls in order, per specialist, and checks each one asks for the recorded model. */
-function player(path: string): (specialist: string, model: string) => CassetteEntry {
+/** Hands out recorded calls in order, per specialist, and checks each one is the request that was recorded. */
+function player(path: string, checkRequests: boolean): (specialist: string, model: string, hash: string) => CassetteEntry {
   const queues = new Map<string, CassetteEntry[]>();
   const lines = readFileSync(path, "utf8").split("\n");
   for (const [index, line] of lines.entries()) {
@@ -220,7 +265,7 @@ function player(path: string): (specialist: string, model: string) => CassetteEn
   }
   const played = new Map<string, number>();
 
-  return (specialist, model) => {
+  return (specialist, model, hash) => {
     const call = (played.get(specialist) ?? 0) + 1;
     played.set(specialist, call);
     const entry = queues.get(specialist)?.[call - 1];
@@ -231,6 +276,11 @@ function player(path: string): (specialist: string, model: string) => CassetteEn
     if (entry.model !== model) {
       throw new CassetteError(
         `cassette ${path}: ${specialist} call ${call} was recorded with ${entry.model}, the request asks for ${model}`,
+      );
+    }
+    if (checkRequests && entry.requestHash !== hash) {
+      throw new CassetteError(
+        `cassette ${path}: request drifted from the cassette at ${specialist} call ${call}; re-record with pnpm eval:record`,
       );
     }
     return entry;
@@ -245,9 +295,16 @@ function parseLine(line: string): CassetteEntry | null {
   }
 }
 
-/** Starts the cassette empty, then appends one JSON line per call. */
+/**
+ * Starts the cassette empty, then appends one JSON line per call. Cassettes are committed, so every string loses this
+ * machine's paths first. The request hash already ignores them, so replay still matches.
+ */
 function recorder(path: string): (entry: CassetteEntry) => void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, "");
-  return (entry) => appendFileSync(path, `${JSON.stringify(entry)}\n`);
+  return (entry) => appendFileSync(path, `${cassetteLine(entry)}\n`);
+}
+
+function cassetteLine(entry: CassetteEntry): string {
+  return JSON.stringify(entry, (_key, value: unknown) => (typeof value === "string" ? stripLocalPaths(value) : value));
 }

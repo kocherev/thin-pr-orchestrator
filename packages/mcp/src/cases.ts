@@ -24,14 +24,14 @@ export async function replayCase(caseId: string) {
   const dir = join(EVALS, "cases", caseId);
   const { repo: sample, issue } = readLabelEvent(readJson(join(dir, "issue.json")));
   const expected = expectedSchema.parse(readJson(join(dir, "expected.json")));
-  // Replay ignores what the tools return, so hidden tests committed with the base give the verdict pnpm eval gives
-  // when it copies them in before verify.
+  // The hidden tests go in with the base, where pnpm eval copies them in before verify, so the requests differ from
+  // the recording. The replay serves the recorded replies without comparing requests and reaches the same verdict.
   const repo = createScratchRepo({ ...readTree(join(EVALS, sample), ""), ...readTree(join(dir, "hidden"), "test/hidden/") });
   try {
     const result = await runLocal({
       repo: repo.dir,
       issue: `${issue.title}\n\n${issue.body}`,
-      model: () => createAnthropicClient({ mode: "replay", cassettePath: join(dir, "cassette.jsonl") }),
+      model: () => createAnthropicClient({ mode: "replay", cassettePath: join(dir, "cassette.jsonl"), checkRequests: false }),
     });
     const verdict = verdictOf(result.status);
     const failedRules = result.record.gate.filter((rule) => rule.verdict === "FAIL").map((rule) => rule.rule);

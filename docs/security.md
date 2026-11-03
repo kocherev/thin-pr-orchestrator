@@ -90,7 +90,7 @@ The three workflows set `permissions: {}` at the top and grant each job only wha
 
 ## Spend cap
 
-`createAnthropicClient` meters every live and recorded call. Before each request, the meter prices the largest reply the request allows and stops with `SpendLimitError` when the session's spend plus that price would pass `THIN_PR_SPEND_LIMIT_USD`. The default is 25 USD. The App sets 25 in `wrangler.jsonc`, and the nightly eval sets 15. Each run also has its own cap, the template's `spend_usd` or the `.thin-pr.yml` override, and the same check stops a call that could pass it. A spend stop fails the run at once without retries. Replay never reaches the network.
+`createAnthropicClient` meters every live and recorded call. Before each request, the meter prices the largest reply the request allows, plus the same specialist's previous request and reply as uncached input, and stops with `SpendLimitError` when the session's spend plus that price would pass `THIN_PR_SPEND_LIMIT_USD`. The default is 25 USD. The App sets 25 in `wrangler.jsonc`, and the nightly eval sets 15. Each run also has its own cap, the template's `spend_usd` or the `.thin-pr.yml` override, and the same check stops a call that could pass it. A spend stop fails the run at once without retries. Replay never reaches the network.
 
 ## Telemetry
 

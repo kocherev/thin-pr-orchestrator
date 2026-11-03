@@ -11,12 +11,16 @@ The evals run the real orchestrator over 26 labeled issues against two small pac
 Each directory under `evals/cases` is one labeled issue:
 
 - `issue.json` is the labeled-issue payload. Its `repository.name` picks the sample repo: `sample-repo` or `sample-python`.
-- `cassette.jsonl` holds the model calls, one JSON line each. Replay hands them out in order per specialist and checks the model id.
+- `cassette.jsonl` holds the model calls, one JSON line each. Replay hands them out in order per specialist and checks the model id and the request hash.
 - `hidden/` holds tests the implementer never sees. They are copied to `test/hidden/` right before verify. A Python case also has `hidden/__init__.py`, because `unittest` discovery only enters packages.
 - `expected.json` is the verdict, `opened`, `awaiting_approval`, or `blocked`, and for most blocked cases the gate rules that must fail.
 - `judge.json` is the human grade for each judge criterion, with a note that says why.
 
 Each cassette line has a `source`. `live` came from the API. `converted` was rebuilt from an older recording. `scripted` was written by hand through the scripted upstream. Converted and scripted lines carry estimated token counts. Today cases 01 to 17 are `converted`, and cases 18 to 21 and the `py-` cases are `scripted`. A scripted line's duration is also an estimate, from its output tokens. No case has a live recording yet.
+
+Each line's `requestHash` is the SHA-256 of the request's model, system prompt, messages, tools, and output config. Before hashing, scratch paths become `.`, and vitest timings and the unittest lines that differ between Python versions are dropped, so the hash is the same on any machine. A change to a prompt, a tool, an output schema, or anything a step sends makes replay fail with `request drifted from the cassette at <specialist> call <n>; re-record with pnpm eval:record`. The converted and scripted lines got their hashes from a replay of today's requests. Their `request.messages` still show what the older recording sent.
+
+Cassettes are committed, so the recorder writes no local path: a scratch checkout becomes `.`, any other temp folder `$TMPDIR`, and a home folder `~`. The run records under `evals/runs/` go through the same rule.
 
 ## What each case tests
 
@@ -106,7 +110,7 @@ pnpm eval:record --all
 
 `pnpm eval:record` runs the named cases against the live API, one at a time, and rewrites each case's cassette with `"source":"live"` lines. `--all` records every case expected to open or to wait for approval. The blocked cases replay scripted failures, such as an empty plan or a planted secret, so they keep their cassettes. The command prints each case's verdict and spend, then the total.
 
-The command refuses to start without `ANTHROPIC_API_KEY`. One limit, `THIN_PR_SPEND_LIMIT_USD` (25 by default), covers the whole recording. Before each request the client prices the largest reply the request allows. A case that would pass the limit stops, keeps its old cassette, and no later case runs.
+The command refuses to start without `ANTHROPIC_API_KEY`. One limit, `THIN_PR_SPEND_LIMIT_USD` (25 by default), covers the whole recording. Before each request the client prices the largest reply the request allows, plus the same specialist's previous request and reply as input. A case that would pass the limit stops, keeps its old cassette, and no later case runs.
 
 After a recording, run `pnpm eval -- --write`. A new recording changes the run, so read the case again, update its `judge.json`, and record the judge again.
 

@@ -34,7 +34,7 @@ const STUB_SCRIPT: Script = {
     summary: "Apply the stub change.",
   },
   reviewer: [{ summary: "Stub review found nothing.", verdict: "approve", notes: [] }],
-  "pr-writer": [{ summary: "pass", title: "Fix the stub", body: "Stub draft." }],
+  "pr-writer": [{ summary: "pass", title: "Fix the stub" }],
 };
 
 describe("issue label", () => {
@@ -354,7 +354,8 @@ describe("issue label", () => {
     // The default branch moves on. The next run starts from a fresh clone, as actions/checkout gives it.
     const clone = cloneAndCommit(repo.remote, "README.md", "# Sample\n");
     const second = memoryGitHub({ openPull: { number: 11, url: "https://github.com/example/sample-repo/pull/11" } });
-    const result = await run(clone, second.github, { model: cassette("gate-pass") });
+    // The new README changes the planner's file list, so the recording no longer matches. The script still edits the stub.
+    const result = await run(clone, second.github, { model: scripted(STUB_SCRIPT) });
 
     expect(result.status).toBe("opened");
     expect(git(repo.remote, "rev-parse", "thin-pr/7^")).toBe(clone.baseSha);
@@ -457,7 +458,8 @@ describe("approval", () => {
   async function awaitingRun() {
     const repo = scratch(OVER_BUDGET);
     const memory = memoryGitHub();
-    const result = await run(repo, memory.github, { model: cassette("gate-pass") });
+    // The prompts state the 1-line budget, so the gate-pass recording no longer matches.
+    const result = await run(repo, memory.github, { model: scripted(STUB_SCRIPT) });
     if (result.status !== "awaiting_approval") {
       throw new Error(`expected awaiting_approval, got ${result.status}`);
     }

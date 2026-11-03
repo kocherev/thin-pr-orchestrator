@@ -110,13 +110,13 @@ The five steps:
 | `implement` | implementer | tool runner over the workspace | `summary`, and `files` from `workspace.diff()` |
 | `verify` | `createVerifyHandler` in `packages/github` | none | `summary` and the `typecheck` and `test` results |
 | `review` | reviewer | structured output | `verdict`, `approve` or `changes_requested`, and `notes` |
-| `write` | pr-writer | structured output | `title`, `body`, and `summary` |
+| `write` | pr-writer | structured output | `title` and `summary`. The draft body comes from `formatRunReport`. |
 
 The gate is not a step. `runIssue` evaluates it after `write` finishes. `runIssue` lives in `packages/github` because it posts checks and pushes. Moving it into `packages/core` would put a GitHub client there, which `pnpm lint` forbids.
 
 ## Specialists
 
-Each model step takes its model and effort from the template step, or from the specialist default when the step names none. Every request sets `thinking` to adaptive and an explicit `output_config.effort`. It omits `temperature`, `top_p`, and `top_k`. Opus 5.5 and Sonnet 5.5 requests opt into the server-side fallback.
+Each model step takes its model and effort from the template step, or from the specialist default when the step names none. Every request sets `thinking` to adaptive and an explicit `output_config.effort`. It omits `temperature`, `top_p`, and `top_k`. Opus 5.5 and Sonnet 5.5 requests opt into the server-side fallback. Each system prompt is one block with a cache breakpoint. The planner and implementer tool loops also set top-level `cache_control`, so the API moves a second breakpoint to the end of the conversation on each turn and the next turn reads the history from the cache. Each call's `cache_read_input_tokens` goes into its usage as `cacheReadTokens`.
 
 The planner, reviewer, and pr-writer are structured-output calls built from their `.strict()` Zod schemas. The planner's call also carries `read_file` and `search`, so it can read the files it is about to name. Its tool loop stops after 8 turns. A reply that still fails the schema throws `SpecialistSchemaError` with the specialist, the phase, and the path of the first issue. A refusal fails the step with its category. A reviewer or pr-writer reply cut off at `max_tokens` is retried once with twice the room. A cut-off planner reply fails the attempt, and the step retries.
 
@@ -126,7 +126,7 @@ The planner reads the issue and the repository's tracked paths, up to 500 of the
 
 An attempt that fails after a model call throws `StepError` with that call's usage. Core keeps it on the `failed` event, so the run totals count refused and retried calls. A `StepError` with `retryable: false` stops the run without the remaining retries. The specialists throw one for a spend limit, since every retry would hit it too.
 
-Each run's session has two spend limits. `THIN_PR_SPEND_LIMIT_USD`, 25 USD by default, covers the whole client. The template's `spend_usd`, or the `.thin-pr.yml` override, covers one run: `createRunHandlers` passes it to the meter with `limitRun`. Before each live call the meter prices the largest reply the request allows. When that could pass either limit, the call is not sent, the run fails, and the report says which limit and how much was spent.
+Each run's session has two spend limits. `THIN_PR_SPEND_LIMIT_USD`, 25 USD by default, covers the whole client. The template's `spend_usd`, or the `.thin-pr.yml` override, covers one run: `createRunHandlers` passes it to the meter with `limitRun`. Before each live call the meter prices the largest reply the request allows, plus the same specialist's previous request and reply as uncached input, since a tool loop sends them again. When that could pass either limit, the call is not sent, the run fails, and the report says which limit and how much was spent.
 
 The reviewer reads the plan, the workspace patch, and the verify results. `changes_requested` loops back to implement with the notes as feedback while the template allows another loop.
 

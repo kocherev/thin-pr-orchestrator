@@ -7,7 +7,7 @@ import { createAnthropicClient } from "./client.js";
 import { SpecialistSchemaError } from "./contract.js";
 import type { PricedModel } from "./pricing.js";
 import { RefusalError, structured, TruncatedOutputError, type StructuredRequest } from "./structured.js";
-import { CassetteError, SPECIALIST_HEADER, SpendLimitError } from "./transport.js";
+import { CassetteError, requestHash, SPECIALIST_HEADER, SpendLimitError } from "./transport.js";
 
 const plan = z.object({ summary: z.string(), steps: z.array(z.string()) }).strict();
 
@@ -104,7 +104,7 @@ describe("model client", () => {
     expect(readFileSync(path, "utf8").trim().split("\n")).toHaveLength(3);
   });
 
-  it("fails a replay that asks for another model or runs past the cassette", async () => {
+  it("fails a replay that asks for another model, changes the prompt, or runs past the cassette", async () => {
     const path = cassettePath();
     const fake = upstream([{ text: planText("only") }]);
     const recorder = createAnthropicClient({ mode: "record", cassettePath: path, apiKey: "test-key", fetch: fake.fetch });
@@ -117,11 +117,50 @@ describe("model client", () => {
       "planner call 1 was recorded with claude-sonnet-5-5, the request asks for claude-opus-5-5",
     );
 
+    const drifted = createAnthropicClient({ mode: "replay", cassettePath: path, fetch: offline }, {});
+    const changedPrompt = { ...planRequest("claude-sonnet-5-5"), system: "You plan large code changes." };
+    await expect(structured(drifted.client, changedPrompt)).rejects.toThrow(
+      "request drifted from the cassette at planner call 1; re-record with pnpm eval:record",
+    );
+    const local = createAnthropicClient({ mode: "replay", cassettePath: path, fetch: offline, checkRequests: false }, {});
+    await expect(structured(local.client, changedPrompt)).resolves.toMatchObject({ summary: "only" });
+
     const exhausted = createAnthropicClient({ mode: "replay", cassettePath: path, fetch: offline }, {});
     await structured(exhausted.client, planRequest("claude-sonnet-5-5"));
     await expect(structured(exhausted.client, planRequest("claude-sonnet-5-5"))).rejects.toThrow(
       "has 1 planner calls; call 2 was requested",
     );
+  });
+
+  it("hashes what a request asks, not the scratch path, the check timings, or how it is served", () => {
+    const ask = (log: string, extra: Record<string, unknown> = {}) => ({
+      model: "claude-opus-5-5",
+      max_tokens: 32_000,
+      system: [{ type: "text", text: "You make a change." }],
+      messages: [{ role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: log }] }],
+      ...extra,
+    });
+    const here = requestHash(ask(`RUN v5.0.5 ${join(tmpdir(), "thin-pr-repo-AbC123", "checkout")}\n Duration  1.05s (import 64%)\n✓ test/a.test.ts (2 tests) 4ms`));
+    const there = requestHash(ask("RUN v5.0.5 /tmp/thin-pr-repo-zz9Q/checkout\n Duration  227ms (transform 60%)\n✓ test/a.test.ts (2 tests) 12ms", { max_tokens: 64_000, betas: ["x"] }));
+    expect(here).toMatch(/^[0-9a-f]{64}$/);
+    expect(there).toBe(here);
+    expect(requestHash(ask("RUN v5.0.5 /tmp/thin-pr-repo-zz9Q/checkout\n✗ test/a.test.ts (2 tests | 1 failed)"))).not.toBe(here);
+    expect(requestHash({ ...ask(""), system: [{ type: "text", text: "You make a large change." }] })).not.toBe(requestHash(ask("")));
+  });
+
+  it("records a cassette without this machine's paths and still replays it", async () => {
+    const path = cassettePath();
+    const scratch = join(tmpdir(), "thin-pr-repo-Ab12Cd", "checkout");
+    const request = { ...planRequest("claude-sonnet-5-5"), input: `Checks ran in ${scratch}. Logs in ${join(tmpdir(), "x.log")}.` };
+    const fake = upstream([{ text: planText(`Ran in ${scratch}`) }]);
+    const recorder = createAnthropicClient({ mode: "record", cassettePath: path, apiKey: "test-key", fetch: fake.fetch });
+    await structured(recorder.client, request);
+
+    const line = readFileSync(path, "utf8");
+    expect(line).not.toContain(tmpdir());
+    expect(line).toContain("Checks ran in .. Logs in $TMPDIR/x.log.");
+    const player = createAnthropicClient({ mode: "replay", cassettePath: path, fetch: offline }, {});
+    await expect(structured(player.client, request)).resolves.toMatchObject({ summary: "Ran in ." });
   });
 
   it("strips the specialist header and sends the documented request shape", async () => {
@@ -190,14 +229,26 @@ describe("model client", () => {
     const { client, meter } = createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: fake.fetch }, {});
     await structured(client, planRequest("claude-sonnet-5-5"));
 
-    // 2 USD went to an earlier run. The next request could cost 0.16 USD, under 0.2 but over 0.1.
+    // 2 USD went to an earlier run. The reviewer's first request could cost 0.16 USD, under 0.2 but over 0.1.
     meter.limitRun(0.2);
-    expect(() => meter.assertRoomFor("claude-sonnet-5-5", 16_000)).not.toThrow();
+    expect(() => meter.assertRoomFor("claude-sonnet-5-5", 16_000, "reviewer")).not.toThrow();
     meter.limitRun(0.1);
-    const refused = structured(client, planRequest("claude-sonnet-5-5"));
+    const refused = structured(client, planRequest("claude-sonnet-5-5", "reviewer"));
     await expect(refused).rejects.toMatchObject({ name: "SpendLimitError", scope: "run", limitUsd: 0.1, spentUsd: 0 });
     await expect(refused).rejects.toThrow("the next model call could pass the run's spend_usd of 0.1 USD (0.000000 USD spent)");
     expect(fake.sent).toHaveLength(1);
+  });
+
+  it("counts a specialist's last request and reply as input before its next call", async () => {
+    const fake = upstream([{ text: planText("long"), inputTokens: 100_000, outputTokens: 1_000 }, { text: planText("fresh") }]);
+    const { client, meter } = createAnthropicClient({ mode: "live", apiKey: "test-key", fetch: fake.fetch }, {});
+    await structured(client, planRequest("claude-sonnet-5-5"));
+
+    // Any first request could cost 0.16 USD. The planner's next one also resends about 101,000 tokens, 0.202 USD more.
+    meter.limitRun(0.3);
+    await expect(structured(client, planRequest("claude-sonnet-5-5", "reviewer"))).resolves.toMatchObject({ summary: "fresh" });
+    await expect(structured(client, planRequest("claude-sonnet-5-5"))).rejects.toMatchObject({ name: "SpendLimitError", scope: "run" });
+    expect(fake.sent).toHaveLength(2);
   });
 
   it("turns a refusal into a typed error with its category", async () => {

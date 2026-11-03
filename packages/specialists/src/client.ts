@@ -17,6 +17,11 @@ export type AnthropicClientOptions = (
   readonly spendLimitUsd?: number;
   /** Upstream fetch for live and record calls. Defaults to the global fetch. */
   readonly fetch?: typeof fetch;
+  /**
+   * Replay compares each request's hash with the recorded one unless this is false. A local run replays an eval
+   * cassette with a different issue and file list, so it serves the replies without the comparison.
+   */
+  readonly checkRequests?: boolean;
 };
 
 /** The client a run's model steps share, and the meter that prices its calls. */
@@ -30,7 +35,7 @@ export function createAnthropicClient(
   const { middleware, meter } = createTransport(
     options.mode === "live"
       ? { mode: "live", spendLimitUsd }
-      : { mode: options.mode, cassettePath: options.cassettePath, spendLimitUsd },
+      : { mode: options.mode, cassettePath: options.cassettePath, spendLimitUsd, checkRequests: options.checkRequests },
   );
   const client = new Anthropic({
     // Replay never reaches the network, but the SDK will not build a request without a credential.

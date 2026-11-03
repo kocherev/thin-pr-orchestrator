@@ -15,7 +15,7 @@ import {
   type RunRecord,
   type Verdict,
 } from "@thin-pr/github";
-import { createAnthropicClient, type ModelSession } from "@thin-pr/specialists";
+import { createAnthropicClient, stableText, type ModelSession } from "@thin-pr/specialists";
 import { createScratchRepo, loadRepoConfig, openWorkspace } from "@thin-pr/workspace";
 import { z } from "zod";
 
@@ -490,47 +490,7 @@ function stableRecord(record: RunRecord, dirs: readonly string[], startedAt: str
 }
 
 function stableLog(text: string, dirs: readonly string[]): string {
-  const relative = dirs.reduce((out, dir) => out.split(dir).join("."), text);
-  const lines = relative
-    .split("\n")
-    .filter((line) => !/^\s*(Start at|Duration)\s/.test(line))
-    .map((line) => line.replace(/ \d+(?:\.\d+)?m?s$/, ""));
-  return unittestSignal(lines).join("\n");
-}
-
-/**
- * Traceback frames, source lines and carets differ between Python versions, so a unittest report keeps only these
- * lines: each `FAIL:` or `ERROR:` line with the test id in the Python 3.10 form `name (module.Class)`, the last line
- * of each traceback (the exception and its message), `Ran N tests`, and `OK` or `FAILED (...)`. Lines before the
- * report, such as a step summary's first line, stay. Text with no `Ran N tests` line is not a unittest report.
- */
-function unittestSignal(lines: readonly string[]): string[] {
-  const start = lines.findIndex((line) => /^([.FEsxu]+|=+|-+|(FAIL|ERROR): .*|Ran \d+ tests?\b.*)$/.test(line));
-  if (start < 0 || !lines.some((line) => /^Ran \d+ tests?\b/.test(line))) {
-    return [...lines];
-  }
-  const kept = lines.slice(0, start);
-  let inTraceback = false;
-  for (const line of lines.slice(start)) {
-    const failure = /^((?:FAIL|ERROR): (\S+) \(.+?)(?:\.\2)?\)$/.exec(line);
-    const ran = /^Ran \d+ tests?\b/.exec(line);
-    if (line === "Traceback (most recent call last):") {
-      inTraceback = true;
-    } else if (inTraceback) {
-      // Frames and their source lines are indented. The first line that is not is the exception.
-      if (!line.startsWith(" ")) {
-        inTraceback = false;
-        kept.push(line);
-      }
-    } else if (failure) {
-      kept.push(`${failure[1]})`);
-    } else if (ran) {
-      kept.push(ran[0]);
-    } else if (/^(OK|FAILED)\b/.test(line)) {
-      kept.push(line);
-    }
-  }
-  return kept;
+  return stableText(dirs.reduce((out, dir) => out.split(dir).join("."), text));
 }
 
 function withHiddenTests(verify: StepHandler, dir: string, hidden: readonly File[]): StepHandler {

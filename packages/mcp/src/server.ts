@@ -77,7 +77,7 @@ export function createServer(options: { readonly runsDir: string | undefined }):
         repo,
         issue,
         runsDir: options.runsDir,
-        model: () => createAnthropicClient(clientOptionsFromEnv()),
+        model: () => createAnthropicClient({ ...clientOptionsFromEnv(), checkRequests: false }),
       });
       return json(result);
     },
