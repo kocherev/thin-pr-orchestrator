@@ -84,6 +84,8 @@ The planner, reviewer, and pr-writer are structured-output calls built from thei
 
 The implementer runs in the SDK tool runner with six strict tools: `list_files`, `read_file`, `search`, `replace`, `create_file`, and `run_check`. It stops when the model stops asking for tools, and fails after 25 turns. A model never reports which files changed. The `files` field comes from `git diff`.
 
+The planner reads the issue and the repository's tracked paths, up to 500 of them, so each step names a real file.
+
 An attempt that fails after a model call throws `StepError` with that call's usage. Core keeps it on the `failed` event, so the run totals count refused and retried calls.
 
 The reviewer reads the plan, the workspace patch, and the verify results. `changes_requested` loops back to implement with the notes as feedback while the template allows another loop.
