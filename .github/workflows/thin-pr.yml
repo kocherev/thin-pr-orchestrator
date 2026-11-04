@@ -9,13 +9,18 @@ on:
     types: [submitted]
   pull_request_review_comment:
     types: [created]
+  # The repo's CI finishing on a thin-pr branch, so its result shows on the draft as thin-pr / ci.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
 
 permissions: {}
 
 # One run at a time per issue or pull request, so a command waits for the run it acts on, and the events for one
-# review queue behind its revise run, which then finds the reply and stops.
+# review queue behind its revise run, which then finds the reply and stops. A finished CI run gets its own group:
+# GitHub keeps one waiting run per group and cancels the rest.
 concurrency:
-  group: thin-pr-${{ github.event.issue.number || github.event.pull_request.number }}
+  group: thin-pr-${{ github.event.issue.number || github.event.pull_request.number || github.event.workflow_run.head_sha }}
   cancel-in-progress: false
 
 jobs:
@@ -23,7 +28,10 @@ jobs:
     # The router in packages/github decides what each event does. This condition only keeps the runner from
     # starting for events it would ignore: other labels, plain comments, approvals, other branches, outsiders and bots.
     if: >-
-      github.event.sender.type != 'Bot' && (
+      (github.event_name == 'workflow_run'
+        && github.event.workflow_run.event == 'workflow_dispatch'
+        && startsWith(github.event.workflow_run.head_branch, 'thin-pr/'))
+      || (github.event.sender.type != 'Bot' && (
         (github.event_name == 'issues'
           && (github.event.label.name == 'thin-pr' || startsWith(github.event.label.name, 'thin-pr:')))
         || (github.event_name == 'issue_comment'
@@ -36,7 +44,7 @@ jobs:
         || (github.event_name == 'pull_request_review_comment'
           && startsWith(github.event.pull_request.head.ref, 'thin-pr/')
           && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
-      )
+      ))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # contents: push the branch, and delete it on cancel. checks: one check per gate rule on the pushed commit. issues: the progress

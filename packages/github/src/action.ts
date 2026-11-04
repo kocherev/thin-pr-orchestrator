@@ -2,7 +2,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import * as core from "@actions/core";
 import * as github from "@actions/github";
+import { Octokit } from "@octokit/rest";
+import { ciCheckFor } from "./ci-check.js";
 import { exportRunRecord } from "./record.js";
+import { createGitHubSurface } from "./surface.js";
 import { routeEvent, type Trigger } from "./router.js";
 import { spanNames, startTrace } from "./trace.js";
 import { pushedBranch, runResultOf, runTrigger } from "./trigger.js";
@@ -22,7 +25,9 @@ async function main(): Promise<void> {
   try {
     const route = routeEvent(github.context.eventName, github.context.payload);
     // The workflow's condition filters most events. One that gets past it and starts nothing is no failure.
-    if (route.kind === "run") {
+    if (github.context.eventName === "workflow_run") {
+      await mirrorCi(token);
+    } else if (route.kind === "run") {
       failure = await handle(route.trigger, token);
     } else if (route.kind === "invalid") {
       failure = `event payload invalid: ${route.reason}`;
@@ -116,6 +121,18 @@ async function handle(trigger: Trigger, token: string): Promise<string> {
       core.info(`Pushed ${result.stored.branch.name}. The diff is over the budget and waits for approval on the issue.`);
       return "";
   }
+}
+
+/** Posts the result of a CI run thin-pr dispatched as `thin-pr / ci` on its commit, so the draft shows it. */
+async function mirrorCi(token: string): Promise<void> {
+  const check = ciCheckFor(github.context.payload);
+  if (!check) {
+    core.info("Nothing to do: this workflow run is not one thin-pr started.");
+    return;
+  }
+  const surface = createGitHubSurface(new Octokit({ auth: token, baseUrl: process.env.GITHUB_API_URL }));
+  await surface.postCheck(check);
+  core.info(`Posted ${check.name}: ${check.title} on ${check.sha}.`);
 }
 
 /**

@@ -425,7 +425,11 @@ describe("issue label", () => {
     for (const event of ["issue_comment:", "pull_request_review:", "pull_request_review_comment:"]) {
       expect(workflow).toContain(`  ${event}`);
     }
-    expect(workflow).toContain("group: thin-pr-${{ github.event.issue.number || github.event.pull_request.number }}");
+    expect(workflow).toContain(
+      "group: thin-pr-${{ github.event.issue.number || github.event.pull_request.number || github.event.workflow_run.head_sha }}",
+    );
+    // A CI run thin-pr dispatched comes from the bot, so it has its own branch of the condition.
+    expect(workflow).toContain("github.event.workflow_run.event == 'workflow_dispatch'");
     expect(workflow).toContain("ref: ${{ github.event.pull_request.head.ref }}");
     const manifest = JSON.parse(readFileSync(join(root, "packages/app/github-app-manifest.json"), "utf8")) as { default_events: string[] };
     expect(manifest.default_events).toEqual(["issues", "issue_comment", "pull_request_review", "pull_request_review_comment"]);

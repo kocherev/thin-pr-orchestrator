@@ -30,13 +30,18 @@ on:
     types: [submitted]
   pull_request_review_comment:
     types: [created]
+  # Your CI finishing on a thin-pr branch, so its result shows on the draft. Use your CI workflow's name: value.
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
 
 permissions: {}
 
 # One run at a time per issue or pull request, so a command waits for the run it acts on, and the events for one
-# review queue behind its revise run, which then finds the reply and stops.
+# review queue behind its revise run, which then finds the reply and stops. A finished CI run gets its own group:
+# GitHub keeps one waiting run per group and cancels the rest.
 concurrency:
-  group: thin-pr-${{ github.event.issue.number || github.event.pull_request.number }}
+  group: thin-pr-${{ github.event.issue.number || github.event.pull_request.number || github.event.workflow_run.head_sha }}
   cancel-in-progress: false
 
 jobs:
@@ -44,7 +49,10 @@ jobs:
     # The router in packages/github decides what each event does. This condition only keeps the runner from
     # starting for events it would ignore: other labels, plain comments, approvals, other branches, outsiders and bots.
     if: >-
-      github.event.sender.type != 'Bot' && (
+      (github.event_name == 'workflow_run'
+        && github.event.workflow_run.event == 'workflow_dispatch'
+        && startsWith(github.event.workflow_run.head_branch, 'thin-pr/'))
+      || (github.event.sender.type != 'Bot' && (
         (github.event_name == 'issues'
           && (github.event.label.name == 'thin-pr' || startsWith(github.event.label.name, 'thin-pr:')))
         || (github.event_name == 'issue_comment'
@@ -57,7 +65,7 @@ jobs:
         || (github.event_name == 'pull_request_review_comment'
           && startsWith(github.event.pull_request.head.ref, 'thin-pr/')
           && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
-      )
+      ))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # contents: push the branch, and delete it on cancel. checks: one check per gate rule on the pushed commit. issues: the progress
@@ -101,6 +109,12 @@ jobs:
 3. Creates the user `thin-pr-check`. Your install and checks run as that user, so code the model wrote cannot read the API key or the token. See `docs/security.md`.
 4. Runs the event from your checkout, which is the working directory.
 5. Uploads the run's trace as the `thin-pr-trace` artifact. Set `otel-endpoint` and `otel-headers` to send it to an OTLP backend instead. See `docs/telemetry.md`.
+
+## Your CI on the draft
+
+GitHub runs no workflow for a push made with the job's own token. So with `ci-workflow` set, the Action starts your CI on the draft's branch itself. When that run finishes, the `workflow_run` trigger in the workflow above starts a short job. That job posts the result on the draft's commit as one check, `thin-pr / ci`, linked to the run. It makes no model call.
+
+The draft may also show a normal pull request CI run marked "action required". GitHub holds the first workflow run from a bot's pull request until a person approves it. Approve it once, or ignore it, since `thin-pr / ci` already carries the result.
 
 ## Inputs
 
