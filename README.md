@@ -73,17 +73,17 @@ To run on your own repo, add the Action with `uses: kocherev/thin-pr-orchestrato
 
 ## Results
 
-**On a real repo.** thin-pr ran ten issues on [kb-copilot](https://github.com/kocherev/kb-copilot), a Python and TypeScript monorepo it had never seen. The repo owner wrote the issues and a hidden acceptance test for each, then reviewed every diff.
+**On a real repo.** thin-pr worked on [kb-copilot](https://github.com/kocherev/kb-copilot), a Python and TypeScript monorepo it had never seen. The repo owner wrote the issues and a hidden acceptance test for each, and reviewed every change.
 
-| Metric | Value |
-| --- | --- |
-| Owner verdict | 10/10 correct |
-| Hidden acceptance tests | 9/10 pass. The owner traced the miss to the test itself. |
-| Gate passed | 9/10. One correct fix was blocked by a false positive, now fixed. |
-| Cost | $2.49 for all ten, $0.20 median per issue |
-| Largest change | 6 files, 123 lines |
+| | Stage 1: local runs | Stage 2: the Action on GitHub |
+| --- | --- | --- |
+| Issues | 10 | 6 |
+| Owner verdict | 10/10 correct | 6/6 drafts merged, 5 with no human edit |
+| Hidden acceptance tests | 9/10 pass. The miss was the test's own fault. | Pass on every draft the owner ran them on |
+| Gate passed | 9/10. One false positive, now fixed. | 6/6 on the run that opened the draft |
+| Spend | $2.49 for all ten | $1.69 for the six drafts, plus $2.78 on three failed runs that each led to a fix |
 
-`evals/kb-copilot/README.md` has each issue, its diff, and what the eval changed in thin-pr.
+`evals/kb-copilot/README.md` has each issue, its diff or draft, what went wrong, and what each stage changed in thin-pr.
 
 **On the sample repos.** `pnpm eval` replays 26 labeled issues and runs each repo's checks for real: 21 against the TypeScript package in `evals/sample-repo` with `tsc` and `vitest`, and 5 against the Python package in `evals/sample-python` with `python3`. Some cases add hidden tests the implementer never sees. Fifteen cases should open a draft, two of them multi-file changes of 5 and 3 files. Ten should not: one per gate rule from `diff` to `review` except `budget`, an empty plan that fails before the gate, and three Python cases that fail `tests`, `paths`, and `secrets`. One case changes 13 files, one more than the feature budget, and must end waiting for approval.
 
