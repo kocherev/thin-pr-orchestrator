@@ -169,11 +169,8 @@ describe("issue label", () => {
     if (result.status !== "blocked") {
       return;
     }
-    expect(result.record.steps.filter((step) => step.id === "review").map((step) => step.outcome)).toEqual([
-      "looped",
-      "looped",
-      "finished",
-    ]);
+    // The reviewer repeats its notes, so the second pass finishes instead of looping again.
+    expect(result.record.steps.filter((step) => step.id === "review").map((step) => step.outcome)).toEqual(["looped", "finished"]);
     expect(git(repo.remote, "branch", "--list", "thin-pr/7")).toBe("");
     expect(memory.calls.some((call) => call.op === "openDraft" || call.op === "listPullsForHead")).toBe(false);
     // Nothing was pushed, so no check goes anywhere: on the base it would mark the default branch red.
@@ -185,10 +182,10 @@ describe("issue label", () => {
     expect(gateRows(body)[0]).toBe("review FAIL");
     expect(body).toContain("| `review` | **FAIL** | Reviewer requested changes (1 note). |");
     expect(sections(body)).toContain("Review: changes_requested");
-    expect(sections(body)).toContain("Run report: 11 step runs, 2 loops, 0 retries");
+    expect(sections(body)).toContain("Run report: 8 step runs, 1 loop, 0 retries");
   });
 
-  it("loops verify back to implement on a failing test, then blocks on the tests rule", async () => {
+  it("loops verify back to implement on a failing test, stops when the failure repeats, then blocks on tests", async () => {
     const repo = scratch("checks:\n  typecheck: 'true'\n  test: echo '1 failed'; exit 1\n");
     const memory = memoryGitHub();
     const result = await run(repo, memory.github, { model: scripted(STUB_SCRIPT) });
@@ -202,9 +199,7 @@ describe("issue label", () => {
       "implement 0 finished",
       "verify 0 looped",
       "implement 1 finished",
-      "verify 1 looped",
-      "implement 2 finished",
-      "verify 2 finished",
+      "verify 1 finished",
       "review 0 finished",
       "write 0 finished",
     ]);

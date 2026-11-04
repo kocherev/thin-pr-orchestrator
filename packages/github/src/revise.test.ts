@@ -199,7 +199,8 @@ describe("revise", () => {
   });
 
   it("keeps to the template's loop limit when the checks keep failing, then explains the failed rule", async () => {
-    const repo = draftRepo("checks:\n  typecheck: 'true'\n  test: echo '1 failed'; exit 1\n");
+    // The failure text changes every pass, so the loop limit is what stops it, not a repeated failure.
+    const repo = draftRepo("checks:\n  typecheck: 'true'\n  test: echo \"failed at $(date +%s%N)\"; exit 1\n");
 
     const { result, memory } = await revise(repo);
 

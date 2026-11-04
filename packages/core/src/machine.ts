@@ -59,6 +59,9 @@ export async function runWorkflow(input: RunInput): Promise<RunState> {
     return state;
   };
 
+  // The feedback each step last looped with. The same feedback again means the pass in between changed nothing.
+  const loopedWith: Partial<Record<StepId, string>> = {};
+
   // Runs one pass over a step with its retries. Returns the loop target and its feedback, or null to move on.
   const runPass = async (step: TemplateStep, loop: number, feedback: string | null, span: Span) => {
     let lastError: string | null = null;
@@ -88,6 +91,13 @@ export async function runWorkflow(input: RunInput): Promise<RunState> {
       }
 
       const usage = result.usage ?? [];
+      // Like the last allowed pass, a repeated one finishes, so the gate judges its output instead of the run
+      // spending more passes on a failure the steps in between cannot change.
+      if (result.outcome === "loop" && loopedWith[step.id] === settled(result.feedback)) {
+        span.setAttribute("thin_pr.repeated_feedback", true);
+        await emit({ step: step.id, kind: "finished", attempt, output: result.output, usage });
+        return null;
+      }
       if (result.outcome === "done") {
         await emit({ step: step.id, kind: "finished", attempt, output: result.output, usage });
         return null;
@@ -99,6 +109,7 @@ export async function runWorkflow(input: RunInput): Promise<RunState> {
         throw new StepFailure(error);
       }
       await emit({ ...looped, kind: "looped" });
+      loopedWith[step.id] = settled(result.feedback);
       return { backTo: step.loop.back_to, feedback: result.feedback };
     }
     throw new StepFailure(`${step.id} failed after ${step.retries + 1} ${step.retries === 0 ? "attempt" : "attempts"}: ${lastError}`);
@@ -140,6 +151,14 @@ export async function runWorkflow(input: RunInput): Promise<RunState> {
     return emit({ kind: "failed", error: error.message });
   }
   return emit({ kind: "completed" });
+}
+
+// Check logs carry timings, such as "Ran 4 tests in 0.002s" or "12 ms", that differ on every pass of one failure.
+const DURATION = /\b\d+(?:\.\d+)?\s?m?s\b/g;
+
+/** Feedback without its timings, so a repeated failure compares equal to itself. */
+function settled(feedback: string): string {
+  return feedback.replace(DURATION, "#");
 }
 
 /** Folds a stored log back into the state `runWorkflow` returned. */
