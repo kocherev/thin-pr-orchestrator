@@ -83,7 +83,7 @@ Both read the last `verify` pass. `13-type-error` passes `vitest run` and fails 
 
 ### `review`
 
-The rule follows the reviewer's `verdict`, not the number of notes. `17-review-notes` requests changes on every pass. Review loops back to implement twice, then finishes, and the gate fails with `Reviewer requested changes (1 note).`
+The rule follows the reviewer's `verdict`, not the number of notes. `17-review-notes` requests changes with the same note on every pass. Review loops back to implement once. The second pass repeats the note, so it finishes there, and the gate fails with `Reviewer requested changes (1 note).`
 
 ### `plan` and `contracts`
 

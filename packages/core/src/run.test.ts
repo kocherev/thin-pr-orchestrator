@@ -111,7 +111,8 @@ describe("runWorkflow", () => {
           implementCalls += 1;
           return { outcome: "done", output: { summary: "edit" } };
         },
-        verify: async () => ({ outcome: "loop", output: { passed: false }, feedback: "still failing" }),
+        // Different feedback each pass, so the loop limit is what stops it.
+        verify: async ({ loop }) => ({ outcome: "loop", output: { passed: false }, feedback: `still failing, pass ${loop}` }),
       }),
     });
     const events = log.read("run-1");
@@ -121,6 +122,39 @@ describe("runWorkflow", () => {
     expect(state.loops).toEqual({ verify: 1 });
     expect(implementCalls).toBe(2);
     expect(events.at(-1)).toMatchObject({ step: null, kind: "failed", error: "verify reached its loop limit (1)" });
+    expect(replay(events)).toEqual(state);
+  });
+
+  it("ends a loop when a step repeats its feedback unchanged, so the run stops paying for passes that change nothing", async () => {
+    const log = openEventLog(logPath());
+    let implementCalls = 0;
+    const state = await runWorkflow({
+      runId: "run-1",
+      issue: "Clamp decrement at zero.",
+      template: { ...template, steps: template.steps.map((step) => (step.id === "verify" ? { ...step, loop: { back_to: "implement", max: 3 } } : step)) },
+      log,
+      handlers: handlers({
+        implement: async () => {
+          implementCalls += 1;
+          return { outcome: "done", output: { summary: "edit" } };
+        },
+        // Only the timing changes between passes, as in a real test log.
+        verify: async ({ loop }) => ({
+          outcome: "loop",
+          output: { passed: false },
+          feedback: `test failed: expected 2, got 1\nRan 4 tests in 0.00${loop + 1}s, ${loop + 12} ms`,
+        }),
+      }),
+    });
+    const events = log.read("run-1");
+    log.close();
+
+    // The second pass repeats the first pass's feedback, so it finishes there and the gate judges its output.
+    expect(state.status).toBe("completed");
+    expect(implementCalls).toBe(2);
+    expect(state.loops).toEqual({ verify: 1 });
+    expect(state.outputs.verify).toEqual({ passed: false });
+    expect(events.filter((event) => event.step === "verify").map((event) => event.kind)).toEqual(["started", "looped", "started", "finished"]);
     expect(replay(events)).toEqual(state);
   });
 

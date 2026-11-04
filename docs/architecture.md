@@ -100,6 +100,7 @@ steps:
 - `retries` is the number of extra attempts after a failed one. Each retry gets the previous error as feedback.
 - A handler may return `loop` with feedback. The run goes back to `loop.back_to`. `loop.max` caps those loops for the whole run, and core fails the run when a step asks for one more.
 - `verify` and `review` stop asking for a loop on their last allowed pass and finish instead. The gate then names the failed check or the review verdict, so core does not fail the run at the cap.
+- A step that asks to loop with exactly the feedback it looped with before also finishes, on that pass. The pass in between changed nothing, so another loop would spend money for the same result. On kb-copilot one run spent 35 Opus requests looping on an identical test failure. The trace marks such a pass with `thin_pr.repeated_feedback`.
 - A template that names a step twice, gives `verify` a model, or loops to a step that is not earlier fails to load with `TemplateError` and the file line.
 
 The five steps:

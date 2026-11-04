@@ -178,8 +178,8 @@
       "failedRules": [
         "typecheck"
       ],
-      "costUsd": 0.036764,
-      "durationMs": 24945,
+      "costUsd": 0.030756,
+      "durationMs": 22065,
       "models": [
         "claude-haiku-5-5",
         "claude-opus-5-5",
@@ -242,8 +242,8 @@
       "failedRules": [
         "review"
       ],
-      "costUsd": 0.04269,
-      "durationMs": 32205,
+      "costUsd": 0.033906,
+      "durationMs": 25845,
       "models": [
         "claude-haiku-5-5",
         "claude-opus-5-5",
@@ -342,8 +342,8 @@
       "failedRules": [
         "tests"
       ],
-      "costUsd": 0.046788,
-      "durationMs": 26976,
+      "costUsd": 0.039924,
+      "durationMs": 24040,
       "models": [
         "claude-haiku-5-5",
         "claude-opus-5-5",
