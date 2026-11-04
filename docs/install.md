@@ -143,6 +143,12 @@ paths:
 
 The install and checks run as `thin-pr-check`, with that user's own `HOME`. A setup action may point a tool's cache at a folder the runner's user owns, and the check user can't write there. `setup-uv` does this with `UV_CACHE_DIR`, so the example moves the uv cache into the check user's home. A generator runs with exactly the check environment, so a generator that calls `uv` needs the same prefix.
 
+A check that a generated file is current must compare fresh output with the file on disk, as `cmp` does. `git diff` can't do it. Checks run on an uncommitted tree, so a correct regeneration still shows as a change against the last commit.
+
+```yaml
+  test: … && pnpm openapi > /tmp/openapi.json && cmp /tmp/openapi.json apps/web/openapi.json
+```
+
 Each field has a default, so a file can set only what differs. `templates/README.md` lists the budget and spend fields. Name only real secret files in `deny`. A broad pattern such as `**/.env*` also blocks `.env.example`, which an issue may need to change. The `secrets` gate rule scans every added line whatever the paths.
 
 ## Try it first
