@@ -13,6 +13,13 @@ gitleaks_image="zricethezav/gitleaks:v8.24.3"
 
 step() { printf '\n== %s ==\n' "$1"; }
 
+# A full Docker disk fails installs and git inside the container with errors that look like test failures.
+free_gb="$(docker run --rm "$node_image" df --output=avail -BG / | tail -1 | tr -dc 0-9)"
+if [ "$free_gb" -lt 3 ]; then
+  echo "Docker has ${free_gb} GB free and ci:local needs 3. Free build cache with: docker builder prune" >&2
+  exit 1
+fi
+
 step "secrets: gitleaks on $base..HEAD"
 if [ -n "$(git -C "$root" rev-list "$base..HEAD")" ]; then
   docker run --rm -v "$root:/repo:ro" "$gitleaks_image" detect --source /repo --redact --no-banner \
@@ -62,6 +69,10 @@ pnpm --filter console exec wrangler deploy --dry-run
 
 step "deploy-check: Worker types and Wrangler dry run"
 pnpm --filter @thin-pr/app exec wrangler types --check
-pnpm --filter @thin-pr/app exec wrangler deploy --dry-run --outdir dist
+# The dry run builds runner/Dockerfile. On its own builder, capped at 2 GB, so repeated runs cannot fill Docker's
+# shared build cache.
+docker buildx inspect thin-pr-ci > /dev/null 2>&1 || docker buildx create --name thin-pr-ci --driver docker-container > /dev/null
+BUILDX_BUILDER=thin-pr-ci pnpm --filter @thin-pr/app exec wrangler deploy --dry-run --outdir dist
+docker buildx prune --builder thin-pr-ci --keep-storage 2GB --force > /dev/null
 
 printf '\nci:local passed: secrets, check, sandbox, action, console, deploy-check.\n'
